@@ -1,0 +1,56 @@
+:root {
+	--brand-mist: #bbbfbf;
+	--brand-steel: #878787;
+	--brand-teal: #05ad98;
+	--brand-white: #ffffff;
+
+	--ink-strong: #162625;
+	--ink-default: #263735;
+	--ink-muted: #4d5e5b;
+	--surface-subtle: #f5f7f7;
+	--surface-muted: #e9eeee;
+	--surface-raised: #ffffff;
+	--primary-hover: #049887;
+	--primary-pressed: #037c70;
+	--primary-on: #102725;
+	--primary-tint: #e4f7f4;
+	--focus-ring: #05ad98;
+
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.25rem;
+	--space-6: 1.5rem;
+	--space-7: 1.75rem;
+	--space-8: 2rem;
+	--space-12: 3rem;
+	--space-16: 4rem;
+
+	--radius-sm: 0.25rem;
+	--radius-md: 0.375rem;
+	--radius-lg: 0.5rem;
+
+	--text-xs: 0.75rem;
+	--text-sm: 0.875rem;
+	--text-base: 1rem;
+	--text-lg: 1.125rem;
+	--text-xl: 1.5rem;
+	--text-2xl: 1.5rem;
+	--text-3xl: 1.75rem;
+
+	--shadow-lg: 0 0.75rem 2rem rgba(22, 38, 37, 0.14);
+
+	--ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+	--duration-fast: 140ms;
+	--duration-base: 190ms;
+
+	--z-dropdown: 20;
+	--z-sticky: 30;
+	--z-backdrop: 40;
+	--z-drawer: 50;
+	--z-toast: 60;
+
+	--sidebar-width: 15.5rem;
+	--content-max: 90rem;
+}

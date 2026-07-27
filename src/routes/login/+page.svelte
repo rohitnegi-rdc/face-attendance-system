@@ -1,70 +1,243 @@
 <script lang="ts">
+	import Eye from '@lucide/svelte/icons/eye';
+	import EyeOff from '@lucide/svelte/icons/eye-off';
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import ScanFace from '@lucide/svelte/icons/scan-face';
+
 	let email = $state('');
 	let password = $state('');
 	let error = $state('');
+	let isSubmitting = $state(false);
+	let showPassword = $state(false);
 
 	async function submit(e: Event) {
 		e.preventDefault();
 		error = '';
-		const res = await fetch('/api/auth/login', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ email, password })
-		});
-		if (!res.ok) {
-			const body = await res.json().catch(() => ({}));
-			error = body.error || 'Login failed';
-			return;
+		isSubmitting = true;
+
+		try {
+			const res = await fetch('/api/auth/login', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ email, password })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				error = data.error || 'We could not sign you in. Check your details and try again.';
+				return;
+			}
+			window.location.href = `/${data.role}`;
+		} catch {
+			error = 'The service is not reachable right now. Please try again.';
+		} finally {
+			isSubmitting = false;
 		}
-		const data = await res.json();
-		window.location.href = `/${data.role}`;
 	}
 </script>
 
-<div class="login-wrap">
-	<h1>Attendance System Login</h1>
-	<form onsubmit={submit} data-testid="login-form">
-		<label>
-			Email
-			<input type="email" bind:value={email} required data-testid="login-email" />
-		</label>
-		<label>
-			Password
-			<input type="password" bind:value={password} required data-testid="login-password" />
-		</label>
-		{#if error}
-			<p class="error" data-testid="login-error">{error}</p>
-		{/if}
-		<button type="submit" data-testid="login-submit">Log in</button>
-	</form>
-</div>
+<svelte:head>
+	<title>Sign in | Face Attendance</title>
+</svelte:head>
+
+<main id="main-content" class="login-page">
+	<section class="login-panel" aria-labelledby="login-title">
+		<div class="product-lockup">
+			<span class="product-mark" aria-hidden="true"><ScanFace size={28} strokeWidth={1.8} /></span>
+			<div>
+				<strong>Face Attendance</strong>
+				<span>Workforce operations</span>
+			</div>
+		</div>
+
+		<div class="login-heading">
+			<h1 id="login-title">Sign in</h1>
+			<p>Use your assigned account to continue.</p>
+		</div>
+
+		<form onsubmit={submit} data-testid="login-form">
+			<label class="field">
+				<span>Email address</span>
+				<input
+					type="email"
+					bind:value={email}
+					autocomplete="username"
+					inputmode="email"
+					required
+					data-testid="login-email"
+				/>
+			</label>
+
+			<label class="field">
+				<span>Password</span>
+				<span class="password-field">
+					<input
+						type={showPassword ? 'text' : 'password'}
+						bind:value={password}
+						autocomplete="current-password"
+						required
+						data-testid="login-password"
+					/>
+					<button
+						class="password-toggle"
+						type="button"
+						onclick={() => (showPassword = !showPassword)}
+						aria-label={showPassword ? 'Hide password' : 'Show password'}
+						title={showPassword ? 'Hide password' : 'Show password'}
+					>
+						{#if showPassword}<EyeOff size={19} />{:else}<Eye size={19} />{/if}
+					</button>
+				</span>
+			</label>
+
+			{#if error}
+				<p class="alert alert--error" role="alert" data-testid="login-error">{error}</p>
+			{/if}
+
+			<button
+				class="button button--primary submit-button"
+				type="submit"
+				disabled={isSubmitting}
+				data-testid="login-submit"
+			>
+				{#if isSubmitting}<LoaderCircle class="spin" size={18} />{/if}
+				{isSubmitting ? 'Signing in...' : 'Sign in'}
+			</button>
+		</form>
+	</section>
+</main>
 
 <style>
-	.login-wrap {
-		max-width: 360px;
-		margin: 4rem auto;
-		font-family: sans-serif;
+	.login-page {
+		display: grid;
+		min-height: 100vh;
+		place-items: center;
+		padding: var(--space-6) var(--space-4);
+		background:
+			linear-gradient(90deg, transparent 49.8%, var(--brand-mist) 50%, transparent 50.2%),
+			var(--surface-subtle);
 	}
-	form {
+
+	.login-panel {
+		width: min(100%, 27rem);
+		padding: clamp(1.5rem, 5vw, 2.5rem);
+		background: var(--brand-white);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-lg);
+		box-shadow: var(--shadow-lg);
+	}
+
+	.product-lockup {
 		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
+		align-items: center;
+		gap: var(--space-3);
 	}
-	.error {
-		color: #c0392b;
+
+	.product-lockup > div {
+		display: grid;
+		line-height: 1.25;
 	}
-	input {
+
+	.product-lockup strong {
+		color: var(--ink-strong);
+		font-size: var(--text-lg);
+	}
+
+	.product-lockup span:last-child {
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
+	}
+
+	.product-mark {
+		display: grid;
+		width: 2.75rem;
+		height: 2.75rem;
+		place-items: center;
+		color: var(--primary-on);
+		background: var(--brand-teal);
+		border-radius: var(--radius-md);
+	}
+
+	.login-heading {
+		margin: var(--space-8) 0 var(--space-6);
+	}
+
+	h1 {
+		margin: 0;
+		font-size: var(--text-3xl);
+	}
+
+	.login-heading p {
+		margin: var(--space-2) 0 0;
+		color: var(--ink-muted);
+	}
+
+	form {
+		display: grid;
+		gap: var(--space-5);
+	}
+
+	.password-field {
+		position: relative;
 		display: block;
-		width: 100%;
-		padding: 0.5rem;
-		margin-top: 0.25rem;
 	}
-	button {
-		padding: 0.6rem;
-		background: #2563eb;
-		color: white;
-		border: none;
-		border-radius: 4px;
+
+	.password-field input {
+		padding-right: 3rem;
+	}
+
+	.password-toggle {
+		position: absolute;
+		top: 50%;
+		right: var(--space-2);
+		display: grid;
+		width: 2.25rem;
+		height: 2.25rem;
+		place-items: center;
+		color: var(--ink-muted);
+		background: transparent;
+		border: 0;
+		border-radius: var(--radius-sm);
+		transform: translateY(-50%);
 		cursor: pointer;
+	}
+
+	.password-toggle:hover {
+		color: var(--ink-strong);
+		background: var(--surface-muted);
+	}
+
+	.submit-button {
+		width: 100%;
+		min-height: 2.75rem;
+	}
+
+	:global(.spin) {
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	@media (max-width: 34rem) {
+		.login-page {
+			align-items: start;
+			padding-top: max(4rem, 14vh);
+			background: var(--brand-white);
+		}
+
+		.login-panel {
+			padding: 0;
+			border: 0;
+			box-shadow: none;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		:global(.spin) {
+			animation: none;
+		}
 	}
 </style>

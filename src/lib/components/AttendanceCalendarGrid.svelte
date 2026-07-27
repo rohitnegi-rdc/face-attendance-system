@@ -44,25 +44,47 @@
 		if (v === 'evening_only') return 'E';
 		return '-';
 	}
+
+	function accessibleCellLabel(entity: string, day: string, v: string | number | null): string {
+		if (mode === 'percent') {
+			return `${entity}, ${formatDate(day)}: ${typeof v === 'number' ? `${v}% attendance` : 'No attendance data'}`;
+		}
+		const status =
+			v === 'present'
+				? 'Present'
+				: v === 'morning_only'
+					? 'Morning only'
+					: v === 'evening_only'
+						? 'Evening only'
+						: 'Absent';
+		return `${entity}, ${formatDate(day)}: ${status}`;
+	}
 </script>
 
 <div class="grid-wrap">
-	<table class="calendar-grid">
+	<table
+		class="calendar-grid"
+		aria-label={mode === 'percent'
+			? 'Attendance percentage calendar'
+			: 'Attendance status calendar'}
+	>
 		<thead>
 			<tr>
-				<th class="day-col">Day</th>
+				<th class="day-col" scope="col">Day</th>
 				{#each entities as e}
-					<th title={e.label}>{e.label}</th>
+					<th scope="col" title={e.label}>{e.label}</th>
 				{/each}
 			</tr>
 		</thead>
 		<tbody>
 			{#each days as day}
 				<tr>
-					<td class="day-col">{formatDate(day)}</td>
+					<th class="day-col" scope="row">{formatDate(day)}</th>
 					{#each entities as e}
 						{@const v = cellValue(e.id, day)}
-						<td class={statusClass(v)} title={String(v)}>{cellLabel(v)}</td>
+						<td class={statusClass(v)} aria-label={accessibleCellLabel(e.label, day, v)}
+							>{cellLabel(v)}</td
+						>
 					{/each}
 				</tr>
 			{/each}
@@ -70,48 +92,126 @@
 	</table>
 </div>
 
+{#if mode === 'status'}
+	<div class="legend" aria-label="Attendance status legend">
+		<span><b class="legend__swatch st-present">P</b> Present</span>
+		<span><b class="legend__swatch st-morning">M</b> Morning only</span>
+		<span><b class="legend__swatch st-evening">E</b> Evening only</span>
+		<span><b class="legend__swatch st-absent">-</b> Absent</span>
+	</div>
+{/if}
+
 <style>
 	.grid-wrap {
 		overflow-x: auto;
 		max-width: 100%;
+		background: var(--brand-white);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-lg);
 	}
+
 	.calendar-grid {
+		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.8rem;
+		font-size: var(--text-xs);
+		font-variant-numeric: tabular-nums;
 	}
+
 	.calendar-grid th,
 	.calendar-grid td {
-		border: 1px solid #ddd;
-		padding: 0.2rem 0.4rem;
+		min-width: 3.5rem;
+		padding: var(--space-2);
 		text-align: center;
 		white-space: nowrap;
+		border-right: 1px solid var(--brand-mist);
+		border-bottom: 1px solid var(--brand-mist);
 	}
+
+	.calendar-grid thead th {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		color: var(--ink-muted);
+		background: var(--surface-muted);
+		font-weight: 700;
+	}
+
 	.day-col {
 		text-align: left;
 		position: sticky;
 		left: 0;
-		background: white;
+		z-index: 1;
+		min-width: 8rem;
+		color: var(--ink-default);
+		background: var(--brand-white);
 	}
+
+	thead .day-col {
+		z-index: 3;
+		background: var(--surface-muted);
+	}
+
 	.st-present {
-		background: #d1fadf;
+		color: #056e61;
+		background: var(--primary-tint);
 	}
+
 	.st-morning,
 	.st-evening {
-		background: #fef3c7;
+		color: var(--ink-default);
+		background: var(--surface-muted);
 	}
+
+	.st-evening {
+		box-shadow: inset 0 0 0 1px var(--brand-steel);
+	}
+
 	.st-absent {
-		background: #fee2e2;
+		color: var(--ink-strong);
+		background: var(--brand-white);
 	}
+
 	.pct-high {
-		background: #d1fadf;
+		color: #056e61;
+		background: var(--primary-tint);
 	}
+
 	.pct-mid {
-		background: #fef3c7;
+		color: var(--ink-default);
+		background: #dcecea;
 	}
+
 	.pct-low {
-		background: #fed7aa;
+		color: var(--ink-default);
+		background: var(--surface-muted);
 	}
+
 	.pct-none {
-		background: #fee2e2;
+		color: var(--ink-strong);
+		background: var(--brand-white);
+	}
+
+	.legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-3);
+		margin-top: var(--space-2);
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
+	}
+
+	.legend span {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
+	}
+
+	.legend__swatch {
+		display: inline-grid;
+		width: 1.5rem;
+		height: 1.5rem;
+		place-items: center;
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-sm);
 	}
 </style>

@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { todayStr, addDaysStr, startOfMonthStr } from '$lib/date';
+	import CalendarDays from '@lucide/svelte/icons/calendar-days';
 
-	let { from = $bindable(''), to = $bindable(''), onchange = () => {} } = $props<{
+	let {
+		from = $bindable(''),
+		to = $bindable(''),
+		onchange = () => {}
+	} = $props<{
 		from?: string;
 		to?: string;
 		onchange?: () => void;
@@ -26,19 +31,23 @@
 	}
 </script>
 
-<div class="range-picker">
-	<div class="presets">
-		<button type="button" onclick={() => applyPreset('today')}>Today</button>
-		<button type="button" onclick={() => applyPreset('7d')}>Last 7 days</button>
-		<button type="button" onclick={() => applyPreset('30d')}>Last 30 days</button>
-		<button type="button" onclick={() => applyPreset('month')}>This month</button>
+<div class="range-picker" aria-label="Date range">
+	<div class="range-picker__title">
+		<CalendarDays size={18} aria-hidden="true" />
+		<strong>Date range</strong>
 	</div>
-	<label>
-		From:
+	<div class="presets" aria-label="Date range presets">
+		<button class="preset" type="button" onclick={() => applyPreset('today')}>Today</button>
+		<button class="preset" type="button" onclick={() => applyPreset('7d')}>Last 7 days</button>
+		<button class="preset" type="button" onclick={() => applyPreset('30d')}>Last 30 days</button>
+		<button class="preset" type="button" onclick={() => applyPreset('month')}>This month</button>
+	</div>
+	<label class="field">
+		From
 		<input type="date" bind:value={from} onchange={() => onchange()} />
 	</label>
-	<label>
-		To:
+	<label class="field">
+		To
 		<input type="date" bind:value={to} onchange={() => onchange()} />
 	</label>
 </div>
@@ -47,16 +56,60 @@
 	.range-picker {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.5rem;
-		align-items: center;
-		margin: 0.5rem 0;
+		gap: var(--space-3);
+		align-items: flex-end;
+		padding: var(--space-3);
+		background: var(--brand-white);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-lg);
 	}
+
+	.range-picker__title {
+		display: flex;
+		min-height: 2.75rem;
+		align-items: center;
+		gap: var(--space-2);
+		color: var(--ink-strong);
+	}
+
 	.presets {
 		display: flex;
-		gap: 0.25rem;
+		flex-wrap: wrap;
+		gap: var(--space-1);
 	}
-	button {
-		font-size: 0.8rem;
-		padding: 0.25rem 0.5rem;
+
+	.preset {
+		min-height: 2.75rem;
+		padding: var(--space-2) var(--space-3);
+		color: var(--ink-default);
+		background: var(--surface-subtle);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+		font-size: var(--text-sm);
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.preset:hover {
+		background: var(--primary-tint);
+		border-color: var(--brand-teal);
+	}
+
+	.field {
+		min-width: 9rem;
+	}
+
+	@media (max-width: 40rem) {
+		.range-picker,
+		.range-picker__title,
+		.presets,
+		.field {
+			width: 100%;
+		}
+
+		.presets {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+		}
 	}
 </style>
