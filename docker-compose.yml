@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: attendance
+      POSTGRES_PASSWORD: attendance
+      POSTGRES_DB: attendance
+      TZ: Asia/Kolkata
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U attendance -d attendance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ai-service:
+    build: ./ai-service
+    environment:
+      TZ: Asia/Kolkata
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  app:
+    build: .
+    environment:
+      TZ: Asia/Kolkata
+      DATABASE_URL: postgres://attendance:attendance@postgres:5432/attendance
+      JWT_SECRET: dev-secret-change-me
+      FACE_MATCH_THRESHOLD: "0.68"
+      EVENING_PAIRING_WINDOW_HOURS: "24"
+      AI_SERVICE_URL: http://ai-service:8000
+      PORT: "3000"
+      BODY_SIZE_LIMIT: "20000000"
+      ORIGIN: http://localhost:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+    volumes:
+      - uploads:/app/uploads
+
+  worker:
+    build: .
+    command: ["node", "worker/index.js"]
+    environment:
+      TZ: Asia/Kolkata
+      DATABASE_URL: postgres://attendance:attendance@postgres:5432/attendance
+      FACE_MATCH_THRESHOLD: "0.68"
+      EVENING_PAIRING_WINDOW_HOURS: "24"
+      AI_SERVICE_URL: http://ai-service:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  pgdata:
+  uploads:
