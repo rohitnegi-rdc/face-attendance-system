@@ -1,0 +1,9 @@
+node_modules
+.svelte-kit
+build
+.git
+Test
+plans
+docs
+uploads
+*.log
