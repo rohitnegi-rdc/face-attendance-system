@@ -1,0 +1,25 @@
+{
+  "images": [
+    {
+      "source_image": "Test/faces/group photo.jpg",
+      "face_count": 5,
+      "annotated_image": "test-output/face-extraction/group_photo/annotated_bounding_boxes.jpg",
+      "json": "test-output/face-extraction/group_photo/faces.json",
+      "processing_ms": 3866.0
+    },
+    {
+      "source_image": "Test/faces/group_evening.jpg",
+      "face_count": 5,
+      "annotated_image": "test-output/face-extraction/group_evening/annotated_bounding_boxes.jpg",
+      "json": "test-output/face-extraction/group_evening/faces.json",
+      "processing_ms": 2797.2
+    },
+    {
+      "source_image": "Test/faces/group_morning.jpg",
+      "face_count": 6,
+      "annotated_image": "test-output/face-extraction/group_morning/annotated_bounding_boxes.jpg",
+      "json": "test-output/face-extraction/group_morning/faces.json",
+      "processing_ms": 3628.0
+    }
+  ]
+}
