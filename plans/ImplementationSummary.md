@@ -271,3 +271,65 @@ contains `href="/admin/insights"`.
 - Log in as `admin@attendance.local` / `Admin1234!` and visit `/admin/attendance`,
   `/admin/pumps/<id>`, `/admin/vendors/<id>`, `/admin/areas/<id>`, `/admin/persons/<id>`, and
   `/admin/insights` to see the full overhaul.
+
+---
+
+# Output: Guided Workforce UI Redesign Implementation (2026-07-27)
+
+## Implemented scope
+
+- Added `PRODUCT.md` and `DESIGN.md` as the product register and canonical Guided Workforce design
+  specification.
+- Added the shared palette, typography, spacing, focus, table, form, metric, status, empty-state,
+  and responsive tokens under `src/lib/styles/`.
+- Added role-aware admin/vendor application navigation, a mobile pump shell, account context,
+  responsive navigation drawer, skip link, and working `POST /api/auth/logout`.
+- Rebuilt login with visible labels, password visibility control, loading state, plain-language
+  errors, autocomplete metadata, and responsive WCAG-focused behavior.
+- Rebuilt pump capture as a deliberate select/preview/submit/process/result workflow. The selected
+  group photo survives recoverable upload failures; bounded polling tolerates temporary status
+  interruptions; the sticky mobile action uses safe-area padding.
+- Extended pump APIs with pump/plant/area context, exact IST next-allowed and pairing-expiry times,
+  latest-session context, secure original-photo delivery, matched/new-person crops, unknown-face
+  results, and readable cross-pump fraud context. Raw embeddings are not serialized.
+- Rebuilt the admin overview, insights, attendance, fraud, guest, merge, CSV import, and all
+  pump/vendor/area/person drill-down interfaces using the shared system. Existing grouped-day and
+  paginated range attendance modes remain intact.
+- Added admin attendance filters for plant, morning/evening session, present/absent status, and
+  page sizes of 25/50/100. The XLSX export applies the same filter semantics.
+- Added CSV drag-and-drop, required-header validation, a downloadable template, retained file
+  state, progress/error handling, result totals, and a row-error table. Server validation now
+  limits imports to CSV files of 5 MB or less.
+- Added complete vendor-scoped overview, attendance calendar, pumps, and anonymous people routes.
+  Every vendor query is constrained by the authenticated vendor ID.
+- Added migration `002_add_merge_review_decisions.sql`. Merge dismissals now persist, completed
+  pairs are excluded, cross-pump merges are rejected, and same-day attendance collisions are
+  combined transactionally. This supersedes the earlier computed-only merge limitation documented
+  above.
+- Added `@lucide/svelte`, `@axe-core/playwright`, focused responsive/accessibility E2E coverage,
+  and visual QA captures.
+
+## Verification output
+
+- Database migration: `002_add_merge_review_decisions.sql` applied successfully to the running
+  PostgreSQL container.
+- `npm run check`: passed with **0 errors and 0 warnings**.
+- `npm run build`: passed using the adapter-node production build.
+- `npx playwright test --workers=2`: **6 tests passed**, including login axe validation, admin
+  serious/critical axe validation, 320px/390px overflow checks, retained pump photo preview,
+  vendor navigation, and an SSR smoke sweep across all admin/vendor operational routes.
+- `git diff --check`: passed.
+- Visual captures are stored in `test-output/ui-redesign/`:
+  `login-320.png`, `pump-preview-390.png`, `vendor-overview-768.png`, and
+  `admin-overview-1440.png`.
+- Production preview verified at `http://127.0.0.1:4178`.
+
+## Residual tooling notes
+
+- The repository-wide `npm run lint` remains blocked by its existing baseline: Prettier reports 23
+  unrelated pre-existing files/generated outputs, and ESLint reports 228 strict-rule violations
+  across legacy and new query-heavy code. Changed redesign files pass their scoped Prettier check;
+  Svelte's compiler check is clean.
+- `npm audit --omit=dev` reports 10 transitive advisories (9 high, 1 moderate) below ExcelJS's
+  archive dependency tree. npm only proposes a forced breaking downgrade to `exceljs@3.4.0`, so no
+  unsafe `--force` change was applied.
