@@ -1,195 +1,299 @@
 <script lang="ts">
-	import { sparklinePath } from '$lib/sparkline';
+	import ArrowDown from '@lucide/svelte/icons/arrow-down';
+	import ArrowRight from '@lucide/svelte/icons/arrow-right';
+	import ArrowUp from '@lucide/svelte/icons/arrow-up';
+	import Minus from '@lucide/svelte/icons/minus';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import Sparkline from '$lib/components/Sparkline.svelte';
+	import StatusBadge from '$lib/components/StatusBadge.svelte';
 
 	let { data } = $props();
 
-	function deltaClass(v: number) {
-		return v > 0 ? 'delta-up' : v < 0 ? 'delta-down' : 'delta-flat';
+	function fmtDelta(value: number) {
+		return value > 0 ? `+${value}` : `${value}`;
 	}
-	function fmtDelta(v: number) {
-		return v > 0 ? `+${v}` : `${v}`;
+
+	function deltaIcon(value: number) {
+		return value > 0 ? ArrowUp : value < 0 ? ArrowDown : Minus;
 	}
+
+	let AttendanceYesterdayIcon = $derived(deltaIcon(data.trends.attendancePct.vsYesterday));
+	let AttendanceAverageIcon = $derived(deltaIcon(data.trends.attendancePct.vs7dAvg));
+	let FraudIcon = $derived(deltaIcon(data.trends.fraudFlags.vsYesterday));
+	let PumpsIcon = $derived(deltaIcon(data.trends.activePumps.vsYesterday));
 </script>
 
-<div class="wrap">
-	<h1>Insights</h1>
+<svelte:head><title>Insights | Face Attendance</title></svelte:head>
+
+<div class="page insights-page">
+	<header class="page-header">
+		<div class="page-header__copy">
+			<p class="eyebrow">Operational health</p>
+			<h1>Insights</h1>
+			<p>Trends, comparisons, and locations that need attention.</p>
+		</div>
+	</header>
 
 	<section>
-		<h2>Today at a Glance</h2>
-		<div class="cards">
-			<div class="card">
-				<div class="label">Attendance %</div>
-				<div class="value">{data.trends.attendancePct.value}%</div>
-				<div class="delta {deltaClass(data.trends.attendancePct.vsYesterday)}">
+		<div class="section-header"><h2>Today at a glance</h2></div>
+		<div class="insight-metrics">
+			<div class="insight-metric">
+				<span>Attendance</span><strong>{data.trends.attendancePct.value}%</strong>
+				<p>
+					<AttendanceYesterdayIcon size={14} />
 					{fmtDelta(data.trends.attendancePct.vsYesterday)}pp vs yesterday
-				</div>
-				<div class="delta {deltaClass(data.trends.attendancePct.vs7dAvg)}">
-					{fmtDelta(data.trends.attendancePct.vs7dAvg)}pp vs 7-day avg
-				</div>
+				</p>
+				<p>
+					<AttendanceAverageIcon size={14} />
+					{fmtDelta(data.trends.attendancePct.vs7dAvg)}pp vs 7-day average
+				</p>
 			</div>
-			<div class="card">
-				<div class="label">Fraud Flags Today</div>
-				<div class="value">{data.trends.fraudFlags.value}</div>
-				<div class="delta {deltaClass(data.trends.fraudFlags.vsYesterday)}">
-					{fmtDelta(data.trends.fraudFlags.vsYesterday)} vs yesterday
-				</div>
+			<div class="insight-metric">
+				<span>Fraud flags</span><strong>{data.trends.fraudFlags.value}</strong>
+				<p><FraudIcon size={14} /> {fmtDelta(data.trends.fraudFlags.vsYesterday)} vs yesterday</p>
 			</div>
-			<div class="card">
-				<div class="label">Active Pumps Today</div>
-				<div class="value">{data.trends.activePumps.value}</div>
-				<div class="delta {deltaClass(data.trends.activePumps.vsYesterday)}">
-					{fmtDelta(data.trends.activePumps.vsYesterday)} vs yesterday
-				</div>
+			<div class="insight-metric">
+				<span>Active pumps</span><strong>{data.trends.activePumps.value}</strong>
+				<p><PumpsIcon size={14} /> {fmtDelta(data.trends.activePumps.vsYesterday)} vs yesterday</p>
 			</div>
 		</div>
 	</section>
 
-	<section>
-		<h2>Pumps Needing Attention ({data.pumpsNeedingAttention.length})</h2>
-		{#if data.pumpsNeedingAttention.length === 0}
-			<p class="muted">No pumps currently flagged.</p>
-		{:else}
-			<ul class="attention-list">
-				{#each data.pumpsNeedingAttention as p}
-					<li>
-						<a href="/admin/pumps/{p.id}">{p.pump_code}</a>
-						<span class="reasons">{p.reasons.join('; ')}</span>
-					</li>
+	<section class="section">
+		<div class="section-header">
+			<div>
+				<h2>Pumps needing attention</h2>
+				<p class="supporting-text">
+					Combined submission and attendance signals, highest priority first.
+				</p>
+			</div>
+			<StatusBadge tone="attention" label={`${data.pumpsNeedingAttention.length} flagged`} />
+		</div>
+		{#if data.pumpsNeedingAttention.length}
+			<div class="attention-list">
+				{#each data.pumpsNeedingAttention as pump, index}
+					<a href={`/admin/pumps/${pump.id}`}>
+						<span class="rank">{index + 1}</span>
+						<span><strong>{pump.pump_code}</strong><small>{pump.reasons.join(' · ')}</small></span>
+						<ArrowRight size={18} />
+					</a>
 				{/each}
-			</ul>
+			</div>
+		{:else}
+			<EmptyState
+				title="No pumps need attention"
+				description="Submission timing and attendance trends are within the expected range."
+			/>
 		{/if}
 	</section>
 
-	<section>
-		<h2>Vendor Rollup</h2>
-		<table>
-			<thead>
-				<tr>
-					<th>Vendor</th><th>Pumps</th><th>Persons (30d)</th><th>Today %</th><th>30d Baseline</th>
-					<th>Δ vs Baseline</th><th>Area Median</th><th>Fraud Rate</th><th>7d Trend</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each data.vendorRollup as v}
-					<tr>
-						<td><a href="/admin/vendors/{v.id}">{v.name}</a></td>
-						<td>{v.pumpCount}</td>
-						<td>{v.distinctPersons}</td>
-						<td>{v.todayPct}%</td>
-						<td>{v.baselinePct}%</td>
-						<td class={deltaClass(v.delta)}>{fmtDelta(v.delta)}pp</td>
-						<td>{v.areaMedianPct}%</td>
-						<td>{v.fraudRate}%</td>
-						<td>
-							<svg width="100" height="24" viewBox="0 0 100 24">
-								<path d={sparklinePath(data.vendorSparklines[v.id] || [])} fill="none" stroke="#2563eb" stroke-width="1.5" />
-							</svg>
-						</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
+	<section class="section">
+		<div class="section-header">
+			<div>
+				<h2>Vendor rollup</h2>
+				<p class="supporting-text">Ranked by change from the 30-day baseline.</p>
+			</div>
+		</div>
+		<div class="table-wrap">
+			<table class="data-table">
+				<thead
+					><tr
+						><th>Vendor</th><th>Pumps</th><th>People</th><th>Today</th><th>30-day baseline</th><th
+							>Change</th
+						><th>Area median</th><th>Fraud rate</th><th>7-day trend</th></tr
+					></thead
+				>
+				<tbody
+					>{#each data.vendorRollup as vendor}{@const DeltaIcon = deltaIcon(vendor.delta)}<tr
+							><td><a href={`/admin/vendors/${vendor.id}`}>{vendor.name}</a></td><td
+								>{vendor.pumpCount}</td
+							><td>{vendor.distinctPersons}</td><td>{vendor.todayPct}%</td><td
+								>{vendor.baselinePct}%</td
+							><td><span class="delta"><DeltaIcon size={14} /> {fmtDelta(vendor.delta)}pp</span></td
+							><td>{vendor.areaMedianPct}%</td><td>{vendor.fraudRate}%</td><td
+								><Sparkline
+									values={data.vendorSparklines[vendor.id] || []}
+									width={100}
+									height={24}
+									label={`${vendor.name} seven-day trend`}
+								/></td
+							></tr
+						>{/each}</tbody
+				>
+			</table>
+		</div>
 	</section>
 
-	<section>
-		<h2>Area Rollup</h2>
-		<table>
-			<thead>
-				<tr><th>Area</th><th>Pumps</th><th>Persons (30d)</th><th>Today %</th><th>30d Baseline</th><th>Δ vs Baseline</th><th>7d Trend</th></tr>
-			</thead>
-			<tbody>
-				{#each data.areaRollup as a}
-					<tr>
-						<td><a href="/admin/areas/{a.id}">{a.name}</a></td>
-						<td>{a.pumpCount}</td>
-						<td>{a.distinctPersons}</td>
-						<td>{a.todayPct}%</td>
-						<td>{a.baselinePct}%</td>
-						<td class={deltaClass(a.delta)}>{fmtDelta(a.delta)}pp</td>
-						<td>
-							<svg width="100" height="24" viewBox="0 0 100 24">
-								<path d={sparklinePath(data.areaSparklines[a.id] || [])} fill="none" stroke="#2563eb" stroke-width="1.5" />
-							</svg>
-						</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
+	<section class="section">
+		<div class="section-header">
+			<div>
+				<h2>Area rollup</h2>
+				<p class="supporting-text">Attendance performance across operating areas.</p>
+			</div>
+		</div>
+		<div class="table-wrap">
+			<table class="data-table">
+				<thead
+					><tr
+						><th>Area</th><th>Pumps</th><th>People</th><th>Today</th><th>30-day baseline</th><th
+							>Change</th
+						><th>7-day trend</th></tr
+					></thead
+				>
+				<tbody
+					>{#each data.areaRollup as area}{@const DeltaIcon = deltaIcon(area.delta)}<tr
+							><td><a href={`/admin/areas/${area.id}`}>{area.name}</a></td><td>{area.pumpCount}</td
+							><td>{area.distinctPersons}</td><td>{area.todayPct}%</td><td>{area.baselinePct}%</td
+							><td><span class="delta"><DeltaIcon size={14} /> {fmtDelta(area.delta)}pp</span></td
+							><td
+								><Sparkline
+									values={data.areaSparklines[area.id] || []}
+									width={100}
+									height={24}
+									label={`${area.name} seven-day trend`}
+								/></td
+							></tr
+						>{/each}</tbody
+				>
+			</table>
+		</div>
 	</section>
 
-	<section>
-		<h2>Data-Quality Backlog</h2>
-		<p>Pending flagged guests: {data.pendingGuestCount}</p>
-		<svg width="140" height="30" viewBox="0 0 140 30">
-			<path d={sparklinePath(data.guestBacklogSeries, 140, 30)} fill="none" stroke="#dc2626" stroke-width="1.5" />
-		</svg>
-		<p class="muted">7-day trend of unreviewed flagged guests — a growing line may indicate FACE_MATCH_THRESHOLD needs retuning.</p>
+	<section class="section quality-panel surface surface--padded">
+		<div>
+			<p class="eyebrow">Data quality</p>
+			<h2>Guest review backlog</h2>
+			<strong>{data.pendingGuestCount}</strong>
+			<p>
+				Unreviewed guest faces. A sustained increase may indicate that face-match thresholds need
+				review.
+			</p>
+		</div>
+		<Sparkline
+			values={data.guestBacklogSeries}
+			width={280}
+			height={80}
+			label="Seven-day guest review backlog"
+		/>
 	</section>
 </div>
 
 <style>
-	.wrap {
-		max-width: 1200px;
-		margin: 2rem auto;
-		font-family: sans-serif;
+	.insights-page {
+		--content-max: 88rem;
 	}
-	section {
-		margin-bottom: 2rem;
+	.eyebrow {
+		margin: 0 0 var(--space-1);
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-transform: uppercase;
 	}
-	.cards {
-		display: flex;
-		gap: 1rem;
+	.insight-metrics {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		background: var(--brand-white);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-lg);
 	}
-	.card {
-		border: 1px solid #ddd;
-		border-radius: 6px;
-		padding: 0.75rem 1.25rem;
-		min-width: 160px;
+	.insight-metric {
+		padding: var(--space-5);
+		border-right: 1px solid var(--brand-mist);
 	}
-	.card .label {
-		font-size: 0.8rem;
-		color: #666;
+	.insight-metric:last-child {
+		border-right: 0;
 	}
-	.card .value {
-		font-size: 1.4rem;
-		font-weight: 600;
+	.insight-metric > span {
+		color: var(--ink-muted);
 	}
+	.insight-metric > strong {
+		display: block;
+		margin: var(--space-1) 0 var(--space-3);
+		color: var(--ink-strong);
+		font-size: var(--text-2xl);
+	}
+	.insight-metric p,
 	.delta {
-		font-size: 0.75rem;
-	}
-	.delta-up {
-		color: #16a34a;
-	}
-	.delta-down {
-		color: #dc2626;
-	}
-	.delta-flat {
-		color: #666;
-	}
-	table {
-		width: 100%;
-		border-collapse: collapse;
-	}
-	th,
-	td {
-		border: 1px solid #ddd;
-		padding: 0.3rem 0.5rem;
+		display: flex;
+		align-items: center;
+		gap: var(--space-1);
+		margin: var(--space-1) 0;
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
 	}
 	.attention-list {
-		list-style: none;
-		padding: 0;
+		overflow: hidden;
+		background: var(--brand-white);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-lg);
 	}
-	.attention-list li {
-		padding: 0.4rem 0;
-		border-bottom: 1px solid #eee;
+	.attention-list a {
+		display: grid;
+		grid-template-columns: auto 1fr auto;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		color: var(--ink-default);
+		text-decoration: none;
+		border-bottom: 1px solid var(--brand-mist);
 	}
-	.reasons {
-		color: #666;
-		font-size: 0.85rem;
-		margin-left: 0.5rem;
+	.attention-list a:last-child {
+		border-bottom: 0;
 	}
-	.muted {
-		color: #888;
-		font-size: 0.85rem;
+	.attention-list a:hover {
+		background: var(--surface-subtle);
+	}
+	.attention-list a > span:nth-child(2) {
+		display: grid;
+	}
+	.attention-list small {
+		color: var(--ink-muted);
+	}
+	.rank {
+		display: grid;
+		width: 1.75rem;
+		height: 1.75rem;
+		place-items: center;
+		color: var(--ink-muted);
+		background: var(--surface-muted);
+		border-radius: var(--radius-sm);
+		font-size: var(--text-xs);
+		font-weight: 700;
+	}
+	.quality-panel {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-6);
+	}
+	.quality-panel > div {
+		max-width: 42rem;
+	}
+	.quality-panel h2 {
+		margin-bottom: var(--space-1);
+	}
+	.quality-panel strong {
+		color: var(--ink-strong);
+		font-size: var(--text-3xl);
+	}
+	.quality-panel p:last-child {
+		margin: var(--space-2) 0 0;
+		color: var(--ink-muted);
+	}
+	@media (max-width: 48rem) {
+		.insight-metrics {
+			grid-template-columns: 1fr;
+		}
+		.insight-metric {
+			border-right: 0;
+			border-bottom: 1px solid var(--brand-mist);
+		}
+		.insight-metric:last-child {
+			border-bottom: 0;
+		}
+		.quality-panel {
+			align-items: stretch;
+			flex-direction: column;
+		}
 	}
 </style>

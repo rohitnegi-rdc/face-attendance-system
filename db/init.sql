@@ -140,6 +140,19 @@ CREATE TABLE person_merge_log (
     merged_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE merge_review_decisions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lower_person_id UUID NOT NULL REFERENCES persons(id),
+    higher_person_id UUID NOT NULL REFERENCES persons(id),
+    decision TEXT NOT NULL CHECK (decision IN ('dismissed', 'merged')),
+    reviewed_by_admin_id UUID NOT NULL REFERENCES admins(id),
+    similarity_score DOUBLE PRECISION,
+    reviewed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (lower_person_id < higher_person_id),
+    UNIQUE (lower_person_id, higher_person_id)
+);
+CREATE INDEX merge_review_decisions_reviewed_at_idx ON merge_review_decisions (reviewed_at DESC);
+
 -- ---------- Aggregates ----------
 
 CREATE TABLE person_attendance_yearly (
@@ -173,6 +186,7 @@ CREATE TABLE schema_migrations (
 );
 -- Fresh installs already have display_seq via the persons table above, so mark 001 as applied.
 INSERT INTO schema_migrations (filename) VALUES ('001_add_person_display_seq.sql');
+INSERT INTO schema_migrations (filename) VALUES ('002_add_merge_review_decisions.sql');
 
 -- ---------- Job queue (Postgres-backed, no Redis — per Prompt A's own prototype option) ----------
 

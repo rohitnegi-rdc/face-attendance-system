@@ -1,86 +1,118 @@
 <script lang="ts">
+	import ArrowDownUp from '@lucide/svelte/icons/arrow-down-up';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 
 	let { data } = $props();
-	let from = $state(data.range.from);
-	let to = $state(data.range.to);
+	let from = $state('');
+	let to = $state('');
 	let sortCol = $state<'pump_code' | 'attendancePct'>('pump_code');
+	$effect(() => {
+		if (!from) from = data.range.from;
+		if (!to) to = data.range.to;
+	});
 
-	function apply() {
-		const params = new URLSearchParams({ from, to });
-		window.location.search = params.toString();
-	}
-
+	const entities = $derived(
+		data.pumps.map((pump: any) => ({ id: pump.id, label: pump.pump_code }))
+	);
 	let sortedPumps = $derived(
 		[...data.pumps].sort((a: any, b: any) =>
-			sortCol === 'attendancePct' ? b.attendancePct - a.attendancePct : a.pump_code.localeCompare(b.pump_code)
+			sortCol === 'attendancePct'
+				? b.attendancePct - a.attendancePct
+				: a.pump_code.localeCompare(b.pump_code)
 		)
 	);
 
-	const entities = data.pumps.map((p: any) => ({ id: p.id, label: p.pump_code }));
+	function apply() {
+		window.location.search = new URLSearchParams({ from, to }).toString();
+	}
 
 	function cellValue(pumpId: string, day: string) {
-		const v = data.dailyMap[`${pumpId}|${day}`];
-		if (!v || v.total === 0) return null;
-		return Math.round((v.present / v.total) * 100);
+		const value = data.dailyMap[`${pumpId}|${day}`];
+		return !value || value.total === 0 ? null : Math.round((value.present / value.total) * 100);
 	}
 </script>
 
-<div class="wrap">
-	<a href="/admin/attendance">&larr; Back to Attendance Table</a>
-	<h1>{data.vendor.name}</h1>
+<svelte:head><title>{data.vendor.name} | Face Attendance</title></svelte:head>
 
+<div class="page detail-page">
+	<a class="back-link" href="/admin/attendance"><ArrowLeft size={16} /> Attendance records</a>
+	<header class="page-header">
+		<div class="page-header__copy">
+			<p class="eyebrow">Vendor</p>
+			<h1>{data.vendor.name}</h1>
+			<p>Pump performance across the selected range.</p>
+		</div>
+	</header>
 	<DateRangePicker bind:from bind:to onchange={apply} />
-
-	<h2>Attendance % by Pump (over range)</h2>
-	<AttendanceCalendarGrid days={data.days} {entities} {cellValue} mode="percent" />
-
-	<h2>Pumps</h2>
-	<table>
-		<thead>
-			<tr>
-				<th><button onclick={() => (sortCol = 'pump_code')}>Pump</button></th>
-				<th>Plant</th>
-				<th>Area</th>
-				<th><button onclick={() => (sortCol = 'attendancePct')}>Attendance % (range)</button></th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each sortedPumps as p}
-				<tr>
-					<td><a href="/admin/pumps/{p.id}">{p.pump_code}</a></td>
-					<td>{p.plant_name}</td>
-					<td>{p.area_name}</td>
-					<td>{p.attendancePct}%</td>
-				</tr>
-			{/each}
-		</tbody>
-	</table>
+	<section class="section">
+		<div class="section-header">
+			<div>
+				<h2>Attendance by pump</h2>
+				<p class="supporting-text">Daily percentage of complete attendance.</p>
+			</div>
+		</div>
+		<AttendanceCalendarGrid days={data.days} {entities} {cellValue} mode="percent" />
+	</section>
+	<section class="section">
+		<div class="section-header"><h2>Pumps</h2></div>
+		<div class="table-wrap">
+			<table class="data-table">
+				<thead
+					><tr
+						><th
+							><button class="sort-button" type="button" onclick={() => (sortCol = 'pump_code')}
+								>Pump <ArrowDownUp size={14} /></button
+							></th
+						><th>Plant</th><th>Area</th><th
+							><button class="sort-button" type="button" onclick={() => (sortCol = 'attendancePct')}
+								>Attendance <ArrowDownUp size={14} /></button
+							></th
+						></tr
+					></thead
+				><tbody
+					>{#each sortedPumps as pump}<tr
+							><td><a href={`/admin/pumps/${pump.id}`}>{pump.pump_code}</a></td><td
+								>{pump.plant_name}</td
+							><td>{pump.area_name}</td><td>{pump.attendancePct}%</td></tr
+						>{/each}</tbody
+				>
+			</table>
+		</div>
+	</section>
 </div>
 
 <style>
-	.wrap {
-		max-width: 1100px;
-		margin: 2rem auto;
-		font-family: sans-serif;
+	.detail-page {
+		--content-max: 80rem;
 	}
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		margin: 0.5rem 0 1.5rem;
-	}
-	th,
-	td {
-		border: 1px solid #ddd;
-		padding: 0.3rem 0.5rem;
-	}
-	th button {
-		background: none;
-		border: none;
-		font: inherit;
+	.back-link {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
+		margin-bottom: var(--space-5);
+		font-size: var(--text-sm);
 		font-weight: 600;
-		cursor: pointer;
+		text-decoration: none;
+	}
+	.eyebrow {
+		margin: 0 0 var(--space-1);
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-transform: uppercase;
+	}
+	.sort-button {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
 		padding: 0;
+		color: inherit;
+		background: transparent;
+		border: 0;
+		font: inherit;
+		font-weight: 700;
+		cursor: pointer;
 	}
 </style>

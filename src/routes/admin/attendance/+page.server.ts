@@ -12,12 +12,26 @@ const SORTABLE_COLUMNS: Record<string, string> = {
 export const load: PageServerLoad = async ({ url }) => {
 	const areaId = url.searchParams.get('area') || '';
 	const vendorId = url.searchParams.get('vendor') || '';
+	const plantId = url.searchParams.get('plant') || '';
 	const pumpId = url.searchParams.get('pump') || '';
+	const session = ['morning', 'evening'].includes(url.searchParams.get('session') || '')
+		? url.searchParams.get('session')!
+		: '';
+	const status = ['present', 'absent'].includes(url.searchParams.get('status') || '')
+		? url.searchParams.get('status')!
+		: '';
+	const attendanceExpression =
+		session === 'morning'
+			? 'dpa.morning_matched'
+			: session === 'evening'
+				? 'dpa.evening_matched'
+				: '(dpa.morning_matched AND dpa.evening_matched)';
 	const day = url.searchParams.get('day') || '';
 	let from = url.searchParams.get('from') || '';
 	let to = url.searchParams.get('to') || '';
 	const page = Math.max(1, Number(url.searchParams.get('page') || '1'));
-	const pageSize = 50;
+	const requestedPageSize = Number(url.searchParams.get('page_size') || '50');
+	const pageSize = [25, 50, 100].includes(requestedPageSize) ? requestedPageSize : 50;
 	const sortCol = SORTABLE_COLUMNS[url.searchParams.get('sort') || ''] || 'dpa.session_date';
 	const sortDir = url.searchParams.get('dir') === 'asc' ? 'ASC' : 'DESC';
 
@@ -37,6 +51,10 @@ export const load: PageServerLoad = async ({ url }) => {
 		params.push(vendorId);
 		conditions.push(`v.id = $${params.length}`);
 	}
+	if (plantId) {
+		params.push(plantId);
+		conditions.push(`pl.id = $${params.length}`);
+	}
 	if (pumpId) {
 		params.push(pumpId);
 		conditions.push(`pu.id = $${params.length}`);
@@ -48,6 +66,9 @@ export const load: PageServerLoad = async ({ url }) => {
 	if (to) {
 		params.push(to);
 		conditions.push(`dpa.session_date <= $${params.length}`);
+	}
+	if (status) {
+		conditions.push(status === 'present' ? attendanceExpression : `NOT ${attendanceExpression}`);
 	}
 	const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -69,8 +90,8 @@ export const load: PageServerLoad = async ({ url }) => {
 		grouped = await query<any>(
 			`SELECT a.id AS area_id, a.name AS area_name, v.id AS vendor_id, v.name AS vendor_name,
 			        pu.id AS pump_id, pu.pump_code,
-			        COUNT(*) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched) AS present,
-			        COUNT(*) FILTER (WHERE NOT (dpa.morning_matched AND dpa.evening_matched)) AS absent,
+			        COUNT(*) FILTER (WHERE ${attendanceExpression}) AS present,
+			        COUNT(*) FILTER (WHERE NOT ${attendanceExpression}) AS absent,
 			        COUNT(*) AS total
 			 FROM daily_person_attendance dpa
 			 JOIN pumps pu ON pu.id = dpa.pump_id
@@ -118,8 +139,8 @@ export const load: PageServerLoad = async ({ url }) => {
 	const summaryParams = params.slice(0, conditions.length);
 	const [summary] = await query<any>(
 		`SELECT
-		   COUNT(*) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched) AS present,
-		   COUNT(*) FILTER (WHERE NOT (dpa.morning_matched AND dpa.evening_matched)) AS absent,
+		   COUNT(*) FILTER (WHERE ${attendanceExpression}) AS present,
+		   COUNT(*) FILTER (WHERE NOT ${attendanceExpression}) AS absent,
 		   COUNT(*) AS total
 		 FROM daily_person_attendance dpa
 		 JOIN pumps pu ON pu.id = dpa.pump_id
@@ -136,6 +157,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	const areas = await query<any>(`SELECT id, name FROM areas ORDER BY name`);
 	const vendors = await query<any>(`SELECT id, name FROM vendors ORDER BY name`);
+	const plants = await query<any>(`SELECT id, name FROM plants ORDER BY name`);
 	const pumps = await query<any>(`SELECT id, pump_code FROM pumps ORDER BY pump_code`);
 
 	return {
@@ -143,9 +165,25 @@ export const load: PageServerLoad = async ({ url }) => {
 		grouped,
 		isSingleDay,
 		summary: { present, absent, total, attendancePct },
-		options: { areas, vendors, pumps },
-		filters: { area: areaId, vendor: vendorId, pump: pumpId, day, from, to },
-		pagination: { page, pageSize, total: Number(totalCount), totalPages: Math.max(1, Math.ceil(Number(totalCount) / pageSize)) },
+		options: { areas, vendors, plants, pumps },
+		filters: {
+			area: areaId,
+			vendor: vendorId,
+			plant: plantId,
+			pump: pumpId,
+			session,
+			status,
+			day,
+			from,
+			to,
+			page_size: String(pageSize)
+		},
+		pagination: {
+			page,
+			pageSize,
+			total: Number(totalCount),
+			totalPages: Math.max(1, Math.ceil(Number(totalCount) / pageSize))
+		},
 		sort: { col: url.searchParams.get('sort') || 'session_date', dir: sortDir.toLowerCase() }
 	};
 };

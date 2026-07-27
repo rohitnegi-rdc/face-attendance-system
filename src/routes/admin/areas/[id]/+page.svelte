@@ -1,59 +1,81 @@
 <script lang="ts">
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 
 	let { data } = $props();
-	let from = $state(data.range.from);
-	let to = $state(data.range.to);
+	let from = $state('');
+	let to = $state('');
+	$effect(() => {
+		if (!from) from = data.range.from;
+		if (!to) to = data.range.to;
+	});
+
+	const entities = $derived(data.plants.map((plant: any) => ({ id: plant.id, label: plant.name })));
 
 	function apply() {
-		const params = new URLSearchParams({ from, to });
-		window.location.search = params.toString();
+		window.location.search = new URLSearchParams({ from, to }).toString();
 	}
 
-	const entities = data.plants.map((p: any) => ({ id: p.id, label: p.name }));
-
 	function cellValue(plantId: string, day: string) {
-		const v = data.dailyMap[`${plantId}|${day}`];
-		if (!v || v.total === 0) return null;
-		return Math.round((v.present / v.total) * 100);
+		const value = data.dailyMap[`${plantId}|${day}`];
+		return !value || value.total === 0 ? null : Math.round((value.present / value.total) * 100);
 	}
 </script>
 
-<div class="wrap">
-	<a href="/admin/attendance">&larr; Back to Attendance Table</a>
-	<h1>{data.area.name}</h1>
+<svelte:head><title>{data.area.name} | Face Attendance</title></svelte:head>
 
+<div class="page detail-page">
+	<a class="back-link" href="/admin/attendance"><ArrowLeft size={16} /> Attendance records</a>
+	<header class="page-header">
+		<div class="page-header__copy">
+			<p class="eyebrow">Area</p>
+			<h1>{data.area.name}</h1>
+			<p>Plant-level attendance across the selected range.</p>
+		</div>
+	</header>
 	<DateRangePicker bind:from bind:to onchange={apply} />
-
-	<h2>Attendance % by Plant (over range)</h2>
-	<AttendanceCalendarGrid days={data.days} {entities} {cellValue} mode="percent" />
-
-	<h2>Plants</h2>
-	<table>
-		<thead><tr><th>Plant</th><th>Attendance % (range)</th></tr></thead>
-		<tbody>
-			{#each data.plants as p}
-				<tr><td>{p.name}</td><td>{p.attendancePct}%</td></tr>
-			{/each}
-		</tbody>
-	</table>
+	<section class="section">
+		<div class="section-header">
+			<div>
+				<h2>Attendance by plant</h2>
+				<p class="supporting-text">Daily percentage of complete attendance.</p>
+			</div>
+		</div>
+		<AttendanceCalendarGrid days={data.days} {entities} {cellValue} mode="percent" />
+	</section>
+	<section class="section">
+		<div class="section-header"><h2>Plants</h2></div>
+		<div class="table-wrap">
+			<table class="data-table">
+				<thead><tr><th>Plant</th><th>Attendance in range</th></tr></thead><tbody
+					>{#each data.plants as plant}<tr
+							><td><strong>{plant.name}</strong></td><td>{plant.attendancePct}%</td></tr
+						>{/each}</tbody
+				>
+			</table>
+		</div>
+	</section>
 </div>
 
 <style>
-	.wrap {
-		max-width: 1100px;
-		margin: 2rem auto;
-		font-family: sans-serif;
+	.detail-page {
+		--content-max: 80rem;
 	}
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		margin: 0.5rem 0 1.5rem;
+	.back-link {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
+		margin-bottom: var(--space-5);
+		font-size: var(--text-sm);
+		font-weight: 600;
+		text-decoration: none;
 	}
-	th,
-	td {
-		border: 1px solid #ddd;
-		padding: 0.3rem 0.5rem;
+	.eyebrow {
+		margin: 0 0 var(--space-1);
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-transform: uppercase;
 	}
 </style>
