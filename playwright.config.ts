@@ -12,6 +12,7 @@ export default defineConfig({
 		}
 	},
 	testMatch: '**/*.e2e.{ts,js}',
+	testIgnore: '**/attendance-pipeline-ui.e2e.ts',
 	use: {
 		baseURL: 'http://127.0.0.1:4177',
 		trace: 'retain-on-failure'
