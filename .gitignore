@@ -24,6 +24,10 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Playwright
 test-results
+/playwright-report
+
+# Face attendance E2E run artifacts (contain biometric embeddings)
+/test-output/attendance-e2e/
 
 # Tool artifacts (not application code)
 .codex

@@ -1,0 +1,372 @@
+{
+  "schema_version": 1,
+  "description": "20 licensed group-photo cases across four recurring identity cohorts",
+  "photo_count": 20,
+  "photos": [
+    {
+      "id": "A01",
+      "cohort": "A",
+      "variant": "baseline",
+      "filename": "a-01-baseline.jpg",
+      "width": 1600,
+      "height": 1069,
+      "sha256": "d1619ceafc85cd457782ca81036beabc29a5d54c51a07e28ce34a046efbffca8",
+      "expected_visible_faces": 11,
+      "source": {
+        "title": "Ilorin Wikimedia Wikidata 6th Birthday Celebration",
+        "description_url": "https://commons.wikimedia.org/wiki/File:*Ilorin_Wikimedia_*Wikidata%27s_6th_Birthday_Celebration_*d3.jpg",
+        "author": "Kenogenic",
+        "license": "CC BY-SA 4.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/4.0/"
+      },
+      "modified": false
+    },
+    {
+      "id": "A02",
+      "cohort": "A",
+      "variant": "lowlight",
+      "filename": "a-02-lowlight.jpg",
+      "width": 1600,
+      "height": 1069,
+      "sha256": "9fe2f57190dda726b42f5eb55c1cbdcddc20c3fc411703bcc4b54d99ccf1c56d",
+      "expected_visible_faces": 11,
+      "source": {
+        "title": "Ilorin Wikimedia Wikidata 6th Birthday Celebration",
+        "description_url": "https://commons.wikimedia.org/wiki/File:*Ilorin_Wikimedia_*Wikidata%27s_6th_Birthday_Celebration_*d3.jpg",
+        "author": "Kenogenic",
+        "license": "CC BY-SA 4.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/4.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "A03",
+      "cohort": "A",
+      "variant": "compressed",
+      "filename": "a-03-compressed.jpg",
+      "width": 720,
+      "height": 481,
+      "sha256": "3786a914cded46928f0a57e94c3628bc03bc6d4c4d653f2e9ad5c602297a1fb8",
+      "expected_visible_faces": 11,
+      "source": {
+        "title": "Ilorin Wikimedia Wikidata 6th Birthday Celebration",
+        "description_url": "https://commons.wikimedia.org/wiki/File:*Ilorin_Wikimedia_*Wikidata%27s_6th_Birthday_Celebration_*d3.jpg",
+        "author": "Kenogenic",
+        "license": "CC BY-SA 4.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/4.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "A04",
+      "cohort": "A",
+      "variant": "center-crop",
+      "filename": "a-04-center-crop.jpg",
+      "width": 1280,
+      "height": 941,
+      "sha256": "d322d2863b8ada26e4d1d1605712f8a3160f55ab13b7d944e64b6a70ca7ce99d",
+      "expected_visible_faces": 11,
+      "source": {
+        "title": "Ilorin Wikimedia Wikidata 6th Birthday Celebration",
+        "description_url": "https://commons.wikimedia.org/wiki/File:*Ilorin_Wikimedia_*Wikidata%27s_6th_Birthday_Celebration_*d3.jpg",
+        "author": "Kenogenic",
+        "license": "CC BY-SA 4.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/4.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "A05",
+      "cohort": "A",
+      "variant": "mirrored",
+      "filename": "a-05-mirrored.jpg",
+      "width": 1600,
+      "height": 1069,
+      "sha256": "12a465120769963f31db442002e8ff751e3b767e14e7219e849304136cae6ac6",
+      "expected_visible_faces": 11,
+      "source": {
+        "title": "Ilorin Wikimedia Wikidata 6th Birthday Celebration",
+        "description_url": "https://commons.wikimedia.org/wiki/File:*Ilorin_Wikimedia_*Wikidata%27s_6th_Birthday_Celebration_*d3.jpg",
+        "author": "Kenogenic",
+        "license": "CC BY-SA 4.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/4.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "B01",
+      "cohort": "B",
+      "variant": "baseline",
+      "filename": "b-01-baseline.jpg",
+      "width": 1260,
+      "height": 840,
+      "sha256": "ff300cefe5e0135172418e30b5edf504eb02231c7373be8340fd5735bcf6ac04",
+      "expected_visible_faces": 29,
+      "source": {
+        "title": "2011 Graduating Class of Rose State College - Respiratory Therapists",
+        "description_url": "https://commons.wikimedia.org/wiki/File:2011_Graduating_Class_of_Rose_State_College_-_Respiratory_Therapists.jpg",
+        "author": "Ken Beachler / Rose State College",
+        "license": "CC BY 2.5",
+        "license_url": "https://creativecommons.org/licenses/by/2.5/"
+      },
+      "modified": false
+    },
+    {
+      "id": "B02",
+      "cohort": "B",
+      "variant": "lowlight",
+      "filename": "b-02-lowlight.jpg",
+      "width": 1260,
+      "height": 840,
+      "sha256": "974076ab61510d0c5738f94a5cea7d65d6638745d95fb91e1fa94a970681d2f9",
+      "expected_visible_faces": 29,
+      "source": {
+        "title": "2011 Graduating Class of Rose State College - Respiratory Therapists",
+        "description_url": "https://commons.wikimedia.org/wiki/File:2011_Graduating_Class_of_Rose_State_College_-_Respiratory_Therapists.jpg",
+        "author": "Ken Beachler / Rose State College",
+        "license": "CC BY 2.5",
+        "license_url": "https://creativecommons.org/licenses/by/2.5/"
+      },
+      "modified": true
+    },
+    {
+      "id": "B03",
+      "cohort": "B",
+      "variant": "compressed",
+      "filename": "b-03-compressed.jpg",
+      "width": 720,
+      "height": 480,
+      "sha256": "48061fbaf62ebb96ce31a69cc098187b6dedfd2d6c10258ea16a92e1d32d93cc",
+      "expected_visible_faces": 29,
+      "source": {
+        "title": "2011 Graduating Class of Rose State College - Respiratory Therapists",
+        "description_url": "https://commons.wikimedia.org/wiki/File:2011_Graduating_Class_of_Rose_State_College_-_Respiratory_Therapists.jpg",
+        "author": "Ken Beachler / Rose State College",
+        "license": "CC BY 2.5",
+        "license_url": "https://creativecommons.org/licenses/by/2.5/"
+      },
+      "modified": true
+    },
+    {
+      "id": "B04",
+      "cohort": "B",
+      "variant": "center-crop",
+      "filename": "b-04-center-crop.jpg",
+      "width": 1008,
+      "height": 740,
+      "sha256": "da2fc697319de4d9eea9433b81cc9a7342df49166f8ceca01d4bfb5bb52781bb",
+      "expected_visible_faces": 29,
+      "source": {
+        "title": "2011 Graduating Class of Rose State College - Respiratory Therapists",
+        "description_url": "https://commons.wikimedia.org/wiki/File:2011_Graduating_Class_of_Rose_State_College_-_Respiratory_Therapists.jpg",
+        "author": "Ken Beachler / Rose State College",
+        "license": "CC BY 2.5",
+        "license_url": "https://creativecommons.org/licenses/by/2.5/"
+      },
+      "modified": true
+    },
+    {
+      "id": "B05",
+      "cohort": "B",
+      "variant": "mirrored",
+      "filename": "b-05-mirrored.jpg",
+      "width": 1260,
+      "height": 840,
+      "sha256": "fdac48a4f67e9fc058b80bfd069cc822eb8d2369f668d9d00114359008ed8734",
+      "expected_visible_faces": 29,
+      "source": {
+        "title": "2011 Graduating Class of Rose State College - Respiratory Therapists",
+        "description_url": "https://commons.wikimedia.org/wiki/File:2011_Graduating_Class_of_Rose_State_College_-_Respiratory_Therapists.jpg",
+        "author": "Ken Beachler / Rose State College",
+        "license": "CC BY 2.5",
+        "license_url": "https://creativecommons.org/licenses/by/2.5/"
+      },
+      "modified": true
+    },
+    {
+      "id": "C01",
+      "cohort": "C",
+      "variant": "baseline",
+      "filename": "c-01-baseline.jpg",
+      "width": 640,
+      "height": 480,
+      "sha256": "338c69d4799a661faf1e199cf3651382d75a8e7511eac622ab7032f11a2f65fe",
+      "expected_visible_faces": 15,
+      "source": {
+        "title": "A FREE HUGS group in Chile",
+        "description_url": "https://commons.wikimedia.org/wiki/File:A_%27FREE_HUGS%27_group_in_Chile.jpg",
+        "author": "Rodrigo Sepulveda Heerwagen",
+        "license": "CC BY-SA 2.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/2.0/"
+      },
+      "modified": false
+    },
+    {
+      "id": "C02",
+      "cohort": "C",
+      "variant": "lowlight",
+      "filename": "c-02-lowlight.jpg",
+      "width": 640,
+      "height": 480,
+      "sha256": "a58e5212a8e49aa88d97c01c9708b32748ba6b68b5f3fe447da7b2a4638a6f0a",
+      "expected_visible_faces": 15,
+      "source": {
+        "title": "A FREE HUGS group in Chile",
+        "description_url": "https://commons.wikimedia.org/wiki/File:A_%27FREE_HUGS%27_group_in_Chile.jpg",
+        "author": "Rodrigo Sepulveda Heerwagen",
+        "license": "CC BY-SA 2.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/2.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "C03",
+      "cohort": "C",
+      "variant": "compressed",
+      "filename": "c-03-compressed.jpg",
+      "width": 640,
+      "height": 480,
+      "sha256": "01e2e6ab1d8864aef5d86ef74e3ddc304e4c1063712db92dbb14200c22e3aa56",
+      "expected_visible_faces": 15,
+      "source": {
+        "title": "A FREE HUGS group in Chile",
+        "description_url": "https://commons.wikimedia.org/wiki/File:A_%27FREE_HUGS%27_group_in_Chile.jpg",
+        "author": "Rodrigo Sepulveda Heerwagen",
+        "license": "CC BY-SA 2.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/2.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "C04",
+      "cohort": "C",
+      "variant": "center-crop",
+      "filename": "c-04-center-crop.jpg",
+      "width": 512,
+      "height": 422,
+      "sha256": "d4d2d2009f76c3a9c788495609e3a2a840915d1354601833cd9189675622bd8e",
+      "expected_visible_faces": 15,
+      "source": {
+        "title": "A FREE HUGS group in Chile",
+        "description_url": "https://commons.wikimedia.org/wiki/File:A_%27FREE_HUGS%27_group_in_Chile.jpg",
+        "author": "Rodrigo Sepulveda Heerwagen",
+        "license": "CC BY-SA 2.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/2.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "C05",
+      "cohort": "C",
+      "variant": "mirrored",
+      "filename": "c-05-mirrored.jpg",
+      "width": 640,
+      "height": 480,
+      "sha256": "1867e5e7ae94459ff0d6104b6b7a56be4f34a823550d85cc8ecb9412b8fb3818",
+      "expected_visible_faces": 15,
+      "source": {
+        "title": "A FREE HUGS group in Chile",
+        "description_url": "https://commons.wikimedia.org/wiki/File:A_%27FREE_HUGS%27_group_in_Chile.jpg",
+        "author": "Rodrigo Sepulveda Heerwagen",
+        "license": "CC BY-SA 2.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/2.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "D01",
+      "cohort": "D",
+      "variant": "baseline",
+      "filename": "d-01-baseline.jpg",
+      "width": 1175,
+      "height": 789,
+      "sha256": "b8cf3c164c208ab0c4d1c93c20a5ed7d7d563349dbd61f2da6a05b77ef1c1947",
+      "expected_visible_faces": 9,
+      "source": {
+        "title": "Group Portrait at X",
+        "description_url": "https://commons.wikimedia.org/wiki/File:Group_Portrait_at_X.jpg",
+        "author": "OBS onthemove",
+        "license": "CC BY-SA 3.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "modified": false
+    },
+    {
+      "id": "D02",
+      "cohort": "D",
+      "variant": "lowlight",
+      "filename": "d-02-lowlight.jpg",
+      "width": 1175,
+      "height": 789,
+      "sha256": "45da94bf56ec6fe991913f854d3a31a2e86f04431beffe2999d7c1fa0f60ceb9",
+      "expected_visible_faces": 9,
+      "source": {
+        "title": "Group Portrait at X",
+        "description_url": "https://commons.wikimedia.org/wiki/File:Group_Portrait_at_X.jpg",
+        "author": "OBS onthemove",
+        "license": "CC BY-SA 3.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "D03",
+      "cohort": "D",
+      "variant": "compressed",
+      "filename": "d-03-compressed.jpg",
+      "width": 720,
+      "height": 483,
+      "sha256": "8e3afaaeaabd265a4b250848df593c7b78c73a45121cef322542e93864f2193d",
+      "expected_visible_faces": 9,
+      "source": {
+        "title": "Group Portrait at X",
+        "description_url": "https://commons.wikimedia.org/wiki/File:Group_Portrait_at_X.jpg",
+        "author": "OBS onthemove",
+        "license": "CC BY-SA 3.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "D04",
+      "cohort": "D",
+      "variant": "center-crop",
+      "filename": "d-04-center-crop.jpg",
+      "width": 939,
+      "height": 695,
+      "sha256": "dea9ac0de0a3d1f594c7b39072306aa4025b8df08ffec1db8f07daf6d7f5b2ea",
+      "expected_visible_faces": 9,
+      "source": {
+        "title": "Group Portrait at X",
+        "description_url": "https://commons.wikimedia.org/wiki/File:Group_Portrait_at_X.jpg",
+        "author": "OBS onthemove",
+        "license": "CC BY-SA 3.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "modified": true
+    },
+    {
+      "id": "D05",
+      "cohort": "D",
+      "variant": "mirrored",
+      "filename": "d-05-mirrored.jpg",
+      "width": 1175,
+      "height": 789,
+      "sha256": "87a4b96bf71277f1e33c67cf866bc3721d84d51e52dbcbbc0026e4a35e1faeb0",
+      "expected_visible_faces": 9,
+      "source": {
+        "title": "Group Portrait at X",
+        "description_url": "https://commons.wikimedia.org/wiki/File:Group_Portrait_at_X.jpg",
+        "author": "OBS onthemove",
+        "license": "CC BY-SA 3.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "modified": true
+    }
+  ],
+  "negative_controls": [
+    "negative/no-face.jpg",
+    "negative/corrupt-image.jpg",
+    "negative/unsupported-name.bmp"
+  ]
+}

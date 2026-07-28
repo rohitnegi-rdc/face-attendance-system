@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "cohort": "A",
+      "filename": "cohort-a-ilorin.jpg",
+      "title": "Ilorin Wikimedia Wikidata 6th Birthday Celebration",
+      "description_url": "https://commons.wikimedia.org/wiki/File:*Ilorin_Wikimedia_*Wikidata%27s_6th_Birthday_Celebration_*d3.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/8/8d/%2AIlorin_Wikimedia_%2AWikidata%27s_6th_Birthday_Celebration_%2Ad3.jpg",
+      "author": "Kenogenic",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "expected_visible_faces": 11
+    },
+    {
+      "cohort": "B",
+      "filename": "cohort-b-respiratory-class.jpg",
+      "title": "2011 Graduating Class of Rose State College - Respiratory Therapists",
+      "description_url": "https://commons.wikimedia.org/wiki/File:2011_Graduating_Class_of_Rose_State_College_-_Respiratory_Therapists.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/a/a5/2011_Graduating_Class_of_Rose_State_College_-_Respiratory_Therapists.jpg",
+      "author": "Ken Beachler / Rose State College",
+      "license": "CC BY 2.5",
+      "license_url": "https://creativecommons.org/licenses/by/2.5/",
+      "expected_visible_faces": 29
+    },
+    {
+      "cohort": "C",
+      "filename": "cohort-c-free-hugs.jpg",
+      "title": "A FREE HUGS group in Chile",
+      "description_url": "https://commons.wikimedia.org/wiki/File:A_%27FREE_HUGS%27_group_in_Chile.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/3/3a/A_%27FREE_HUGS%27_group_in_Chile.jpg",
+      "author": "Rodrigo Sepulveda Heerwagen",
+      "license": "CC BY-SA 2.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/2.0/",
+      "expected_visible_faces": 15
+    },
+    {
+      "cohort": "D",
+      "filename": "cohort-d-group-portrait.jpg",
+      "title": "Group Portrait at X",
+      "description_url": "https://commons.wikimedia.org/wiki/File:Group_Portrait_at_X.jpg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/3/33/Group_Portrait_at_X.jpg",
+      "author": "OBS onthemove",
+      "license": "CC BY-SA 3.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "expected_visible_faces": 9
+    }
+  ]
+}
