@@ -333,3 +333,77 @@ contains `href="/admin/insights"`.
 - `npm audit --omit=dev` reports 10 transitive advisories (9 high, 1 moderate) below ExcelJS's
   archive dependency tree. npm only proposes a forced breaking downgrade to `exceljs@3.4.0`, so no
   unsafe `--force` change was applied.
+
+---
+
+# Output: Face Attendance E2E and Concurrency Testing (2026-07-28)
+
+## Implemented scope
+
+- Added a reproducible, attributed 20-image group-photo corpus covering four identity cohorts
+  across baseline, low-light, compressed, crop, and mirror variants. Added no-face, corrupt-image,
+  extension-mismatch, and oversized-upload negative cases.
+- Added extraction tooling that calls the real InsightFace service and stores numbered crops,
+  bounding-box overlays, complete 512-value embeddings, checksums, matching matrices, and contract
+  validation results under `test-output/attendance-e2e/<run-id>/`.
+- Added a real-stack concurrency harness for 20 simultaneous same-pump requests, 20 independent
+  Areas, and 20 pumps in one Area. The harness audits sessions, request IDs, files, jobs, attempts,
+  attendance, fraud flags, vectors, and queue drainage.
+- Added a dedicated Playwright configuration and six serial browser/API/database E2E scenarios.
+  Live-derived UI values are asserted immediately after each input/state transition, including
+  selected filename and size, processing state, waiting state, matched/new totals, session title,
+  and final locked state. Four midpoint/result screenshots were retained in the local run output.
+- Added migration `003_harden_attendance_pipeline.sql` and updated fresh-install schema definitions.
+- Hardened submission concurrency with a pump advisory transaction lock, atomic session/job
+  creation, rollback upload cleanup, deterministic conflict responses, and request IDs.
+- Hardened workers with transactional Area locks, stale-claim recovery, bounded three-attempt
+  retries, one job per session, session-scoped vectors, and explicit terminal failure states.
+- Made morning-only/yearly finalization idempotent and applied it consistently during expiry.
+- Corrected status classification so current-session matched and newly-created faces are mutually
+  exclusive.
+- Clamped InsightFace bounding boxes to the image dimensions and converted the pump session title
+  to an explicit Svelte `$derived` value.
+
+## Test output
+
+- Extraction run `20260728-101644`: **20 photos**, **303 faces**, **90.35% mean visible-face
+  recall**, **74.32% mean same-cohort variant match rate** at `0.68`, **0 cross-cohort false
+  matches**, and **0 embedding/bounding-box/crop contract errors**.
+- Same-pump burst: **1 accepted**, **19 deterministic 409 conflicts**, **0 HTTP 5xx**, **153 ms
+  submit p95**, and one completed job.
+- Independent-Area burst: **20/20 accepted and completed**, **0 failed**, **0 HTTP 5xx**, and
+  **120 ms submit p95**.
+- Same-Area burst: **20/20 accepted and completed**, **0 failed**, **0 HTTP 5xx**, and **132 ms
+  submit p95**.
+- Across the concurrency profiles, all **41 accepted jobs** reached `done`, each had exactly one
+  attempt, and there were no duplicate jobs or stranded `queued`/`claimed` jobs.
+- Same-Area fraud processing produced 187 flags while preserving Area serialization. Four workers
+  showed an average Area-lock wait of about 8.3 seconds and a maximum of **42.817 seconds**.
+- The dedicated attendance Playwright suite passed **6/6**, covering morning/evening matching,
+  intermediate reactive UI states, midnight pairing, 25-hour expiry, exact-file duplication,
+  zero-face completion, corrupt-image retry/failure, oversized upload rejection, yearly rollups,
+  and Svelte dependency tracking.
+- The existing general Playwright suite passed **6/6** after excluding the dedicated real-stack
+  attendance suite from its preview-server configuration.
+- `npm run check` passed with **0 errors and 0 warnings**; `npm run build`, scoped Prettier,
+  Python/Node syntax checks, `git diff --check`, and `npm audit --offline --omit=dev` all passed.
+
+## Evidence and retained data
+
+- Full local evidence is stored in
+  `test-output/attendance-e2e/20260728-101644/E2EReport.md`, with CSV/JSON audits, overlays, face
+  crops, full embeddings, and four browser screenshots. Raw embeddings and bulky evidence remain
+  git-ignored.
+- The concurrency records are intentionally retained and tagged `E2E-28044945` for inspection;
+  existing operational records were not modified.
+- The migration was applied successfully to the current local PostgreSQL stack.
+
+## Residual findings
+
+- Compression variants are materially weak at the configured `0.68` threshold: cohort match rates
+  were 14.29%, 0%, 20%, and 44.44%. Low-light, crop, and mirror variants performed much better.
+  Threshold/model calibration should be evaluated on a representative consented workforce set
+  before production rollout.
+- API acceptance stayed well below the one-second target, but a 20-request same-Area burst waited
+  up to 42.817 seconds for serialized worker processing. Additional workers improve independent
+  Area throughput but cannot remove deliberate contention within one Area.
