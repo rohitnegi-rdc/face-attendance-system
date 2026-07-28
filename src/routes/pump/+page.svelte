@@ -141,13 +141,13 @@
 		errorMsg = 'Processing is taking longer than expected. Please retry the status check.';
 	}
 
-	function sessionTitle() {
+	const sessionTitle = $derived.by(() => {
 		if (today?.state === 'locked') return 'Attendance complete';
 		if (today?.state === 'evening' && today?.can_submit === false)
 			return 'Evening attendance scheduled';
 		if (today?.state === 'evening') return 'Evening attendance';
 		return 'Morning attendance';
-	}
+	});
 
 	function formatIST(value: string | null | undefined) {
 		if (!value) return '';
@@ -167,7 +167,7 @@
 	<header class="capture-heading">
 		<div>
 			<p class="eyebrow">Today’s session</p>
-			<h1>{sessionTitle()}</h1>
+			<h1 data-testid="session-title">{sessionTitle}</h1>
 			<p>
 				{today?.pump_code ? `${today.pump_code} · ${today.plant_name}` : 'Group photo attendance'}
 			</p>
@@ -352,7 +352,7 @@
 			{:else}
 				<div class="session-details">
 					<p class="eyebrow">Session status</p>
-					<h2>{sessionTitle()}</h2>
+					<h2>{sessionTitle}</h2>
 					<dl>
 						<div>
 							<dt>Date</dt>

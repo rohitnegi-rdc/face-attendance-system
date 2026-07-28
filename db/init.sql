@@ -98,6 +98,10 @@ CREATE UNIQUE INDEX ON attendance_sessions (pump_id, session_date, session_type)
 CREATE UNIQUE INDEX ON attendance_sessions (photo_hash);
 CREATE INDEX ON attendance_sessions (pump_id, session_type, pairing_status);
 
+ALTER TABLE person_face_vectors
+    ADD COLUMN session_id UUID REFERENCES attendance_sessions(id);
+CREATE INDEX ON person_face_vectors (session_id);
+
 CREATE TABLE daily_person_attendance (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     person_id UUID NOT NULL REFERENCES persons(id),
@@ -165,6 +169,14 @@ CREATE TABLE person_attendance_yearly (
     PRIMARY KEY (person_id, year)
 );
 
+CREATE TABLE attendance_rollup_finalizations (
+    pump_id UUID NOT NULL REFERENCES pumps(id),
+    session_date DATE NOT NULL,
+    session_id UUID NOT NULL REFERENCES attendance_sessions(id),
+    finalized_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (pump_id, session_date)
+);
+
 -- ---------- Bulk import audit trail ----------
 
 CREATE TABLE csv_imports (
@@ -196,6 +208,9 @@ CREATE TABLE attendance_jobs (
     request_id UUID NOT NULL,
     status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'claimed', 'done', 'error')),
     claimed_at TIMESTAMPTZ,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX ON attendance_jobs (status, created_at);
+CREATE UNIQUE INDEX ON attendance_jobs (session_id);

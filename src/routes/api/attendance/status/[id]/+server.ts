@@ -17,28 +17,28 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	const matched = await query<any>(
 		`SELECT p.id AS person_id, p.display_seq, pu.pump_code, dpa.morning_matched, dpa.evening_matched,
 		        pfv.source_photo_crop_url
-		 FROM daily_person_attendance dpa
-		 JOIN persons p ON p.id = dpa.person_id
+		 FROM person_face_vectors current_vector
+		 JOIN persons p ON p.id = current_vector.person_id
 		 JOIN pumps pu ON pu.id = p.pump_id
-		 LEFT JOIN LATERAL (
-		   SELECT source_photo_crop_url FROM person_face_vectors
-		   WHERE person_id = p.id ORDER BY created_at DESC LIMIT 1
-		 ) pfv ON true
-		 WHERE dpa.pump_id = $1 AND dpa.session_date = $2
-		   AND p.first_seen_at < $3`,
-		[session.pump_id, session.session_date, session.processed_at || new Date()]
+		 JOIN daily_person_attendance dpa
+		   ON dpa.person_id = p.id AND dpa.session_date = $2
+		 LEFT JOIN person_face_vectors pfv ON pfv.id = current_vector.id
+		 WHERE current_vector.session_id = $1
+		   AND p.first_seen_at < $3
+		 GROUP BY p.id, p.display_seq, pu.pump_code, dpa.morning_matched,
+		          dpa.evening_matched, pfv.source_photo_crop_url`,
+		[session.id, session.session_date, session.submitted_at]
 	);
 
 	const newPersons = await query<any>(
 		`SELECT p.id AS person_id, p.display_seq, pu.pump_code, p.first_seen_at,
-		        pfv.source_photo_crop_url
-		 FROM persons p JOIN pumps pu ON pu.id = p.pump_id
-		 LEFT JOIN LATERAL (
-		   SELECT source_photo_crop_url FROM person_face_vectors
-		   WHERE person_id = p.id ORDER BY created_at ASC LIMIT 1
-		 ) pfv ON true
-		 WHERE p.pump_id = $1 AND p.first_seen_at >= $2`,
-		[session.pump_id, session.submitted_at]
+		        MIN(pfv.source_photo_crop_url) AS source_photo_crop_url
+		 FROM person_face_vectors pfv
+		 JOIN persons p ON p.id = pfv.person_id
+		 JOIN pumps pu ON pu.id = p.pump_id
+		 WHERE pfv.session_id = $1 AND p.first_seen_at >= $2
+		 GROUP BY p.id, p.display_seq, pu.pump_code, p.first_seen_at`,
+		[session.id, session.submitted_at]
 	);
 
 	const fraudFlags = await query<any>(

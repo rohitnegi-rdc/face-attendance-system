@@ -55,7 +55,10 @@ async def extract_faces(file: UploadFile = File(...), x_request_id: str | None =
 
     results = []
     for f in faces:
-        x1, y1, x2, y2 = [max(0, int(v)) for v in f.bbox]
+        x1 = min(arr.shape[1], max(0, int(f.bbox[0])))
+        y1 = min(arr.shape[0], max(0, int(f.bbox[1])))
+        x2 = min(arr.shape[1], max(0, int(f.bbox[2])))
+        y2 = min(arr.shape[0], max(0, int(f.bbox[3])))
         crop = arr[y1:y2, x1:x2]
         crop_b64 = ""
         if crop.size > 0:

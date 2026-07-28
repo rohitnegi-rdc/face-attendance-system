@@ -12,6 +12,8 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://ai-service:8000';
 const FACE_MATCH_THRESHOLD = Number(process.env.FACE_MATCH_THRESHOLD ?? 0.68);
 const POLL_INTERVAL_MS = 1500;
 const GALLERY_SIZE = 5;
+const CLAIM_TIMEOUT_MINUTES = Number(process.env.JOB_CLAIM_TIMEOUT_MINUTES ?? 10);
+const MAX_JOB_ATTEMPTS = Number(process.env.MAX_JOB_ATTEMPTS ?? 3);
 
 function log(level, fields, message) {
 	console.log(
@@ -27,11 +29,23 @@ function log(level, fields, message) {
 
 async function claimNextJob() {
 	const { rows } = await pool.query(
-		`UPDATE attendance_jobs SET status = 'claimed', claimed_at = now()
-		 WHERE id = (
-		   SELECT id FROM attendance_jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
-		 )
-		 RETURNING *`
+		`UPDATE attendance_jobs AS job
+		 SET status = 'claimed', claimed_at = now(), attempts = attempts + 1, last_error = NULL
+		 FROM (
+		   SELECT id
+		   FROM attendance_jobs
+		   WHERE attempts < $2
+		     AND (
+		       status = 'queued'
+		       OR (status = 'claimed' AND claimed_at < now() - ($1 || ' minutes')::interval)
+		     )
+		   ORDER BY created_at ASC
+		   LIMIT 1
+		   FOR UPDATE SKIP LOCKED
+		 ) AS candidate
+		 WHERE job.id = candidate.id
+		 RETURNING job.*`,
+		[CLAIM_TIMEOUT_MINUTES, MAX_JOB_ATTEMPTS]
 	);
 	return rows[0] || null;
 }
@@ -52,13 +66,50 @@ async function extractFaces(photoBuffer, requestId) {
 	return res.json();
 }
 
+async function expireStaleMornings(db) {
+	const windowHours = Number(process.env.EVENING_PAIRING_WINDOW_HOURS ?? 24);
+	const { rows } = await db.query(
+		`WITH expired AS (
+		   UPDATE attendance_sessions
+		   SET pairing_status = 'expired'
+		   WHERE session_type = 'morning'
+		     AND pairing_status = 'open'
+		     AND now() - submitted_at > ($1 || ' hours')::interval
+		   RETURNING id, pump_id, session_date
+		 ),
+		 finalized AS (
+		   INSERT INTO attendance_rollup_finalizations (pump_id, session_date, session_id)
+		   SELECT pump_id, session_date, id FROM expired
+		   ON CONFLICT (pump_id, session_date) DO NOTHING
+		   RETURNING pump_id, session_date
+		 ),
+		 yearly AS (
+		   INSERT INTO person_attendance_yearly (person_id, year, days_morning_only)
+		   SELECT dpa.person_id, EXTRACT(YEAR FROM dpa.session_date)::int, 1
+		   FROM daily_person_attendance dpa
+		   JOIN finalized f
+		     ON f.pump_id = dpa.pump_id AND f.session_date = dpa.session_date
+		   WHERE dpa.morning_matched AND NOT dpa.evening_matched
+		   ON CONFLICT (person_id, year)
+		   DO UPDATE SET
+		     days_morning_only = person_attendance_yearly.days_morning_only + 1,
+		     last_updated = now()
+		 )
+		 SELECT count(*)::int AS expired_count FROM expired`,
+		[windowHours]
+	);
+	return rows[0]?.expired_count ?? 0;
+}
+
 async function processJob(job) {
 	const requestId = job.request_id;
 	const client = await pool.connect();
 	try {
-		const { rows: sessRows } = await client.query('SELECT * FROM attendance_sessions WHERE id = $1', [
-			job.session_id
-		]);
+		await client.query('BEGIN');
+		const { rows: sessRows } = await client.query(
+			'SELECT * FROM attendance_sessions WHERE id = $1',
+			[job.session_id]
+		);
 		const session = sessRows[0];
 		if (!session) throw new Error('session not found');
 
@@ -74,8 +125,9 @@ async function processJob(job) {
 		await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [areaId]);
 		const lockWaitMs = Date.now() - lockStart;
 
-		await client.query('BEGIN');
-		await client.query(`UPDATE attendance_sessions SET status = 'processing' WHERE id = $1`, [session.id]);
+		await client.query(`UPDATE attendance_sessions SET status = 'processing' WHERE id = $1`, [
+			session.id
+		]);
 
 		const photoBuffer = await fs.readFile(session.photo_url);
 		const extractStart = Date.now();
@@ -84,7 +136,14 @@ async function processJob(job) {
 
 		log(
 			'info',
-			{ requestId, sessionId: session.id, areaId, lockWaitMs, extractMs, facesDetected: faces.length },
+			{
+				requestId,
+				sessionId: session.id,
+				areaId,
+				lockWaitMs,
+				extractMs,
+				facesDetected: faces.length
+			},
 			'ai extraction complete'
 		);
 
@@ -115,10 +174,25 @@ async function processJob(job) {
 				await client.query(
 					`INSERT INTO fraud_flags (session_id, person_id, matched_at_pump_id, matched_session_id, similarity_score)
 					 VALUES ($1, $2, $3, $4, $5)`,
-					[session.id, crossMatch.person_id, crossMatch.pump_id, crossMatch.matched_session_id, crossMatch.similarity]
+					[
+						session.id,
+						crossMatch.person_id,
+						crossMatch.pump_id,
+						crossMatch.matched_session_id,
+						crossMatch.similarity
+					]
 				);
 				fraudFlags.push({ person_id: crossMatch.person_id, similarity: crossMatch.similarity });
-				log('warn', { requestId, sessionId: session.id, personId: crossMatch.person_id, similarity: crossMatch.similarity }, 'fraud flag raised');
+				log(
+					'warn',
+					{
+						requestId,
+						sessionId: session.id,
+						personId: crossMatch.person_id,
+						similarity: crossMatch.similarity
+					},
+					'fraud flag raised'
+				);
 				continue;
 			}
 
@@ -151,9 +225,14 @@ async function processJob(job) {
 			}
 
 			await client.query(
-				`INSERT INTO person_face_vectors (person_id, embedding, source_photo_crop_url)
-				 VALUES ($1, $2::vector, $3)`,
-				[personId, vec, face.crop_base64 ? `data:image/jpeg;base64,${face.crop_base64}` : null]
+				`INSERT INTO person_face_vectors (person_id, session_id, embedding, source_photo_crop_url)
+				 VALUES ($1, $2, $3::vector, $4)`,
+				[
+					personId,
+					session.id,
+					vec,
+					face.crop_base64 ? `data:image/jpeg;base64,${face.crop_base64}` : null
+				]
 			);
 			// Keep gallery capped at GALLERY_SIZE (drop oldest beyond it).
 			await client.query(
@@ -164,7 +243,8 @@ async function processJob(job) {
 				[personId, GALLERY_SIZE]
 			);
 
-			const confidenceCol = session.session_type === 'morning' ? 'morning_confidence' : 'evening_confidence';
+			const confidenceCol =
+				session.session_type === 'morning' ? 'morning_confidence' : 'evening_confidence';
 			const matchedCol = session.session_type === 'morning' ? 'morning_matched' : 'evening_matched';
 			await client.query(
 				`INSERT INTO daily_person_attendance (person_id, pump_id, session_date, ${matchedCol}, ${confidenceCol})
@@ -175,29 +255,39 @@ async function processJob(job) {
 			);
 		}
 
-		await client.query(`UPDATE attendance_sessions SET status = 'completed', processed_at = now() WHERE id = $1`, [
-			session.id
-		]);
+		await client.query(
+			`UPDATE attendance_sessions SET status = 'completed', processed_at = now() WHERE id = $1`,
+			[session.id]
+		);
 
 		if (session.session_type === 'evening') {
-			const { rows: touched } = await client.query(
-				`SELECT person_id, morning_matched, evening_matched FROM daily_person_attendance
-				 WHERE pump_id = $1 AND session_date = $2`,
-				[session.pump_id, session.session_date]
+			const { rows: finalized } = await client.query(
+				`INSERT INTO attendance_rollup_finalizations (pump_id, session_date, session_id)
+				 VALUES ($1, $2, $3)
+				 ON CONFLICT (pump_id, session_date) DO NOTHING
+				 RETURNING session_id`,
+				[session.pump_id, session.session_date, session.id]
 			);
-			const year = new Date(session.session_date).getFullYear();
-			for (const row of touched) {
-				let col;
-				if (row.morning_matched && row.evening_matched) col = 'days_present';
-				else if (row.morning_matched) col = 'days_morning_only';
-				else col = 'days_evening_only';
-				await client.query(
-					`INSERT INTO person_attendance_yearly (person_id, year, ${col})
-					 VALUES ($1, $2, 1)
-					 ON CONFLICT (person_id, year)
-					 DO UPDATE SET ${col} = person_attendance_yearly.${col} + 1, last_updated = now()`,
-					[row.person_id, year]
+			if (finalized.length) {
+				const { rows: touched } = await client.query(
+					`SELECT person_id, morning_matched, evening_matched FROM daily_person_attendance
+					 WHERE pump_id = $1 AND session_date = $2`,
+					[session.pump_id, session.session_date]
 				);
+				const year = new Date(session.session_date).getFullYear();
+				for (const row of touched) {
+					let col;
+					if (row.morning_matched && row.evening_matched) col = 'days_present';
+					else if (row.morning_matched) col = 'days_morning_only';
+					else col = 'days_evening_only';
+					await client.query(
+						`INSERT INTO person_attendance_yearly (person_id, year, ${col})
+						 VALUES ($1, $2, 1)
+						 ON CONFLICT (person_id, year)
+						 DO UPDATE SET ${col} = person_attendance_yearly.${col} + 1, last_updated = now()`,
+						[row.person_id, year]
+					);
+				}
 			}
 		}
 
@@ -217,12 +307,25 @@ async function processJob(job) {
 		);
 	} catch (err) {
 		await client.query('ROLLBACK').catch(() => {});
-		await pool.query(`UPDATE attendance_sessions SET status = 'failed', error_reason = $2 WHERE id = $1`, [
-			job.session_id,
-			String(err?.message || err)
-		]);
-		await pool.query(`UPDATE attendance_jobs SET status = 'error' WHERE id = $1`, [job.id]);
-		log('error', { requestId, sessionId: job.session_id, error: String(err?.message || err) }, 'session failed');
+		const errorMessage = String(err?.message || err);
+		const retrying = job.attempts < MAX_JOB_ATTEMPTS;
+		await client.query('BEGIN');
+		await client.query(
+			`UPDATE attendance_jobs
+			 SET status = $2, claimed_at = NULL, last_error = $3
+			 WHERE id = $1`,
+			[job.id, retrying ? 'queued' : 'error', errorMessage]
+		);
+		await client.query(
+			`UPDATE attendance_sessions SET status = $2, error_reason = $3 WHERE id = $1`,
+			[job.session_id, retrying ? 'pending' : 'failed', errorMessage]
+		);
+		await client.query('COMMIT');
+		log(
+			retrying ? 'warn' : 'error',
+			{ requestId, sessionId: job.session_id, attempt: job.attempts, error: errorMessage },
+			retrying ? 'session processing will retry' : 'session failed'
+		);
 	} finally {
 		client.release();
 	}
@@ -231,16 +334,18 @@ async function processJob(job) {
 async function loop() {
 	log('info', {}, 'worker started, polling attendance_jobs');
 	// Periodic sweep for stale open morning sessions across ALL pumps (§2 expiry rule).
-	setInterval(async () => {
-		const windowHours = Number(process.env.EVENING_PAIRING_WINDOW_HOURS ?? 24);
-		const { rowCount } = await pool.query(
-			`UPDATE attendance_sessions SET pairing_status = 'expired'
-			 WHERE session_type = 'morning' AND pairing_status = 'open'
-			   AND now() - submitted_at > ($1 || ' hours')::interval`,
-			[windowHours]
-		);
-		if (rowCount > 0) log('info', { expiredCount: rowCount }, 'periodic sweep expired stale morning sessions');
-	}, 60 * 60 * 1000);
+	setInterval(
+		async () => {
+			try {
+				const expiredCount = await expireStaleMornings(pool);
+				if (expiredCount > 0)
+					log('info', { expiredCount }, 'periodic sweep expired stale morning sessions');
+			} catch (err) {
+				log('error', { error: String(err?.message || err) }, 'periodic expiry sweep failed');
+			}
+		},
+		60 * 60 * 1000
+	);
 
 	while (true) {
 		try {
