@@ -26,8 +26,18 @@ async function main() {
 		}
 		const sql = await fs.readFile(path.join(dir, file), 'utf-8');
 		console.log(`applying: ${file}`);
-		await pool.query(sql);
-		await pool.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
+		const client = await pool.connect();
+		try {
+			await client.query('BEGIN');
+			await client.query(sql);
+			await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
+			await client.query('COMMIT');
+		} catch (error) {
+			await client.query('ROLLBACK').catch(() => {});
+			throw error;
+		} finally {
+			client.release();
+		}
 		console.log(`applied: ${file}`);
 	}
 

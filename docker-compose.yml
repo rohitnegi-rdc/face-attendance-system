@@ -3,16 +3,14 @@ services:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: attendance
-      POSTGRES_PASSWORD: attendance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a random URL-safe secret}
       POSTGRES_DB: attendance
       TZ: Asia/Kolkata
-    ports:
-      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U attendance -d attendance"]
+      test: ['CMD-SHELL', 'pg_isready -U attendance -d attendance']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -21,8 +19,15 @@ services:
     build: ./ai-service
     environment:
       TZ: Asia/Kolkata
-    ports:
-      - "8000:8000"
+      AI_SERVICE_WORKERS: '${AI_SERVICE_WORKERS:-2}'
+      AI_MAX_UPLOAD_BYTES: '18874368'
+      AI_MAX_IMAGE_LONG_SIDE: '1920'
+      AI_RESIZE_JPEG_QUALITY: '90'
+      ANTI_SPOOF_ENABLED: '${ANTI_SPOOF_ENABLED:-true}'
+      ANTI_SPOOF_MODEL_PATH: /app/models/MiniFASNetV2.onnx
+      ANTI_SPOOF_LIVE_THRESHOLD: '${ANTI_SPOOF_LIVE_THRESHOLD:-0.80}'
+      ANTI_SPOOF_SUSPICIOUS_THRESHOLD: '${ANTI_SPOOF_SUSPICIOUS_THRESHOLD:-0.20}'
+      ANTI_SPOOF_MIN_FACE_SIZE: '${ANTI_SPOOF_MIN_FACE_SIZE:-64}'
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -34,21 +39,24 @@ services:
     build: .
     environment:
       TZ: Asia/Kolkata
-      DATABASE_URL: postgres://attendance:attendance@postgres:5432/attendance
-      JWT_SECRET: dev-secret-change-me
-      FACE_MATCH_THRESHOLD: "0.68"
-      EVENING_PAIRING_WINDOW_HOURS: "24"
+      DATABASE_URL: postgres://attendance:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a random URL-safe secret}@postgres:5432/attendance
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET to a random secret of at least 32 characters}
+      GOOGLE_OAUTH_CLIENT_ID: '${GOOGLE_OAUTH_CLIENT_ID:-}'
+      GOOGLE_OAUTH_CLIENT_SECRET: '${GOOGLE_OAUTH_CLIENT_SECRET:-}'
+      GOOGLE_OAUTH_REDIRECT_URI: '${GOOGLE_OAUTH_REDIRECT_URI:-}'
+      FACE_MATCH_THRESHOLD: '0.30'
+      EVENING_PAIRING_WINDOW_HOURS: '24'
       AI_SERVICE_URL: http://ai-service:8000
-      PORT: "3000"
-      BODY_SIZE_LIMIT: "20000000"
-      ORIGIN: http://localhost:3000
+      PORT: '3000'
+      BODY_SIZE_LIMIT: '20000000'
+      PROTOCOL_HEADER: x-forwarded-proto
     ports:
-      - "3000:3000"
+      - '${APP_BIND_ADDRESS:-127.0.0.1}:${APP_HOST_PORT:-3001}:3000'
     depends_on:
       postgres:
         condition: service_healthy
       ai-service:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - uploads:/app/uploads
 
@@ -57,15 +65,29 @@ services:
     command: ["node", "worker/index.js"]
     environment:
       TZ: Asia/Kolkata
-      DATABASE_URL: postgres://attendance:attendance@postgres:5432/attendance
-      FACE_MATCH_THRESHOLD: "0.68"
-      EVENING_PAIRING_WINDOW_HOURS: "24"
+      DATABASE_URL: postgres://attendance:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a random URL-safe secret}@postgres:5432/attendance
+      FACE_MATCH_THRESHOLD: '0.30'
+      EVENING_PAIRING_WINDOW_HOURS: '24'
       AI_SERVICE_URL: http://ai-service:8000
+      AI_REQUEST_TIMEOUT_MS: '30000'
+      WORKER_BATCH_SIZE: '${WORKER_BATCH_SIZE:-4}'
+      MAX_ACTIVE_ATTENDANCE_JOBS: '30'
+      DB_POOL_MAX: '10'
+      GEMINI_API_KEY: '${GEMINI_API_KEY:-}'
+      GEMINI_MODEL: '${GEMINI_MODEL:-gemini-3.5-flash-lite}'
+      RECAPTURE_BLOCK_CONFIDENCE: '${RECAPTURE_BLOCK_CONFIDENCE:-0.85}'
+      SMTP_HOST: '${SMTP_HOST:-}'
+      SMTP_PORT: '${SMTP_PORT:-587}'
+      SMTP_SECURE: '${SMTP_SECURE:-false}'
+      SMTP_USER: '${SMTP_USER:-}'
+      SMTP_PASS: '${SMTP_PASS:-}'
+      SMTP_FROM: '${SMTP_FROM:-}'
+      FRAUD_ALERT_CC_EMAIL: '${FRAUD_ALERT_CC_EMAIL:-}'
     depends_on:
       postgres:
         condition: service_healthy
       ai-service:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - uploads:/app/uploads
 

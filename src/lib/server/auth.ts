@@ -2,7 +2,13 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { queryOne } from './db';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+function getJwtSecret(): string {
+	const secret = process.env.JWT_SECRET?.trim();
+	if (!secret || secret.length < 32 || secret === 'dev-secret-change-me') {
+		throw new Error('JWT_SECRET must be configured with at least 32 characters');
+	}
+	return secret;
+}
 
 export type Role = 'admin' | 'vendor' | 'pump';
 
@@ -13,12 +19,12 @@ export interface AuthToken {
 }
 
 export function signToken(payload: AuthToken): string {
-	return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+	return jwt.sign(payload, getJwtSecret(), { expiresIn: '7d' });
 }
 
 export function verifyToken(token: string): AuthToken | null {
 	try {
-		return jwt.verify(token, JWT_SECRET) as AuthToken;
+		return jwt.verify(token, getJwtSecret()) as AuthToken;
 	} catch {
 		return null;
 	}

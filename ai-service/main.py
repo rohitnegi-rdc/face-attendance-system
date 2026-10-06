@@ -6,17 +6,22 @@ See plans/MasterPlan.md §5 / Prompt A "AI MICROSERVICE".
 """
 import base64
 import logging
+import os
 import time
 import uuid
 from io import BytesIO
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, Header, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from insightface.app import FaceAnalysis
 from PIL import Image
 
 MAX_FACES = 30
+MAX_IMAGE_LONG_SIDE = max(640, int(os.getenv("AI_MAX_IMAGE_LONG_SIDE", "1920")))
+RESIZE_JPEG_QUALITY = min(100, max(50, int(os.getenv("AI_RESIZE_JPEG_QUALITY", "90"))))
+MAX_UPLOAD_BYTES = max(1, int(os.getenv("AI_MAX_UPLOAD_BYTES", str(18 * 1024 * 1024))))
+MAX_IMAGE_PIXELS = 20_000_000
 
 # Structured JSON logging (plans/MasterPlan.md §7a)
 logging.basicConfig(level=logging.INFO, format='{"timestamp":"%(asctime)s","level":"%(levelname)s","service":"ai-service","message":"%(message)s"}')
@@ -38,6 +43,8 @@ def load_model():
 
 @app.get("/health")
 def health():
+    if face_app is None:
+        raise HTTPException(status_code=503, detail="Face recognition model is not ready")
     return {"status": "ok", "model_loaded": face_app is not None}
 
 
@@ -46,8 +53,21 @@ async def extract_faces(file: UploadFile = File(...), x_request_id: str | None =
     request_id = x_request_id or str(uuid.uuid4())
     start = time.time()
 
-    raw = await file.read()
-    img = Image.open(BytesIO(raw)).convert("RGB")
+    raw = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Image exceeds the upload size limit")
+    try:
+        source_image = Image.open(BytesIO(raw))
+        if source_image.format not in {"JPEG", "PNG", "WEBP"}:
+            raise HTTPException(status_code=415, detail="Unsupported image format")
+        if source_image.width * source_image.height > MAX_IMAGE_PIXELS:
+            raise HTTPException(status_code=413, detail="Image dimensions exceed the processing limit")
+        source_image.verify()
+        img = Image.open(BytesIO(raw)).convert("RGB")
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=415, detail="Invalid or unsupported image") from error
     arr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
     faces = face_app.get(arr)

@@ -10,6 +10,7 @@ import { logger } from '$lib/server/log';
 const NINE_HOURS = 9;
 const EVENING_PAIRING_WINDOW_HOURS = Number(process.env.EVENING_PAIRING_WINDOW_HOURS ?? 24);
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
+const MAX_UPLOAD_BYTES = 18 * 1024 * 1024;
 
 class SubmissionError extends Error {
 	constructor(
@@ -32,6 +33,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const lat = form.get('lat') ? Number(form.get('lat')) : null;
 	const lng = form.get('lng') ? Number(form.get('lng')) : null;
 	if (!file) return json({ error: 'photo is required' }, { status: 400 });
+	if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
+		return json({ error: 'Photo must be smaller than 18 MB.' }, { status: 413 });
+	}
+	if (file.type && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+		return json({ error: 'Upload a JPEG, PNG, or WebP photo.' }, { status: 415 });
+	}
 
 	const buffer = Buffer.from(await file.arrayBuffer());
 	const photoHash = crypto.createHash('sha256').update(buffer).digest('hex');

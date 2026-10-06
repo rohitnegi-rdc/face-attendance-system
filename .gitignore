@@ -1,5 +1,7 @@
 node_modules
 uploads
+/creds.md
+/test-output/
 
 # Output
 .output

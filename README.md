@@ -11,14 +11,38 @@ was built and any deviations from the plan.
 - Database: PostgreSQL 16 + pgvector
 - Orchestration: Docker Compose
 
-## Running with Docker Compose
+## Running locally with Docker Compose
+
+Copy `.env.example` to `.env`, then set independent URL-safe secrets for `POSTGRES_PASSWORD`
+and `JWT_SECRET` (for example, generate each with `openssl rand -hex 32`). Compose fails closed
+when either secret is empty. Keep `.env` and `creds.md` local; neither belongs in Git or a Docker
+image.
 
 ```sh
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yaml up --build
 ```
 
-This starts `postgres` (with the schema in `db/init.sql` auto-applied), `ai-service`, `app`
-(SvelteKit on :3000), and `worker`.
+This starts PostgreSQL (schema in `db/init.sql`), the AI service, the SvelteKit app, and worker.
+The app is available at `http://localhost:3001`; PostgreSQL is published only on
+`127.0.0.1:5434`. Database and AI service ports are not published to the host. For trusted-LAN
+device testing only, set `APP_BIND_ADDRESS=0.0.0.0` in `.env` and restrict access with the host
+firewall; restore `127.0.0.1` afterward.
+
+For production, do not use the development override. Keep `APP_BIND_ADDRESS=127.0.0.1`, place
+the app behind an HTTPS reverse proxy, and provide secrets through the deployment secret manager.
+Database and AI ports remain private to the Compose network. Before applying migrations, take a
+database backup and verify it can be restored; the migration runner records applied migrations
+but does not provide automatic rollback. The production release process should retain the prior
+image and backup until post-deploy health checks pass.
+
+Before a migration, create a custom-format backup from the running database:
+
+```sh
+docker compose exec -T postgres pg_dump -U attendance -Fc attendance > attendance-pre-migration.dump
+```
+
+Protect the backup as sensitive data and test restores in a separate environment before relying
+on it for recovery.
 
 ## Seeding the database
 
@@ -27,8 +51,10 @@ through the same CSV-import code path the admin UI uses:
 
 ```sh
 npm install
-DATABASE_URL=postgres://attendance:attendance@localhost:5432/attendance npm run seed
+DATABASE_URL=postgres://attendance:<POSTGRES_PASSWORD>@localhost:5434/attendance npm run seed
 ```
+
+Replace `<POSTGRES_PASSWORD>` with the URL-safe value in your local `.env`.
 
 - Admin login: `admin@attendance.local` / `Admin1234!`
 - Pump logins: `<slugified pump_code>@pumps.local` / `Test1234!` (e.g. `bglprvn1@pumps.local`)
