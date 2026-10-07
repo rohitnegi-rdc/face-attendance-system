@@ -26,46 +26,46 @@ reverse proxy, supply all secrets from the deployment secret manager, and do not
 or AI-service ports. Configure OAuth callback URLs for the actual production hostname separately.
 Wait for the AI service health check before routing work to it.
 
-## Release, migration, and rollback
+## Release, backup, migration, and rollback
 
-Build the release images, then take a protected custom-format database backup before running
-migrations. The Compose `migrate` service applies numbered SQL files in order, records each file in
+Build the release images, then take a protected database-and-uploads backup before running
+migrations. Backups briefly stop the app and worker to keep attendance rows and evidence photos
+consistent; the script restarts services automatically, including on failure. Store backups outside
+the repository on encrypted, access-controlled storage and test retention/rotation separately. The
+Compose `migrate` service applies numbered SQL files in order, records each file in
 `schema_migrations`, and is a dependency of both the app and worker. Startup is held until the
 migration job succeeds. It is safe to run again: applied files are skipped.
 
 ```sh
-docker compose exec -T postgres pg_dump -U attendance -Fc attendance > attendance-pre-migration.dump
+BACKUP_DIR=/secure/attendance-backups bash scripts/backup-production.sh
 ```
 
-Check that the archive is readable before deployment:
+The script creates a timestamped directory containing `database.dump`, `uploads.tar.gz`, and
+`SHA256SUMS`. Run a complete isolated restore drill before the first release and periodically after
+that:
 
 ```sh
-pg_restore --list attendance-pre-migration.dump > /dev/null
+bash scripts/restore-drill.sh /secure/attendance-backups/<timestamp>
 ```
 
-Run a restore drill in an isolated PostgreSQL container (never into the live database):
-
-```sh
-export DRILL_PASSWORD="$(openssl rand -hex 24)"
-docker run -d --name attendance-restore-drill \
-  -e POSTGRES_USER=attendance -e POSTGRES_PASSWORD="$DRILL_PASSWORD" \
-  -e POSTGRES_DB=restore_drill pgvector/pgvector:pg16
-docker cp attendance-pre-migration.dump attendance-restore-drill:/tmp/backup.dump
-docker exec attendance-restore-drill pg_restore --no-owner --dbname=restore_drill \
-  --username=attendance /tmp/backup.dump
-docker exec attendance-restore-drill psql -U attendance -d restore_drill \
-  -c "SELECT count(*) FROM pumps; SELECT count(*) FROM attendance_sessions;"
-docker rm -f attendance-restore-drill
-unset DRILL_PASSWORD
-```
-
-Require restore and both queries to succeed; record the drill date and result. Do this before the
-first production release and periodically thereafter. Protect and remove the archive according to
-your data-retention policy.
+The drill verifies checksums, restores PostgreSQL into a throwaway isolated container, extracts
+photos into a temporary named volume, and reports pump/session/file counts. It removes only its
+uniquely named container and volume on exit. Record the drill date and result.
 
 Deploy with `docker compose up -d --build`. Confirm all services are healthy, `GET /api/health`
-returns HTTP 200 with `status: ok`, the migration service exited successfully, and the worker logs
-show it polling/processing jobs. Also smoke-test login and a non-destructive admin/pump page.
+returns HTTP 200 with `status: ok`, `database: ok`, and `ai_service: ok`, the migration service
+exited successfully, and the worker logs show it polling/processing jobs. The health endpoint checks
+both dependencies with a bounded AI-service timeout. Also smoke-test login and a non-destructive
+admin/pump page.
+
+## Google OAuth
+
+Google sign-in is optional until configured. Set `GOOGLE_OAUTH_CLIENT_ID`,
+`GOOGLE_OAUTH_CLIENT_SECRET`, and `GOOGLE_OAUTH_REDIRECT_URI` in the deployment environment. The
+redirect URI must exactly match the Google OAuth client and use the public HTTPS hostname, for
+example `https://attendance.example.com/api/auth/google/callback`. The app only accepts verified
+`@rdc.in` Workspace identities that already have an application account; it does not provision
+accounts on OAuth login.
 
 Use a unique `APP_IMAGE` tag per release and retain the previous tag. If the new app fails, set
 `APP_IMAGE` back to that tag and run `docker compose up -d --no-build app worker`, but only if the
