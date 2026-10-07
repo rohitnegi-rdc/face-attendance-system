@@ -6,6 +6,12 @@
 		userEmail?: string;
 		children: import('svelte').Snippet;
 	}>();
+
+	async function signOut(event: SubmitEvent) {
+		event.preventDefault();
+		const response = await fetch('/api/auth/logout', { method: 'POST' });
+		if (response.ok) window.location.assign('/login');
+	}
 </script>
 
 <div class="pump-shell">
@@ -17,7 +23,7 @@
 				<small>{userEmail}</small>
 			</span>
 		</a>
-		<form method="POST" action="/api/auth/logout">
+		<form onsubmit={signOut}>
 			<button class="icon-button" type="submit" aria-label="Sign out" title="Sign out">
 				<LogOut size={19} />
 			</button>

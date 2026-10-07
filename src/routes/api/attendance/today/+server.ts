@@ -3,6 +3,8 @@ import type { RequestHandler } from './$types';
 import { query, queryOne } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
 
+const EVENING_MIN_GAP_MINUTES = 1;
+
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user || locals.user.role !== 'pump') {
 		return json({ error: 'Forbidden' }, { status: 403 });
@@ -17,6 +19,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		   SET pairing_status = 'expired'
 		   WHERE pump_id = $1
 		     AND session_type = 'morning'
+		     AND status = 'completed'
 		     AND pairing_status = 'open'
 		     AND now() - submitted_at > ($2 || ' hours')::interval
 		   RETURNING id, pump_id, session_date
@@ -50,17 +53,24 @@ export const GET: RequestHandler = async ({ locals }) => {
 	);
 	const openMorning = await queryOne<any>(
 		`SELECT id, submitted_at,
-		        submitted_at + interval '9 hours' AS next_allowed_at,
-		        submitted_at + ($2 || ' hours')::interval AS pairing_expires_at
+		        submitted_at + ($2 || ' minutes')::interval AS next_allowed_at,
+		        submitted_at + ($3 || ' hours')::interval AS pairing_expires_at
 		 FROM attendance_sessions
-		 WHERE pump_id = $1 AND session_type = 'morning' AND pairing_status = 'open'
+		 WHERE pump_id = $1 AND session_type = 'morning' AND status = 'completed' AND pairing_status = 'open'
 		 ORDER BY submitted_at DESC LIMIT 1`,
-		[pumpId, pairingWindowHours]
+		[pumpId, EVENING_MIN_GAP_MINUTES, pairingWindowHours]
 	);
 	const eveningToday = await queryOne<any>(
 		`SELECT id FROM attendance_sessions
 		 WHERE pump_id = $1 AND session_date = $2 AND session_type = 'evening'`,
 		[pumpId, today]
+	);
+	const reviewSession = await queryOne<any>(
+		`SELECT id, session_type, status
+		 FROM attendance_sessions
+		 WHERE pump_id = $1 AND status = 'review'
+		 ORDER BY submitted_at DESC LIMIT 1`,
+		[pumpId]
 	);
 
 	const latestSession = await queryOne<any>(
@@ -71,8 +81,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 		[pumpId]
 	);
 
-	let state: 'morning' | 'evening' | 'locked';
-	if (!openMorning) state = eveningToday ? 'locked' : 'morning';
+	let state: 'morning' | 'evening' | 'locked' | 'review';
+	if (reviewSession) state = 'review';
+	else if (!openMorning) state = eveningToday ? 'locked' : 'morning';
 	else state = 'evening';
 
 	const canSubmit =
@@ -88,6 +99,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		next_allowed_at: openMorning?.next_allowed_at ?? null,
 		pairing_expires_at: openMorning?.pairing_expires_at ?? null,
 		latest_session: latestSession,
+		review_session_id: reviewSession?.id ?? null,
 		today,
 		...context
 	});

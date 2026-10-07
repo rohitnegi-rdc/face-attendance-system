@@ -10,16 +10,23 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 	}
 
 	const account = await findAccountByEmail(email);
-	if (!account || !(await checkPassword(password, account.password_hash))) {
+	if (!account || !account.password_hash || !(await checkPassword(password, account.password_hash))) {
 		logger.warn({ email }, 'login failed');
 		return json({ error: 'Invalid credentials' }, { status: 401 });
 	}
+	if (account.role === 'pump' && account.status === 'disabled') {
+		logger.warn({ email }, 'login rejected: pump disabled');
+		return json({ error: 'Account disabled. Contact your Plant Manager.' }, { status: 403 });
+	}
 
 	const token = signToken({ role: account.role, id: account.id, email: account.email });
-	cookies.set('session', token, {
+	const isHttps = request.headers.get('x-forwarded-proto')?.split(',')[0].trim() === 'https';
+	cookies.set(isHttps ? 'session' : 'session_http', token, {
 		path: '/',
 		httpOnly: true,
 		sameSite: 'lax',
+		// LAN HTTP is used only for local device testing; deployed HTTPS sessions stay secure.
+		secure: isHttps,
 		maxAge: 60 * 60 * 24 * 7
 	});
 

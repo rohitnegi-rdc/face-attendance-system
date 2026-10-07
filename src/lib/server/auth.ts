@@ -10,7 +10,7 @@ function getJwtSecret(): string {
 	return secret;
 }
 
-export type Role = 'admin' | 'vendor' | 'pump';
+export type Role = 'admin' | 'vendor' | 'plant-manager' | 'pump';
 
 export interface AuthToken {
 	role: Role;
@@ -44,15 +44,28 @@ export async function findAccountByEmail(email: string): Promise<{
 	id: string;
 	email: string;
 	password_hash: string;
+	status?: string;
 } | null> {
-	const admin = await queryOne<any>('SELECT id, email, password_hash FROM admins WHERE email = $1', [email]);
+	const admin = await queryOne<any>(
+		'SELECT id, email, password_hash FROM admins WHERE lower(email) = lower($1)',
+		[email]
+	);
 	if (admin) return { role: 'admin', ...admin };
 
-	const vendor = await queryOne<any>('SELECT id, email, password_hash FROM vendors WHERE email = $1', [email]);
+	const vendor = await queryOne<any>(
+		'SELECT id, email, password_hash FROM vendors WHERE lower(email) = lower($1)',
+		[email]
+	);
 	if (vendor) return { role: 'vendor', ...vendor };
 
+	const plantManager = await queryOne<any>(
+		`SELECT id, email, password_hash FROM plant_managers WHERE lower(email) = lower($1)`,
+		[email]
+	);
+	if (plantManager) return { role: 'plant-manager', ...plantManager };
+
 	const pump = await queryOne<any>(
-		'SELECT id, login_email AS email, password_hash FROM pumps WHERE login_email = $1',
+		'SELECT id, login_email AS email, password_hash, status FROM pumps WHERE lower(login_email) = lower($1)',
 		[email]
 	);
 	if (pump) return { role: 'pump', ...pump };

@@ -1,21 +1,35 @@
 <script lang="ts">
-	import { formatDate } from '$lib/date';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import { formatDate, formatDayLabel } from '$lib/date';
 
-	// Generic day x entity grid. `days` is an array of "YYYY-MM-DD" strings.
-	// `entities` is an array of { id, label }. `cellValue(entityId, day)` returns
-	// either a status string ('present'|'morning_only'|'evening_only'|'absent')
-	// or a number 0-100 (attendance %) when `mode === 'percent'`.
+	// Generic entity x day grid. `days` is an array of "YYYY-MM-DD" strings, rendered as
+	// horizontally-scrollable columns. `entities` is an array of { id, label }, rendered as
+	// rows. `cellValue(entityId, day)` returns either a status string
+	// ('present'|'morning_only'|'evening_only'|'absent') or a number 0-100 (attendance %)
+	// when `mode === 'percent'`.
 	let {
 		days = [],
 		entities = [],
 		cellValue,
-		mode = 'status'
+		mode = 'status',
+		entityLabel = 'Entity'
 	} = $props<{
 		days: string[];
 		entities: { id: string; label: string }[];
 		cellValue: (entityId: string, day: string) => string | number | null;
 		mode?: 'status' | 'percent';
+		entityLabel?: string;
 	}>();
+	let scroller: HTMLDivElement;
+	const orderedDays = $derived([...days].sort((a, b) => b.localeCompare(a)));
+
+	function scrollDates(direction: -1 | 1) {
+		scroller?.scrollBy({
+			left: direction * Math.max(scroller.clientWidth * 0.75, 320),
+			behavior: 'smooth'
+		});
+	}
 
 	function statusClass(v: string | number | null): string {
 		if (mode === 'percent') {
@@ -61,7 +75,14 @@
 	}
 </script>
 
-<div class="grid-wrap">
+<div class="calendar-toolbar" aria-label="Date navigation">
+	<span>Newest dates first</span>
+	<div>
+		<button class="icon-button" type="button" aria-label="Show newer dates" title="Newer dates" onclick={() => scrollDates(-1)}><ChevronLeft size={18} /></button>
+		<button class="icon-button" type="button" aria-label="Show older dates" title="Older dates" onclick={() => scrollDates(1)}><ChevronRight size={18} /></button>
+	</div>
+</div>
+<div class="grid-wrap" bind:this={scroller} role="region" aria-label="Scrollable attendance dates">
 	<table
 		class="calendar-grid"
 		aria-label={mode === 'percent'
@@ -70,17 +91,21 @@
 	>
 		<thead>
 			<tr>
-				<th class="day-col" scope="col">Day</th>
-				{#each entities as e}
-					<th scope="col" title={e.label}>{e.label}</th>
+				<th class="entity-col" scope="col">{entityLabel}</th>
+				{#each orderedDays as day}
+					{@const label = formatDayLabel(day)}
+					<th class="day-head" scope="col" title={formatDate(day)}>
+						<span class="day-head__weekday">{label.weekday}</span>
+						<span class="day-head__date">{label.date}</span>
+					</th>
 				{/each}
 			</tr>
 		</thead>
 		<tbody>
-			{#each days as day}
+			{#each entities as e}
 				<tr>
-					<th class="day-col" scope="row">{formatDate(day)}</th>
-					{#each entities as e}
+					<th class="entity-col" scope="row" title={e.label}>{e.label}</th>
+					{#each orderedDays as day}
 						{@const v = cellValue(e.id, day)}
 						<td class={statusClass(v)} aria-label={accessibleCellLabel(e.label, day, v)}
 							>{cellLabel(v)}</td
@@ -102,16 +127,56 @@
 {/if}
 
 <style>
+	.calendar-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		margin-bottom: var(--space-2);
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
+	}
+	.calendar-toolbar > div { display: flex; gap: var(--space-1); }
+	.calendar-toolbar .icon-button {
+		width: 2.25rem;
+		height: 2.25rem;
+		background: var(--brand-white);
+		border: 1px solid var(--brand-mist);
+	}
 	.grid-wrap {
+		position: relative;
+		isolation: isolate;
 		overflow-x: auto;
+		overflow-y: visible;
 		max-width: 100%;
 		background: var(--brand-white);
 		border: 1px solid var(--brand-mist);
 		border-radius: var(--radius-lg);
+		overscroll-behavior-inline: contain;
+		scroll-behavior: smooth;
+		scrollbar-width: thin;
+		scrollbar-color: var(--brand-mist) var(--surface-muted);
+	}
+	.grid-wrap::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+	.grid-wrap::-webkit-scrollbar-track {
+		background: var(--surface-muted);
+		border-radius: var(--radius-sm);
+	}
+	.grid-wrap::-webkit-scrollbar-thumb {
+		background: var(--brand-mist);
+		border-radius: var(--radius-sm);
+		border: 2px solid var(--surface-muted);
+	}
+	.grid-wrap::-webkit-scrollbar-thumb:hover {
+		background: var(--brand-teal);
 	}
 
 	.calendar-grid {
-		width: 100%;
+		width: max-content;
+		min-width: 100%;
 		border-collapse: collapse;
 		font-size: var(--text-xs);
 		font-variant-numeric: tabular-nums;
@@ -119,12 +184,28 @@
 
 	.calendar-grid th,
 	.calendar-grid td {
-		min-width: 3.5rem;
 		padding: var(--space-2);
 		text-align: center;
 		white-space: nowrap;
 		border-right: 1px solid var(--brand-mist);
 		border-bottom: 1px solid var(--brand-mist);
+	}
+
+	.day-head {
+		min-width: 4.5rem;
+		scroll-snap-align: start;
+	}
+	.calendar-grid td {
+		min-width: 4.5rem;
+	}
+
+	.day-head__weekday {
+		display: block;
+		color: var(--ink-muted);
+	}
+	.day-head__date {
+		display: block;
+		font-weight: 700;
 	}
 
 	.calendar-grid thead th {
@@ -136,18 +217,23 @@
 		font-weight: 700;
 	}
 
-	.day-col {
+	.entity-col {
 		text-align: left;
 		position: sticky;
 		left: 0;
-		z-index: 1;
-		min-width: 8rem;
+		z-index: 3;
+		width: clamp(10rem, 22vw, 15rem);
+		min-width: clamp(10rem, 22vw, 15rem);
+		max-width: clamp(10rem, 22vw, 15rem);
+		overflow: hidden;
+		text-overflow: ellipsis;
 		color: var(--ink-default);
 		background: var(--brand-white);
+		box-shadow: 1px 0 0 var(--brand-mist);
 	}
 
-	thead .day-col {
-		z-index: 3;
+	.calendar-grid thead .entity-col {
+		z-index: 5;
 		background: var(--surface-muted);
 	}
 
@@ -213,5 +299,9 @@
 		place-items: center;
 		border: 1px solid var(--brand-mist);
 		border-radius: var(--radius-sm);
+	}
+	@media (max-width: 47.99rem) {
+		.entity-col { width: 9rem; min-width: 9rem; max-width: 9rem; }
+		.day-head, .calendar-grid td { min-width: 4.25rem; }
 	}
 </style>

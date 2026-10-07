@@ -4,11 +4,15 @@
 	import Search from '@lucide/svelte/icons/search';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { formatDate } from '$lib/date';
+	import { dateKey, formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
 	let { data } = $props();
 	let expandedPumps = $state(new Set<string>());
+	let dateMode = $state<'range' | 'day'>('range');
+	$effect(() => {
+		dateMode = data.isSingleDay ? 'day' : 'range';
+	});
 
 	const metrics = $derived([
 		{ label: 'Present', value: data.summary.present },
@@ -134,15 +138,35 @@
 				><option value="absent" selected={data.filters.status === 'absent'}>Absent</option></select
 			></label
 		>
-		<label class="field"
-			><span>Single day</span><input name="day" type="date" value={data.filters.day} /></label
-		>
-		<label class="field"
-			><span>From</span><input name="from" type="date" value={data.filters.from} /></label
-		>
-		<label class="field"
-			><span>To</span><input name="to" type="date" value={data.filters.to} /></label
-		>
+		<fieldset class="date-mode">
+			<legend>Date view</legend>
+			<div class="segmented-control">
+				<button
+					type="button"
+					class:active={dateMode === 'range'}
+					aria-pressed={dateMode === 'range'}
+					onclick={() => (dateMode = 'range')}>Date range</button
+				>
+				<button
+					type="button"
+					class:active={dateMode === 'day'}
+					aria-pressed={dateMode === 'day'}
+					onclick={() => (dateMode = 'day')}>Single day</button
+				>
+			</div>
+		</fieldset>
+		{#if dateMode === 'day'}
+			<label class="field"
+				><span>Day</span><input name="day" type="date" value={data.filters.day} /></label
+			>
+		{:else}
+			<label class="field"
+				><span>From</span><input name="from" type="date" value={data.filters.from} /></label
+			>
+			<label class="field"
+				><span>To</span><input name="to" type="date" value={data.filters.to} /></label
+			>
+		{/if}
 		<label class="field"
 			><span>Rows</span><select name="page_size"
 				><option value="25" selected={data.pagination.pageSize === 25}>25</option><option
@@ -181,7 +205,7 @@
 										><tr
 											><th><span class="sr-only">Expand</span></th><th>Pump</th><th>Present</th><th
 												>Absent</th
-											><th>Total</th></tr
+							><th>Total</th><th>Action</th></tr
 										></thead
 									>
 									<tbody>
@@ -198,11 +222,12 @@
 													></td
 												>
 												<td><a href={`/admin/pumps/${pump.pump_id}`}>{pump.pump_code}</a></td>
-												<td>{pump.present}</td><td>{pump.absent}</td><td>{pump.total}</td>
+								<td>{pump.present}</td><td>{pump.absent}</td><td>{pump.total}</td>
+								<td><a class="button button--secondary correction-link" href={`/admin/attendance/correct?pump=${pump.pump_id}&day=${data.filters.day}`}>Correct attendance</a></td>
 											</tr>
 											{#if expandedPumps.has(pump.pump_id)}
 												<tr class="detail-row"
-													><td colspan="5"
+									><td colspan="6"
 														><div class="person-records">
 															{#each pumpRows(pump.pump_id) as row}<a
 																	href={`/admin/persons/${row.person_id}`}
@@ -241,7 +266,7 @@
 								><a href={sortUrl('pump_code')}>Pump</a></th
 							><th><a href={sortUrl('vendor_name')}>Vendor</a></th><th>Plant</th><th
 								><a href={sortUrl('area_name')}>Area</a></th
-							><th><a href={sortUrl('status')}>Status</a></th></tr
+							><th><a href={sortUrl('status')}>Status</a></th><th>Action</th></tr
 						></thead
 					>
 					<tbody
@@ -257,8 +282,8 @@
 								><td
 									><StatusBadge
 										tone={isPresent(row) ? 'success' : 'neutral'}
-										label={isPresent(row) ? 'Present' : 'Absent'}
-									/></td
+									label={isPresent(row) ? 'Present' : 'Absent'}
+								/></td><td><a class="button button--secondary correction-link" href={`/admin/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`}>Correct attendance</a></td
 								></tr
 							>{/each}</tbody
 					>
@@ -293,6 +318,7 @@
 								<dd>{row.plant_name}, {row.area_name}</dd>
 							</div>
 						</dl>
+						<a class="button button--secondary correction-link" href={`/admin/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`}>Correct attendance</a>
 					</article>
 				{/each}
 			</div>
@@ -321,6 +347,53 @@
 	}
 	.attendance-page {
 		--content-max: 88rem;
+	}
+	[data-testid='attendance-table'] {
+		min-width: 76rem;
+	}
+	[data-testid='attendance-table'] th:first-child,
+	[data-testid='attendance-table'] td:first-child {
+		width: 9rem;
+		min-width: 9rem;
+		white-space: nowrap;
+	}
+	.date-mode {
+		min-width: 0;
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+	.date-mode legend {
+		margin-bottom: var(--space-1);
+		color: var(--ink-default);
+		font-size: var(--text-sm);
+		font-weight: 600;
+	}
+	.segmented-control {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		min-height: 2.75rem;
+		padding: 0.1875rem;
+		background: var(--surface-muted);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+	}
+	.segmented-control button {
+		min-width: 0;
+		padding: var(--space-2);
+		color: var(--ink-muted);
+		background: transparent;
+		border: 0;
+		border-radius: calc(var(--radius-md) - 2px);
+		font: inherit;
+		font-size: var(--text-sm);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.segmented-control button.active {
+		color: var(--ink-strong);
+		background: var(--brand-white);
+		box-shadow: 0 1px 2px rgb(22 38 37 / 12%);
 	}
 	.area-group {
 		margin-top: var(--space-5);

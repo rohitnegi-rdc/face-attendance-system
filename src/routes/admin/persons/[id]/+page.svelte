@@ -1,11 +1,12 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import AttendanceEvidenceButtons from '$lib/components/AttendanceEvidenceButtons.svelte';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
-	let { data } = $props();
+	let { data, form } = $props();
 	const totals = $derived(
 		data.yearly.reduce(
 			(sum: any, year: any) => ({
@@ -50,6 +51,9 @@
 		/>
 	</header>
 	<MetricStrip {metrics} />
+	{#if form?.message}
+		<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+	{/if}
 	<section class="section">
 		<div class="section-header"><h2>Yearly rollup</h2></div>
 		<div class="table-wrap">
@@ -71,7 +75,12 @@
 		<div class="section-header"><h2>Attendance history</h2></div>
 		<div class="table-wrap">
 			<table class="data-table">
-				<thead><tr><th>Date</th><th>Morning</th><th>Evening</th><th>Daily status</th></tr></thead
+				<thead
+					><tr
+						><th>Date</th><th>Morning</th><th>Evening</th><th>Daily status</th><th
+							>Photo evidence</th
+						></tr
+					></thead
 				><tbody
 					>{#each data.history as history}<tr
 							><td>{formatDate(history.session_date)}</td><td
@@ -89,7 +98,54 @@
 									tone={history.morning_matched && history.evening_matched ? 'success' : 'neutral'}
 									label={history.morning_matched && history.evening_matched ? 'Present' : 'Partial'}
 								/></td
-							></tr
+							><td class="history-evidence">
+								{#if history.morning_session_id}
+									<div>
+										<strong>Morning</strong>
+										<AttendanceEvidenceButtons
+											session={{
+												id: history.morning_session_id,
+												sessionType: 'morning',
+												groupPhotoUrl: history.morning_photo_url
+													? `/api/attendance/photo/${history.morning_session_id}`
+													: null,
+												groupFlagged: history.morning_group_flagged,
+												people: [
+													{
+														personId: data.person.id,
+														label: 'Individual photo',
+														cropUrl: history.morning_crop_url,
+														flagged: history.morning_person_flagged
+													}
+												]
+											}}
+										/>
+									</div>
+								{/if}
+								{#if history.evening_session_id}
+									<div>
+										<strong>Evening</strong>
+										<AttendanceEvidenceButtons
+											session={{
+												id: history.evening_session_id,
+												sessionType: 'evening',
+												groupPhotoUrl: history.evening_photo_url
+													? `/api/attendance/photo/${history.evening_session_id}`
+													: null,
+												groupFlagged: history.evening_group_flagged,
+												people: [
+													{
+														personId: data.person.id,
+														label: 'Individual photo',
+														cropUrl: history.evening_crop_url,
+														flagged: history.evening_person_flagged
+													}
+												]
+											}}
+										/>
+									</div>
+								{/if}
+							</td></tr
 						>{/each}</tbody
 				>
 			</table>
@@ -115,6 +171,22 @@
 		color: var(--ink-muted);
 		font-size: var(--text-xs);
 		font-weight: 700;
+		text-transform: uppercase;
+	}
+	.history-evidence {
+		min-width: 18rem;
+	}
+	.history-evidence > div {
+		display: grid;
+		gap: var(--space-1);
+	}
+	.history-evidence > div + div {
+		margin-top: var(--space-3);
+		padding-top: var(--space-3);
+		border-top: 1px solid var(--brand-mist);
+	}
+	.history-evidence strong {
+		font-size: var(--text-xs);
 		text-transform: uppercase;
 	}
 </style>

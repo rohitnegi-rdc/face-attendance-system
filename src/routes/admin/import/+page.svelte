@@ -7,12 +7,20 @@
 	import X from '@lucide/svelte/icons/x';
 
 	const REQUIRED_HEADERS = ['Area Name', 'Plant Name', 'PUMP Name', 'Vendor Name'];
+	const PM_REQUIRED_HEADERS = ['Plant Code', 'Plant Name', 'Plant Manager Name', 'Email ID'];
 	let fileInput: HTMLInputElement;
 	let selectedFile = $state<File | null>(null);
 	let result = $state<any>(null);
 	let error = $state('');
 	let isDragging = $state(false);
 	let isSubmitting = $state(false);
+
+	let pmFileInput: HTMLInputElement;
+	let pmSelectedFile = $state<File | null>(null);
+	let pmResult = $state<any>(null);
+	let pmError = $state('');
+	let pmIsDragging = $state(false);
+	let pmIsSubmitting = $state(false);
 
 	async function selectFile(file: File | undefined) {
 		error = '';
@@ -72,6 +80,67 @@
 			error = 'The service is not reachable. Your file is still selected.';
 		} finally {
 			isSubmitting = false;
+		}
+	}
+
+	async function pmSelectFile(file: File | undefined) {
+		pmError = '';
+		pmResult = null;
+		if (!file) return;
+		if (!file.name.toLowerCase().endsWith('.csv')) {
+			pmError = 'Choose a file with a .csv extension.';
+			return;
+		}
+		if (file.size > 5 * 1024 * 1024) {
+			pmError = 'The CSV file must be 5 MB or smaller.';
+			return;
+		}
+
+		const firstLine = (await file.slice(0, 2048).text()).split(/\r?\n/, 1)[0];
+		const headers = firstLine.split(',').map((value) => value.trim().replace(/^"|"$/g, ''));
+		const missing = PM_REQUIRED_HEADERS.filter((header) => !headers.includes(header));
+		if (missing.length) {
+			pmError = `Missing required headers: ${missing.join(', ')}.`;
+			return;
+		}
+		pmSelectedFile = file;
+	}
+
+	function pmOnInput(event: Event) {
+		pmSelectFile((event.currentTarget as HTMLInputElement).files?.[0]);
+	}
+
+	function pmOnDrop(event: DragEvent) {
+		event.preventDefault();
+		pmIsDragging = false;
+		pmSelectFile(event.dataTransfer?.files?.[0]);
+	}
+
+	function pmClearFile() {
+		pmSelectedFile = null;
+		pmResult = null;
+		pmError = '';
+		if (pmFileInput) pmFileInput.value = '';
+	}
+
+	async function pmSubmit() {
+		if (!pmSelectedFile) return;
+		pmError = '';
+		pmIsSubmitting = true;
+		const form = new FormData();
+		form.append('file', pmSelectedFile);
+		try {
+			const res = await fetch('/api/admin/import/plant-managers', { method: 'POST', body: form });
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				pmError = body.error || 'The import could not be completed.';
+				return;
+			}
+			pmResult = body;
+		} catch {
+			pmError = 'The service is not reachable. Your file is still selected.';
+		} finally {
+			pmIsSubmitting = false;
 		}
 	}
 </script>
@@ -182,6 +251,141 @@
 					<table class="data-table">
 						<thead><tr><th>Row</th><th>Message</th></tr></thead><tbody
 							>{#each result.errors as item}<tr><td>{item.row}</td><td>{item.message}</td></tr
+								>{/each}</tbody
+						>
+					</table>
+				</div>
+			{/if}
+		</section>
+	{/if}
+
+	<header class="page-header">
+		<div class="page-header__copy">
+			<p class="eyebrow">Administration</p>
+			<h1>Plant manager import</h1>
+			<p>
+				Import plant incharge names and emails, matched against existing plants by name. Used for
+				routing notification emails.
+			</p>
+		</div>
+		<a class="button button--secondary" href="/plant-managers-template.csv" download
+			><Download size={17} /> Download template</a
+		>
+	</header>
+
+	<section class="surface surface--padded">
+		<input
+			class="visually-hidden"
+			bind:this={pmFileInput}
+			type="file"
+			accept=".csv,text/csv"
+			onchange={pmOnInput}
+			data-testid="plant-manager-file-input"
+		/>
+
+		{#if pmSelectedFile}
+			<div class="selected-file">
+				<span class="file-icon"><FileCheck size={25} /></span>
+				<div>
+					<strong>{pmSelectedFile.name}</strong><small
+						>{(pmSelectedFile.size / 1024).toFixed(1)} KB · Headers validated</small
+					>
+				</div>
+				<button
+					class="icon-button"
+					type="button"
+					onclick={pmClearFile}
+					aria-label="Remove selected CSV"
+					title="Remove file"><X size={19} /></button
+				>
+			</div>
+		{:else}
+			<button
+				class:dragging={pmIsDragging}
+				class="upload-zone"
+				type="button"
+				onclick={() => pmFileInput?.click()}
+				ondragover={(event) => {
+					event.preventDefault();
+					pmIsDragging = true;
+				}}
+				ondragleave={() => (pmIsDragging = false)}
+				ondrop={pmOnDrop}
+			>
+				<span class="file-icon"><FileUp size={26} /></span>
+				<strong>Drop a CSV here or choose a file</strong>
+				<small>Required: Plant Code, Plant Name, Plant Manager Name, Email ID · 5 MB maximum</small>
+			</button>
+		{/if}
+
+		{#if pmError}<p class="alert alert--error" role="alert">{pmError}</p>{/if}
+
+		<div class="import-action">
+			<button
+				class="button button--primary"
+				type="button"
+				onclick={pmSubmit}
+				disabled={!pmSelectedFile || pmIsSubmitting}
+				data-testid="plant-manager-import-submit"
+			>
+				{#if pmIsSubmitting}<LoaderCircle class="spin" size={18} />{:else}<Upload size={18} />{/if}
+				{pmIsSubmitting ? 'Importing...' : 'Import CSV'}
+			</button>
+		</div>
+	</section>
+
+	{#if pmResult}
+		<section class="section" data-testid="plant-manager-import-summary">
+			<div class="section-header">
+				<div>
+					<h2>Import complete</h2>
+					<p class="supporting-text">{pmSelectedFile?.name}</p>
+				</div>
+			</div>
+			<div class="summary-list">
+				<div><span>Rows processed</span><strong>{pmResult.rows_total}</strong></div>
+				<div><span>Matched and updated</span><strong>{pmResult.rows_matched}</strong></div>
+				<div><span>No matching plant</span><strong>{pmResult.rows_unmatched}</strong></div>
+				<div><span>Ambiguous (skipped)</span><strong>{pmResult.rows_ambiguous}</strong></div>
+			</div>
+
+			{#if pmResult.unmatched?.length}
+				<div class="section-header errors-heading">
+					<h2>No matching plant</h2>
+					<span>{pmResult.unmatched.length}</span>
+				</div>
+				<p class="supporting-text">
+					These plant names weren't found in the system — they may not have a pump yet, or the name
+					differs from what's already stored. Nothing was changed for these rows.
+				</p>
+				<div class="table-wrap error-table">
+					<table class="data-table">
+						<thead><tr><th>Row</th><th>Plant code</th><th>Plant name</th></tr></thead><tbody
+							>{#each pmResult.unmatched as item}<tr
+									><td>{item.row}</td><td>{item.plant_code}</td><td>{item.plant_name}</td></tr
+								>{/each}</tbody
+						>
+					</table>
+				</div>
+			{/if}
+
+			{#if pmResult.ambiguous?.length}
+				<div class="section-header errors-heading">
+					<h2>Ambiguous — multiple plants share this name</h2>
+					<span>{pmResult.ambiguous.length}</span>
+				</div>
+				<p class="supporting-text">
+					Skipped to avoid attaching the wrong manager — resolve these manually.
+				</p>
+				<div class="table-wrap error-table">
+					<table class="data-table">
+						<thead
+							><tr><th>Row</th><th>Plant code</th><th>Plant name</th><th>Candidates</th></tr></thead
+						><tbody
+							>{#each pmResult.ambiguous as item}<tr
+									><td>{item.row}</td><td>{item.plant_code}</td><td>{item.plant_name}</td><td
+										>{item.candidate_count}</td
+									></tr
 								>{/each}</tbody
 						>
 					</table>

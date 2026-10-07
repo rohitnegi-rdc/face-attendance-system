@@ -17,6 +17,15 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	if (locals.user.role === 'pump' && session.pump_id !== locals.user.id) {
 		return error(403, 'Forbidden');
 	}
+	if (locals.user.role === 'plant-manager') {
+		const assigned = await queryOne<any>(
+			`SELECT 1 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
+			 JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id
+			 WHERE s.id = $1 AND pma.manager_id = $2`,
+			[params.id, locals.user.id]
+		);
+		if (!assigned) return error(403, 'Forbidden');
+	}
 
 	const photoPath = path.resolve(session.photo_url);
 	const relative = path.relative(UPLOAD_DIR, photoPath);

@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { query } from '$lib/server/db';
-import { todayStr, addDaysStr } from '$lib/date';
+import { todayStr, addDaysStr, dateKey } from '$lib/date';
 
 const ATTENTION_SILENCE_HOURS = Number(process.env.EVENING_PAIRING_WINDOW_HOURS ?? 24) + 6; // 30h default
 
@@ -34,19 +34,33 @@ export const load: PageServerLoad = async () => {
 		 FROM daily_person_attendance WHERE session_date >= $1 AND session_date <= $2`,
 		[last7From, today]
 	);
-	const [fraudToday] = await query<any>(`SELECT COUNT(*) AS c FROM fraud_flags WHERE created_at::date = $1`, [today]);
-	const [fraudYesterday] = await query<any>(`SELECT COUNT(*) AS c FROM fraud_flags WHERE created_at::date = $1`, [
-		yesterday
-	]);
+	const [fraudToday] = await query<any>(
+		`SELECT COUNT(*) AS c FROM fraud_flags WHERE created_at::date = $1`,
+		[today]
+	);
+	const [fraudYesterday] = await query<any>(
+		`SELECT COUNT(*) AS c FROM fraud_flags WHERE created_at::date = $1`,
+		[yesterday]
+	);
 
 	const todayPct = pct(Number(todayAgg?.present ?? 0), Number(todayAgg?.total ?? 0));
 	const yesterdayPct = pct(Number(yesterdayAgg?.present ?? 0), Number(yesterdayAgg?.total ?? 0));
 	const last7Pct = pct(Number(last7Agg?.present ?? 0), Number(last7Agg?.total ?? 0));
 
 	const trends = {
-		attendancePct: { value: todayPct, vsYesterday: Math.round((todayPct - yesterdayPct) * 10) / 10, vs7dAvg: Math.round((todayPct - last7Pct) * 10) / 10 },
-		fraudFlags: { value: Number(fraudToday?.c ?? 0), vsYesterday: Number(fraudToday?.c ?? 0) - Number(fraudYesterday?.c ?? 0) },
-		activePumps: { value: Number(todayAgg?.active_pumps ?? 0), vsYesterday: Number(todayAgg?.active_pumps ?? 0) - Number(yesterdayAgg?.active_pumps ?? 0) }
+		attendancePct: {
+			value: todayPct,
+			vsYesterday: Math.round((todayPct - yesterdayPct) * 10) / 10,
+			vs7dAvg: Math.round((todayPct - last7Pct) * 10) / 10
+		},
+		fraudFlags: {
+			value: Number(fraudToday?.c ?? 0),
+			vsYesterday: Number(fraudToday?.c ?? 0) - Number(fraudYesterday?.c ?? 0)
+		},
+		activePumps: {
+			value: Number(todayAgg?.active_pumps ?? 0),
+			vsYesterday: Number(todayAgg?.active_pumps ?? 0) - Number(yesterdayAgg?.active_pumps ?? 0)
+		}
 	};
 
 	// ---------- Pumps needing attention ----------
@@ -91,7 +105,9 @@ export const load: PageServerLoad = async () => {
 			id: p.id,
 			pump_code: p.pump_code,
 			reasons: [
-				p.last_submitted_at ? `no submission since ${new Date(p.last_submitted_at).toISOString().slice(0, 10)}` : 'never submitted'
+				p.last_submitted_at
+					? `no submission since ${dateKey(p.last_submitted_at)}`
+					: 'never submitted'
 			]
 		});
 	}
@@ -102,14 +118,19 @@ export const load: PageServerLoad = async () => {
 	}
 	for (const p of droppedPumps) {
 		const existing = attentionMap.get(p.id) || { id: p.id, pump_code: p.pump_code, reasons: [] };
-		existing.reasons.push(`7-day attendance dropped ${p.drop.toFixed(1)}pp (${p.prior7Pct}% → ${p.last7Pct}%)`);
+		existing.reasons.push(
+			`7-day attendance dropped ${p.drop.toFixed(1)}pp (${p.prior7Pct}% → ${p.last7Pct}%)`
+		);
 		attentionMap.set(p.id, existing);
 	}
 	const pumpsNeedingAttention = [...attentionMap.values()];
 
 	// ---------- Vendor / Area rollups, ranked by furthest below 30-day baseline ----------
 	async function rollup(groupCol: 'vendor_id' | 'area_id', nameTable: string, nameCol = 'name') {
-		const joinArea = groupCol === 'area_id' ? 'JOIN plants pl ON pl.id = pu.plant_id JOIN areas g ON g.id = pl.area_id' : 'JOIN vendors g ON g.id = pu.vendor_id';
+		const joinArea =
+			groupCol === 'area_id'
+				? 'JOIN plants pl ON pl.id = pu.plant_id JOIN areas g ON g.id = pl.area_id'
+				: 'JOIN vendors g ON g.id = pu.vendor_id';
 		const rows = await query<any>(
 			`SELECT g.id, g.${nameCol} AS name,
 			   COUNT(DISTINCT pu.id) AS pump_count,
@@ -173,7 +194,9 @@ export const load: PageServerLoad = async () => {
 		[last30From]
 	);
 	const fraudMap = new Map(fraudByVendor.map((r: any) => [r.vendor_id, Number(r.fraud_count)]));
-	const sessionsMap = new Map(sessionsByVendor.map((r: any) => [r.vendor_id, Number(r.session_count)]));
+	const sessionsMap = new Map(
+		sessionsByVendor.map((r: any) => [r.vendor_id, Number(r.session_count)])
+	);
 	const vendorRollupWithFraud = vendorRollup.map((v: any) => {
 		const fraudCount = fraudMap.get(v.id) ?? 0;
 		const sessions = sessionsMap.get(v.id) ?? 0;
@@ -187,7 +210,10 @@ export const load: PageServerLoad = async () => {
 	// ---------- 7-day sparklines per area/vendor ----------
 	const last7Days = Array.from({ length: 7 }, (_, i) => addDaysStr(today, -6 + i));
 	async function sparklineSeries(groupCol: 'vendor_id' | 'area_id') {
-		const joinArea = groupCol === 'area_id' ? 'JOIN plants pl ON pl.id = pu.plant_id JOIN areas g ON g.id = pl.area_id' : 'JOIN vendors g ON g.id = pu.vendor_id';
+		const joinArea =
+			groupCol === 'area_id'
+				? 'JOIN plants pl ON pl.id = pu.plant_id JOIN areas g ON g.id = pl.area_id'
+				: 'JOIN vendors g ON g.id = pu.vendor_id';
 		const rows = await query<any>(
 			`SELECT g.id, dpa.session_date,
 			   COUNT(*) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched) AS present, COUNT(*) AS total
@@ -200,9 +226,9 @@ export const load: PageServerLoad = async () => {
 		);
 		const byGroup = new Map<string, Record<string, { present: number; total: number }>>();
 		for (const r of rows) {
-			const dateKey = r.session_date instanceof Date ? r.session_date.toISOString().slice(0, 10) : r.session_date;
+			const sessionDate = dateKey(r.session_date);
 			if (!byGroup.has(r.id)) byGroup.set(r.id, {});
-			byGroup.get(r.id)![dateKey] = { present: Number(r.present), total: Number(r.total) };
+			byGroup.get(r.id)![sessionDate] = { present: Number(r.present), total: Number(r.total) };
 		}
 		const result: Record<string, number[]> = {};
 		for (const [id, dayMap] of byGroup) {
@@ -226,9 +252,7 @@ export const load: PageServerLoad = async () => {
 		 WHERE created_at::date >= $1 AND reviewed = false GROUP BY created_at::date`,
 		[last7From]
 	);
-	const guestBacklogMap = new Map(
-		guestBacklogTrend.map((r: any) => [r.day instanceof Date ? r.day.toISOString().slice(0, 10) : r.day, Number(r.c)])
-	);
+	const guestBacklogMap = new Map(guestBacklogTrend.map((r: any) => [dateKey(r.day), Number(r.c)]));
 	const guestBacklogSeries = last7Days.map((d) => guestBacklogMap.get(d) ?? 0);
 
 	return {

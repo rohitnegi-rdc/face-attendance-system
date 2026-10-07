@@ -3,7 +3,12 @@ import { query } from '$lib/server/db';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const vendorId = locals.user!.id;
-	const pump = url.searchParams.get('pump') || '';
+	const requestedPump = url.searchParams.get('pump') || '';
+	const pump = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+		requestedPump
+	)
+		? requestedPump
+		: '';
 	const [pumps, persons] = await Promise.all([
 		query<any>('SELECT id, pump_code FROM pumps WHERE vendor_id = $1 ORDER BY pump_code', [
 			vendorId

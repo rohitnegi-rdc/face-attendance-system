@@ -2,8 +2,8 @@ import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { pool, query } from '$lib/server/db';
 
-const LOWER_BOUND = 0.55;
-const UPPER_BOUND = Number(process.env.FACE_MATCH_THRESHOLD ?? 0.68);
+const LOWER_BOUND = 0.2;
+const UPPER_BOUND = Number(process.env.FACE_MATCH_THRESHOLD ?? 0.3);
 
 export const load: PageServerLoad = async () => {
 	const candidates = await query<any>(

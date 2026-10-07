@@ -7,7 +7,7 @@ import { pool } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
 import { logger } from '$lib/server/log';
 
-const NINE_HOURS = 9;
+const EVENING_MIN_GAP_MINUTES = 1;
 const EVENING_PAIRING_WINDOW_HOURS = Number(process.env.EVENING_PAIRING_WINDOW_HOURS ?? 24);
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
 const MAX_UPLOAD_BYTES = 18 * 1024 * 1024;
@@ -27,6 +27,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 	const pumpId = locals.user.id;
 	const requestId = randomUUID();
+
+	// The pump's JWT stays valid for 7 days, so a pump disabled mid-session (by the worker, after
+	// its token was already issued) must be re-checked here, not just at login.
+	const pumpAccount = await pool.query('SELECT status FROM pumps WHERE id = $1', [pumpId]);
+	if (pumpAccount.rows[0]?.status === 'disabled') {
+		return json({ error: 'Account disabled. Contact your Plant Manager.' }, { status: 403 });
+	}
 
 	const form = await request.formData();
 	const file = form.get('photo') as File | null;
@@ -54,11 +61,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		await client.query(
 			`WITH expired AS (
-			   UPDATE attendance_sessions
-			   SET pairing_status = 'expired'
-			   WHERE pump_id = $1
-			     AND session_type = 'morning'
-			     AND pairing_status = 'open'
+		   UPDATE attendance_sessions
+		   SET pairing_status = 'expired'
+		   WHERE pump_id = $1
+		     AND session_type = 'morning'
+		     AND status = 'completed'
+		     AND pairing_status = 'open'
 			     AND now() - submitted_at > ($2 || ' hours')::interval
 			   RETURNING id, pump_id, session_date
 			 ),
@@ -84,9 +92,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const openMorningResult = await client.query(
 			`SELECT *,
-			        EXTRACT(EPOCH FROM (now() - submitted_at)) / 3600 AS elapsed_hours
+			        EXTRACT(EPOCH FROM (now() - submitted_at)) / 60 AS elapsed_minutes
 			 FROM attendance_sessions
-			 WHERE pump_id = $1 AND session_type = 'morning' AND pairing_status = 'open'
+			 WHERE pump_id = $1 AND session_type = 'morning' AND status = 'completed' AND pairing_status = 'open'
 			 ORDER BY submitted_at DESC LIMIT 1`,
 			[pumpId]
 		);
@@ -109,11 +117,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			sessionType = 'morning';
 			sessionDate = today;
 		} else {
-			const elapsed = Number(openMorning.elapsed_hours);
-			if (elapsed < NINE_HOURS) {
-				const remaining = (NINE_HOURS - elapsed).toFixed(1);
+			const elapsed = Number(openMorning.elapsed_minutes);
+			if (elapsed < EVENING_MIN_GAP_MINUTES) {
+				const remaining = Math.ceil(EVENING_MIN_GAP_MINUTES - elapsed);
 				throw new SubmissionError(
-					`9-hour rule: ${remaining} hours remaining before evening submission is allowed`
+					`Test evening rule: ${remaining} minute remaining before evening submission is allowed`
 				);
 			}
 			sessionType = 'evening';

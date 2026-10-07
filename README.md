@@ -82,5 +82,17 @@ submits `Test/faces/group_evening.jpg`, and prints the resulting `daily_person_a
 
 ## Config (.env)
 
-See `.env.example`. Key values: `FACE_MATCH_THRESHOLD` (default 0.68),
+See `.env.example`. Key values: `FACE_MATCH_THRESHOLD` (default 0.30),
 `EVENING_PAIRING_WINDOW_HOURS` (default 24), `DATABASE_URL`, `JWT_SECRET`, `AI_SERVICE_URL`.
+`JWT_SECRET` must be at least 32 characters. Pump photo uploads are limited to 18 MiB and JPEG,
+PNG, or WebP; the AI service also rejects images above 20 megapixels.
+
+### Google Workspace sign-in
+
+Create a Google OAuth client with application type **Web application**, then register the exact
+callback URL used by the app, such as `https://<your-host>/api/auth/google/callback`. Set
+`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `GOOGLE_OAUTH_REDIRECT_URI` in the
+runtime environment (never commit the secret), then recreate the app container. The callback
+accepts only verified `@rdc.in` identities with Google's matching hosted-domain claim and an
+existing application account; it does not create accounts or grant roles. Use an HTTPS callback
+outside localhost.

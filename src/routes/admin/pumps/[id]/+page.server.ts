@@ -1,11 +1,23 @@
-import type { PageServerLoad } from './$types';
+import type { Actions, PageServerLoad } from './$types';
 import { query, queryOne } from '$lib/server/db';
-import { error } from '@sveltejs/kit';
-import { todayStr, addDaysStr, daysBetween } from '$lib/date';
+import { error, fail } from '@sveltejs/kit';
+import { todayStr, addDaysStr, dateKey, daysBetween } from '$lib/date';
+import { createAttendanceReviewFlag } from '$lib/server/attendanceReview';
+
+const PAGE_SIZES = [25, 50, 100];
+
+function readPaging(url: URL, pagePrefix: string) {
+	const requestedPage = Number(url.searchParams.get(`${pagePrefix}_page`) || '1');
+	const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+	const requestedPageSize = Number(url.searchParams.get(`${pagePrefix}_page_size`) || '25');
+	const pageSize = PAGE_SIZES.includes(requestedPageSize) ? requestedPageSize : 25;
+	return { page, pageSize };
+}
 
 export const load: PageServerLoad = async ({ params, url }) => {
 	const pump = await queryOne<any>(
-		`SELECT pu.id, pu.pump_code, pl.name AS plant_name, a.name AS area_name, v.name AS vendor_name, v.id AS vendor_id, a.id AS area_id
+		`SELECT pu.id, pu.pump_code, pu.status, pu.disabled_at, pu.disabled_reason,
+		        pl.name AS plant_name, a.name AS area_name, v.name AS vendor_name, v.id AS vendor_id, a.id AS area_id
 		 FROM pumps pu
 		 JOIN plants pl ON pl.id = pu.plant_id
 		 JOIN areas a ON a.id = pl.area_id
@@ -19,71 +31,272 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const from = url.searchParams.get('from') || addDaysStr(to, -29);
 	const days = daysBetween(from, to);
 
-	const attendanceRows = await query<any>(
-		`SELECT person_id, session_date, morning_matched, evening_matched
-		 FROM daily_person_attendance
-		 WHERE pump_id = $1 AND session_date >= $2 AND session_date <= $3`,
-		[pump.id, from, to]
-	);
-	const attendanceMap: Record<string, string> = {};
-	for (const r of attendanceRows) {
-		const dateKey = r.session_date instanceof Date ? r.session_date.toISOString().slice(0, 10) : r.session_date;
-		const status = r.morning_matched && r.evening_matched ? 'present' : r.morning_matched ? 'morning_only' : 'evening_only';
-		attendanceMap[`${r.person_id}|${dateKey}`] = status;
-	}
+	const rosterPaging = readPaging(url, 'roster');
+	const sessionPaging = readPaging(url, 'session');
 
-	const roster = await query<any>(
-		`SELECT p.id, p.display_seq, p.first_seen_at, p.last_seen_at,
-		        COALESCE(y.days_present, 0) AS days_present,
-		        COALESCE(y.days_morning_only, 0) AS days_morning_only,
-		        COALESCE(y.days_evening_only, 0) AS days_evening_only
-		 FROM persons p
-		 LEFT JOIN person_attendance_yearly y ON y.person_id = p.id AND y.year = EXTRACT(YEAR FROM now())
-		 WHERE p.pump_id = $1
-		 ORDER BY p.display_seq`,
+	const [{ count: rosterTotal }] = await query<any>(
+		`SELECT COUNT(*) AS count FROM persons WHERE pump_id = $1 AND status = 'active'`,
 		[pump.id]
 	);
 
-	const sessionLog = await query<any>(
-		`SELECT id, session_type, status, pairing_status, submitted_at, processed_at, error_reason
-		 FROM attendance_sessions
-		 WHERE pump_id = $1 AND session_date >= $2 AND session_date <= $3
-		 ORDER BY submitted_at DESC`,
+	const roster = await query<any>(
+		`SELECT p.id, p.display_seq, p.first_seen_at, p.last_seen_at,
+		        COUNT(dpa.id) FILTER (
+		          WHERE dpa.morning_matched AND dpa.evening_matched
+		        ) AS days_present,
+		        COUNT(dpa.id) FILTER (
+		          WHERE dpa.morning_matched AND NOT dpa.evening_matched
+		        ) AS days_morning_only,
+		        COUNT(dpa.id) FILTER (
+		          WHERE NOT dpa.morning_matched AND dpa.evening_matched
+		        ) AS days_evening_only
+		 FROM persons p
+		 LEFT JOIN daily_person_attendance dpa ON dpa.person_id = p.id
+		 WHERE p.pump_id = $1 AND p.status = 'active'
+		 GROUP BY p.id
+		 ORDER BY p.display_seq
+		 LIMIT $2 OFFSET $3`,
+		[pump.id, rosterPaging.pageSize, (rosterPaging.page - 1) * rosterPaging.pageSize]
+	);
+	const rosterIds = roster.map((p: any) => p.id);
+
+	// Calendar only needs rows for the roster page currently shown.
+	const attendanceRows = rosterIds.length
+		? await query<any>(
+				`SELECT person_id, session_date, morning_matched, evening_matched
+			 FROM daily_person_attendance
+			 WHERE pump_id = $1 AND person_id = ANY($2) AND session_date >= $3 AND session_date <= $4`,
+				[pump.id, rosterIds, from, to]
+			)
+		: [];
+	const attendanceMap: Record<string, string> = {};
+	for (const r of attendanceRows) {
+		const sessionDate = dateKey(r.session_date);
+		const status =
+			r.morning_matched && r.evening_matched
+				? 'present'
+				: r.morning_matched
+					? 'morning_only'
+					: 'evening_only';
+		attendanceMap[`${r.person_id}|${sessionDate}`] = status;
+	}
+
+	const [{ count: sessionLogTotal }] = await query<any>(
+		`SELECT COUNT(*) AS count FROM attendance_sessions
+		 WHERE pump_id = $1 AND session_date >= $2 AND session_date <= $3`,
 		[pump.id, from, to]
 	);
+	const sessionLog = await query<any>(
+		`SELECT id, session_date, session_type, status, pairing_status, paired_session_id,
+		        submitted_at, processed_at, error_reason, photo_url,
+		        fraud_resolution, fraud_resolved_at,
+		        EXISTS (
+		          SELECT 1 FROM attendance_review_flags arf
+		          WHERE arf.session_id = attendance_sessions.id
+		            AND arf.person_id IS NULL AND arf.status = 'open'
+		        ) AS group_flagged
+		 FROM attendance_sessions
+		 WHERE pump_id = $1 AND session_date >= $2 AND session_date <= $3
+		 ORDER BY submitted_at DESC
+		 LIMIT $4 OFFSET $5`,
+		[pump.id, from, to, sessionPaging.pageSize, (sessionPaging.page - 1) * sessionPaging.pageSize]
+	);
 
+	const sessionIds = sessionLog.map((s: any) => s.id);
+	const faceEvidence = sessionIds.length
+		? await query<any>(
+				`SELECT afe.session_id, afe.person_id, afe.face_crop_url, p.display_seq,
+			        EXISTS (
+			          SELECT 1 FROM attendance_review_flags arf
+			          WHERE arf.session_id = afe.session_id
+			            AND arf.person_id = afe.person_id AND arf.status = 'open'
+			        ) AS flagged
+			 FROM attendance_face_evidence afe
+			 JOIN persons p ON p.id = afe.person_id
+			 WHERE afe.session_id = ANY($1)
+			 ORDER BY p.display_seq`,
+				[sessionIds]
+			)
+		: [];
+	const evidenceBySession = new Map<string, any[]>();
+	for (const face of faceEvidence) {
+		const people = evidenceBySession.get(face.session_id) ?? [];
+		people.push({
+			personId: face.person_id,
+			label: `Worker ${face.display_seq}`,
+			cropUrl: face.face_crop_url,
+			flagged: face.flagged
+		});
+		evidenceBySession.set(face.session_id, people);
+	}
+	const sessions = sessionLog.map((session: any) => ({
+		...session,
+		evidence: {
+			id: session.id,
+			sessionType: session.session_type,
+			groupPhotoUrl: session.photo_url ? `/api/attendance/photo/${session.id}` : null,
+			groupFlagged: session.group_flagged,
+			people: evidenceBySession.get(session.id) ?? []
+		}
+	}));
+
+	// Rejection counts are computed from the full range, not just the current session-log
+	// page, so they need their own unpaginated read of the relevant fields.
+	const allSessionsInRange = await query<any>(
+		`SELECT session_type, pairing_status
+		 FROM attendance_sessions
+		 WHERE pump_id = $1 AND session_date >= $2 AND session_date <= $3`,
+		[pump.id, from, to]
+	);
 	const rejectionCounts = {
-		nineHourRule: sessionLog.filter((s: any) => s.error_reason?.includes('9-hour rule')).length,
-		duplicatePhoto: sessionLog.filter((s: any) => s.error_reason?.includes('Duplicate photo')).length,
-		morningExpired: sessionLog.filter((s: any) => s.pairing_status === 'expired').length
+		morningExpired: allSessionsInRange.filter(
+			(s: any) => s.session_type === 'morning' && s.pairing_status === 'expired'
+		).length,
+		morningAwaiting: allSessionsInRange.filter(
+			(s: any) => s.session_type === 'morning' && s.pairing_status === 'open'
+		).length,
+		morningOnly: allSessionsInRange.filter(
+			(s: any) => s.session_type === 'morning' && s.pairing_status !== 'paired'
+		).length
 	};
 
+	// Daily breakdown (trend chart + daily-summary table) always covers the full selected
+	// range and the full roster, independent of either table's current pagination page.
 	const dailyTotals = await query<any>(
 		`SELECT session_date,
-		   COUNT(*) FILTER (WHERE morning_matched AND evening_matched) AS present, COUNT(*) AS total
+		   COUNT(*) FILTER (WHERE morning_matched AND evening_matched) AS present,
+		   COUNT(*) FILTER (WHERE morning_matched AND NOT evening_matched) AS morning_only,
+		   COUNT(*) FILTER (WHERE evening_matched AND NOT morning_matched) AS evening_only
 		 FROM daily_person_attendance
 		 WHERE pump_id = $1 AND session_date >= $2 AND session_date <= $3
 		 GROUP BY session_date`,
 		[pump.id, from, to]
 	);
-	const dailyTotalsMap: Record<string, { present: number; total: number }> = {};
+	const dailyTotalsMap: Record<
+		string,
+		{ present: number; morningOnly: number; eveningOnly: number }
+	> = {};
 	for (const r of dailyTotals) {
-		const dateKey = r.session_date instanceof Date ? r.session_date.toISOString().slice(0, 10) : r.session_date;
-		dailyTotalsMap[dateKey] = { present: Number(r.present), total: Number(r.total) };
+		dailyTotalsMap[dateKey(r.session_date)] = {
+			present: Number(r.present),
+			morningOnly: Number(r.morning_only),
+			eveningOnly: Number(r.evening_only)
+		};
 	}
-	const sparkline = days.map((d: string) => {
-		const t = dailyTotalsMap[d];
-		return t && t.total > 0 ? Math.round((t.present / t.total) * 100) : 0;
+	const rosterSize = Number(rosterTotal);
+	const dailyBreakdown = days.map((day: string) => {
+		const t = dailyTotalsMap[day] ?? { present: 0, morningOnly: 0, eveningOnly: 0 };
+		const absent = Math.max(rosterSize - t.present - t.morningOnly - t.eveningOnly, 0);
+		return {
+			day,
+			present: t.present,
+			morningOnly: t.morningOnly,
+			eveningOnly: t.eveningOnly,
+			absent
+		};
 	});
 
 	return {
 		pump,
 		roster,
-		sessionLog,
+		rosterPagination: {
+			page: rosterPaging.page,
+			pageSize: rosterPaging.pageSize,
+			total: Number(rosterTotal),
+			totalPages: Math.max(1, Math.ceil(Number(rosterTotal) / rosterPaging.pageSize))
+		},
+		sessionLog: sessions,
+		sessionPagination: {
+			page: sessionPaging.page,
+			pageSize: sessionPaging.pageSize,
+			total: Number(sessionLogTotal),
+			totalPages: Math.max(1, Math.ceil(Number(sessionLogTotal) / sessionPaging.pageSize))
+		},
 		range: { from, to },
 		days,
 		attendanceMap,
 		rejectionCounts,
-		sparkline
+		dailyBreakdown
 	};
+};
+
+export const actions: Actions = {
+	reactivatePump: async ({ params }) => {
+		await queryOne(
+			`UPDATE pumps SET status = 'active', disabled_at = NULL, disabled_reason = NULL WHERE id = $1`,
+			[params.id]
+		);
+		return { success: true, message: 'Pump login reactivated.' };
+	},
+	flagEvidence: async ({ params, request, locals }) => {
+		const form = await request.formData();
+		try {
+			const created = await createAttendanceReviewFlag({
+				sessionId: String(form.get('session_id') || ''),
+				personId: String(form.get('person_id') || '') || null,
+				pumpId: params.id,
+				adminId: locals.user!.id,
+				reason: String(form.get('reason') || ''),
+				note: String(form.get('note') || '')
+			});
+			return {
+				success: true,
+				message: created
+					? 'Attendance evidence flagged for review.'
+					: 'This attendance evidence is already flagged.'
+			};
+		} catch (actionError) {
+			return fail(400, {
+				message: actionError instanceof Error ? actionError.message : 'Could not flag evidence.'
+			});
+		}
+	},
+	resolveFraudSession: async ({ params, request, locals }) => {
+		const form = await request.formData();
+		const sessionId = String(form.get('session_id') || '');
+		const resolution = String(form.get('resolution') || '');
+		if (!sessionId || !['marked_normal', 'confirmed_fraud'].includes(resolution)) {
+			return fail(400, { message: 'Invalid fraud resolution request.' });
+		}
+		const session = await queryOne<any>(
+			`SELECT id, status, pump_id FROM attendance_sessions WHERE id = $1 AND pump_id = $2`,
+			[sessionId, params.id]
+		);
+		if (!session || session.status !== 'fraud_detected') {
+			return fail(400, { message: 'This session is not an unresolved fraud detection.' });
+		}
+		const adminId = locals.user!.id;
+
+		if (resolution === 'marked_normal') {
+			await query(
+				`UPDATE attendance_sessions
+				 SET status = 'pending',
+				     error_reason = NULL,
+				     fraud_resolution = 'marked_normal',
+				     fraud_resolved_by_admin_id = $2,
+				     fraud_resolved_at = now(),
+				     pairing_status = CASE WHEN pairing_status = 'expired' THEN 'open' ELSE pairing_status END
+				 WHERE id = $1`,
+				[sessionId, adminId]
+			);
+			await query(
+				`UPDATE attendance_jobs SET status = 'queued', attempts = 0, claimed_at = NULL, last_error = NULL
+				 WHERE session_id = $1`,
+				[sessionId]
+			);
+			await query(
+				`UPDATE pumps SET status = 'active', disabled_at = NULL, disabled_reason = NULL WHERE id = $1`,
+				[params.id]
+			);
+			return { success: true, message: 'Marked normal — reprocessing and pump login restored.' };
+		}
+
+		await query(
+			`UPDATE attendance_sessions
+			 SET fraud_resolution = 'confirmed_fraud', fraud_resolved_by_admin_id = $2, fraud_resolved_at = now()
+			 WHERE id = $1`,
+			[sessionId, adminId]
+		);
+		return { success: true, message: 'Confirmed as fraud. Pump login stays disabled.' };
+	}
 };

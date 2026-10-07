@@ -3,6 +3,7 @@
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import ScanFace from '@lucide/svelte/icons/scan-face';
+	let { data } = $props();
 
 	let email = $state('');
 	let password = $state('');
@@ -103,6 +104,15 @@
 				{isSubmitting ? 'Signing in...' : 'Sign in'}
 			</button>
 		</form>
+
+		{#if data.googleOAuthEnabled}
+			<div class="login-divider" aria-hidden="true"><span>or</span></div>
+			{#if data.oauthError}<p class="alert alert--error" role="alert">{data.oauthError}</p>{/if}
+			<a class="button button--secondary google-login" href="/api/auth/google/start">
+				Continue with RDC Google account
+			</a>
+			<p class="oauth-note">Only existing rdc.in accounts can sign in.</p>
+		{/if}
 	</section>
 </main>
 
@@ -209,6 +219,34 @@
 	.submit-button {
 		width: 100%;
 		min-height: 2.75rem;
+	}
+
+	.login-divider {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		margin: var(--space-5) 0 var(--space-4);
+		color: var(--ink-muted);
+	}
+
+	.login-divider::before,
+	.login-divider::after {
+		content: '';
+		flex: 1;
+		border-top: 1px solid var(--brand-mist);
+	}
+
+	.google-login {
+		width: 100%;
+		justify-content: center;
+		text-decoration: none;
+	}
+
+	.oauth-note {
+		margin: var(--space-3) 0 0;
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
+		text-align: center;
 	}
 
 	:global(.spin) {

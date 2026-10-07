@@ -1,20 +1,25 @@
 import type { PageServerLoad } from './$types';
 import { query } from '$lib/server/db';
 import { nowIST } from '$lib/server/time';
+import { isDateKey } from '$lib/date';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const vendorId = locals.user!.id;
 	const fallbackTo = nowIST().format('YYYY-MM-DD');
 	const fallbackFrom = nowIST().subtract(13, 'day').format('YYYY-MM-DD');
-	const from = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('from') || '')
-		? url.searchParams.get('from')!
-		: fallbackFrom;
-	const to = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('to') || '')
-		? url.searchParams.get('to')!
-		: fallbackTo;
-	const pump = url.searchParams.get('pump') || '';
-	const plant = url.searchParams.get('plant') || '';
-	const area = url.searchParams.get('area') || '';
+	const requestedFrom = url.searchParams.get('from') || '';
+	const requestedTo = url.searchParams.get('to') || '';
+	const from = isDateKey(requestedFrom) ? requestedFrom : fallbackFrom;
+	const to = isDateKey(requestedTo) ? requestedTo : fallbackTo;
+	const uuidParam = (name: string) => {
+		const value = url.searchParams.get(name) || '';
+		return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+			? value
+			: '';
+	};
+	const pump = uuidParam('pump');
+	const plant = uuidParam('plant');
+	const area = uuidParam('area');
 
 	const [pumps, plants, areas, daily, records] = await Promise.all([
 		query<any>(`SELECT id, pump_code FROM pumps WHERE vendor_id = $1 ORDER BY pump_code`, [

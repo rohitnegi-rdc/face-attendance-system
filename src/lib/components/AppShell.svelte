@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { tick } from 'svelte';
 	import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 	import ChartNoAxesCombined from '@lucide/svelte/icons/chart-no-axes-combined';
 	import CalendarCheck from '@lucide/svelte/icons/calendar-check';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import ScanFace from '@lucide/svelte/icons/scan-face';
 	import UsersRound from '@lucide/svelte/icons/users-round';
+	import Building2 from '@lucide/svelte/icons/building-2';
 	import FileUp from '@lucide/svelte/icons/file-up';
 	import Fuel from '@lucide/svelte/icons/fuel';
 	import Menu from '@lucide/svelte/icons/menu';
@@ -17,12 +19,21 @@
 		userEmail = '',
 		children
 	} = $props<{
-		role: 'admin' | 'vendor';
+		role: 'admin' | 'vendor' | 'plant-manager';
 		userEmail?: string;
 		children: import('svelte').Snippet;
 	}>();
 
+	async function signOut(event: SubmitEvent) {
+		event.preventDefault();
+		const response = await fetch('/api/auth/logout', { method: 'POST' });
+		if (response.ok) window.location.assign('/login');
+	}
+
 	let drawerOpen = $state(false);
+	let menuButton: HTMLButtonElement;
+	let drawer: HTMLElement;
+	let drawerCloseButton: HTMLButtonElement;
 
 	const adminItems = [
 		{ href: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
@@ -31,6 +42,8 @@
 		{ href: '/admin/fraud-flags', label: 'Fraud flags', icon: TriangleAlert },
 		{ href: '/admin/flagged-guests', label: 'Guest review', icon: ScanFace },
 		{ href: '/admin/merge-candidates', label: 'Merge review', icon: UsersRound },
+		{ href: '/admin/vendors', label: 'Vendors', icon: Building2 },
+		{ href: '/admin/plant-managers', label: 'Plant managers', icon: Building2 },
 		{ href: '/admin/import', label: 'Imports', icon: FileUp }
 	];
 
@@ -40,27 +53,72 @@
 		{ href: '/vendor/pumps', label: 'Pumps', icon: Fuel },
 		{ href: '/vendor/people', label: 'People', icon: UsersRound }
 	];
+	const plantManagerItems = [
+		{ href: '/plant-manager', label: 'Overview', icon: LayoutDashboard, exact: true },
+		{ href: '/plant-manager/attendance', label: 'Attendance', icon: CalendarCheck },
+		{ href: '/plant-manager/pumps', label: 'Pumps', icon: Fuel },
+		{ href: '/plant-manager/people', label: 'People', icon: UsersRound }
+	];
 
-	let items = $derived(role === 'admin' ? adminItems : vendorItems);
+	let items = $derived(role === 'admin' ? adminItems : role === 'vendor' ? vendorItems : plantManagerItems);
 
 	function isActive(item: { href: string; exact?: boolean }) {
 		return item.exact ? page.url.pathname === item.href : page.url.pathname.startsWith(item.href);
 	}
+
+	async function openDrawer() {
+		drawerOpen = true;
+		await tick();
+		drawerCloseButton?.focus();
+	}
+
+	function closeDrawer(restoreFocus = true) {
+		drawerOpen = false;
+		if (restoreFocus) menuButton?.focus();
+	}
+
+	function handleDrawerKeydown(event: KeyboardEvent) {
+		if (!drawerOpen) return;
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closeDrawer();
+			return;
+		}
+		if (event.key !== 'Tab') return;
+		const focusable = Array.from(
+			drawer.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')
+		).filter((element) => element.offsetParent !== null);
+		if (!focusable.length) return;
+		const first = focusable[0];
+		const last = focusable.at(-1)!;
+		if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleDrawerKeydown} />
 
 <div class="app-shell">
 	<header class="app-topbar">
 		<button
+			bind:this={menuButton}
 			class="icon-button app-topbar__menu"
 			type="button"
 			aria-label="Open navigation"
-			onclick={() => (drawerOpen = true)}
+			aria-expanded={drawerOpen}
+			aria-controls="app-navigation"
+			onclick={openDrawer}
 		>
 			<Menu size={22} />
 		</button>
 		<a
 			class="brand"
-			href={role === 'admin' ? '/admin' : '/vendor'}
+			href={role === 'admin' ? '/admin' : role === 'vendor' ? '/vendor' : '/plant-manager'}
 			aria-label="Face Attendance home"
 		>
 			<span class="brand__mark"><ScanFace size={21} /></span>
@@ -68,10 +126,10 @@
 		</a>
 		<div class="account">
 			<div class="account__copy">
-				<strong>{role === 'admin' ? 'Administrator' : 'Vendor'}</strong>
+				<strong>{role === 'admin' ? 'Administrator' : role === 'vendor' ? 'Vendor' : 'Plant Manager'}</strong>
 				<span>{userEmail}</span>
 			</div>
-			<form method="POST" action="/api/auth/logout">
+			<form onsubmit={signOut}>
 				<button class="icon-button" type="submit" aria-label="Sign out" title="Sign out">
 					<LogOut size={19} />
 				</button>
@@ -84,17 +142,24 @@
 		class="drawer-backdrop"
 		type="button"
 		aria-label="Close navigation"
-		onclick={() => (drawerOpen = false)}
+		onclick={() => closeDrawer()}
 	></button>
 
-	<aside class:open={drawerOpen} class="sidebar" aria-label="{role} navigation">
+	<aside
+		bind:this={drawer}
+		id="app-navigation"
+		class:open={drawerOpen}
+		class="sidebar"
+		aria-label="{role} navigation"
+	>
 		<div class="sidebar__mobile-header">
 			<strong>Navigation</strong>
 			<button
+				bind:this={drawerCloseButton}
 				class="icon-button"
 				type="button"
 				aria-label="Close navigation"
-				onclick={() => (drawerOpen = false)}
+				onclick={() => closeDrawer()}
 			>
 				<X size={21} />
 			</button>
@@ -106,7 +171,7 @@
 					class:active={isActive(item)}
 					href={item.href}
 					aria-current={isActive(item) ? 'page' : undefined}
-					onclick={() => (drawerOpen = false)}
+					onclick={() => closeDrawer(false)}
 				>
 					<Icon size={18} />
 					<span>{item.label}</span>
@@ -138,7 +203,7 @@
 		height: 4rem;
 		align-items: center;
 		gap: var(--space-3);
-		padding: 0 var(--space-4);
+		padding: 0 var(--space-5);
 		background: var(--brand-white);
 		border-bottom: 1px solid var(--brand-mist);
 	}
@@ -196,7 +261,7 @@
 		display: flex;
 		width: var(--sidebar-width);
 		flex-direction: column;
-		padding: var(--space-4) var(--space-3);
+		padding: var(--space-5) var(--space-3);
 		background: var(--brand-white);
 		border-right: 1px solid var(--brand-mist);
 	}

@@ -46,8 +46,10 @@ async function main() {
 	);
 
 	console.log('seed import summary:', summary);
-	console.log('\nSample pump logins (password Test1234!): aslpwwi2@pumps.local, bglprvn1@pumps.local, ...');
-	console.log('Sample vendor logins (password Test1234!): rvnenterprises@vendors.local, ...');
+	console.log(
+		'\nSample pump logins (password Test1234!): aslpwwi2@pumps.local, bglprvn1@pumps.local, ...'
+	);
+	console.log('Sample vendor logins (password Test1234!): rvnenterprises@vendors.rdc, ...');
 
 	await pool.end();
 }

@@ -19,6 +19,13 @@ export function slugify(value: string): string {
 	return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+export function slugifyLogin(value: string): string {
+	return value
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+}
+
 export interface ImportSummary {
 	rows_total: number;
 	rows_created: number;
@@ -77,10 +84,10 @@ export async function importCsv(csvText: string): Promise<ImportSummary> {
 				plantName
 			]);
 			if (!plant) {
-				plant = await queryOne<any>('INSERT INTO plants (area_id, name) VALUES ($1, $2) RETURNING id', [
-					area.id,
-					plantName
-				]);
+				plant = await queryOne<any>(
+					'INSERT INTO plants (area_id, name) VALUES ($1, $2) RETURNING id',
+					[area.id, plantName]
+				);
 				summary.plants_created++;
 			}
 
@@ -93,7 +100,7 @@ export async function importCsv(csvText: string): Promise<ImportSummary> {
 					area.id
 				]);
 				if (!vendor) {
-					const email = `${slugify(vendorName)}-${slugify(areaName)}@vendors.local`;
+					const email = `${slugify(vendorName)}-${slugify(areaName)}@vendors.rdc`;
 					const passwordHash = await hashPassword('Test1234!');
 					vendor = await queryOne<any>(
 						`INSERT INTO vendors (name, email, password_hash, area_id, group_name)
@@ -103,9 +110,11 @@ export async function importCsv(csvText: string): Promise<ImportSummary> {
 					summary.vendors_created++;
 				}
 			} else {
-				vendor = await queryOne<any>('SELECT id FROM vendors WHERE name = $1 AND area_id IS NULL', [vendorName]);
+				vendor = await queryOne<any>('SELECT id FROM vendors WHERE name = $1 AND area_id IS NULL', [
+					vendorName
+				]);
 				if (!vendor) {
-					const email = `${slugify(vendorName)}@vendors.local`;
+					const email = `${slugify(vendorName)}@vendors.rdc`;
 					const passwordHash = await hashPassword('Test1234!');
 					vendor = await queryOne<any>(
 						`INSERT INTO vendors (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id`,
@@ -116,16 +125,27 @@ export async function importCsv(csvText: string): Promise<ImportSummary> {
 			}
 
 			// UPSERT Pump on pump_code — vendor identity ONLY from the CSV column (never inferred).
-			const existingPump = await queryOne<any>('SELECT id FROM pumps WHERE pump_code = $1', [pumpCode]);
+			const existingPump = await queryOne<any>('SELECT id FROM pumps WHERE pump_code = $1', [
+				pumpCode
+			]);
 			if (existingPump) {
-				await query('UPDATE pumps SET plant_id = $1, vendor_id = $2 WHERE id = $3', [
-					plant.id,
-					vendor.id,
-					existingPump.id
-				]);
+				const loginEmail = `${slugifyLogin(pumpCode)}@pumps.local`;
+				await query(
+					`UPDATE pumps
+					 SET plant_id = $1,
+					     vendor_id = $2,
+					     login_email = CASE
+					       WHEN NOT EXISTS (
+					         SELECT 1 FROM pumps other WHERE other.login_email = $3 AND other.id <> $4
+					       ) THEN $3
+					       ELSE login_email
+					     END
+					 WHERE id = $4`,
+					[plant.id, vendor.id, loginEmail, existingPump.id]
+				);
 				summary.pumps_updated++;
 			} else {
-				const loginEmail = `${slugify(pumpCode)}@pumps.local`;
+				const loginEmail = `${slugifyLogin(pumpCode)}@pumps.local`;
 				const passwordHash = await hashPassword('Test1234!');
 				await query(
 					`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash)

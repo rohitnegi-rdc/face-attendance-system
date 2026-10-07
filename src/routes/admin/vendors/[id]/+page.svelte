@@ -32,6 +32,11 @@
 		const value = data.dailyMap[`${pumpId}|${day}`];
 		return !value || value.total === 0 ? null : Math.round((value.present / value.total) * 100);
 	}
+	function pageUrl(page: number) {
+		const params = new URLSearchParams(window.location.search);
+		params.set('page', String(page));
+		return `?${params.toString()}`;
+	}
 </script>
 
 <svelte:head><title>{data.vendor.name} | Face Attendance</title></svelte:head>
@@ -42,7 +47,10 @@
 		<div class="page-header__copy">
 			<p class="eyebrow">Vendor</p>
 			<h1>{data.vendor.name}</h1>
-			<p>Pump performance across the selected range.</p>
+			<p>
+				{data.vendor.email}{#if data.vendor.area_name}
+					· {data.vendor.area_name}{/if} · Pump performance across the selected range.
+			</p>
 		</div>
 	</header>
 	<DateRangePicker bind:from bind:to onchange={apply} />
@@ -50,10 +58,20 @@
 		<div class="section-header">
 			<div>
 				<h2>Attendance by pump</h2>
-				<p class="supporting-text">Daily percentage of complete attendance.</p>
+				<p class="supporting-text">
+					Daily percentage of complete attendance &middot; scroll for more days.
+				</p>
 			</div>
 		</div>
-		<AttendanceCalendarGrid days={data.days} {entities} {cellValue} mode="percent" />
+		<div class="calendar-frame">
+			<AttendanceCalendarGrid
+				days={data.days}
+				{entities}
+				{cellValue}
+				mode="percent"
+				entityLabel="Pump"
+			/>
+		</div>
 	</section>
 	<section class="section">
 		<div class="section-header"><h2>Pumps</h2></div>
@@ -61,11 +79,12 @@
 			<table class="data-table">
 				<thead
 					><tr
-						><th
+						><th aria-sort={sortCol === 'pump_code' ? 'ascending' : 'none'}
 							><button class="sort-button" type="button" onclick={() => (sortCol = 'pump_code')}
 								>Pump <ArrowDownUp size={14} /></button
 							></th
 						><th>Plant</th><th>Area</th><th
+							aria-sort={sortCol === 'attendancePct' ? 'descending' : 'none'}
 							><button class="sort-button" type="button" onclick={() => (sortCol = 'attendancePct')}
 								>Attendance <ArrowDownUp size={14} /></button
 							></th
@@ -80,6 +99,19 @@
 				>
 			</table>
 		</div>
+		{#if data.pagination.totalPages > 1}
+			<nav class="pager" aria-label="Pumps pagination">
+				{#if data.pagination.page > 1}<a
+						class="button button--secondary"
+						href={pageUrl(data.pagination.page - 1)}>Previous</a
+					>{:else}<span></span>{/if}
+				<span>Page {data.pagination.page} of {data.pagination.totalPages}</span>
+				{#if data.pagination.page < data.pagination.totalPages}<a
+						class="button button--secondary"
+						href={pageUrl(data.pagination.page + 1)}>Next</a
+					>{/if}
+			</nav>
+		{/if}
 	</section>
 </div>
 
@@ -114,5 +146,15 @@
 		font: inherit;
 		font-weight: 700;
 		cursor: pointer;
+	}
+	.calendar-frame :global(.grid-wrap) {
+		width: 100%;
+	}
+	.pager {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		margin-top: var(--space-3);
 	}
 </style>

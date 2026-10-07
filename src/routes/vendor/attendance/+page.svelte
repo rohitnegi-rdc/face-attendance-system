@@ -3,12 +3,12 @@
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { formatDate } from '$lib/date';
+	import { dateKey, formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
 	let { data } = $props();
 	const days = $derived(
-		[...new Set(data.daily.map((row: any) => String(row.session_date).slice(0, 10)))].sort()
+		[...new Set(data.daily.map((row: any) => dateKey(row.session_date)))].sort()
 	);
 	const entities = $derived(
 		data.pumps
@@ -18,7 +18,7 @@
 	const lookup = $derived(
 		new Map(
 			data.daily.map((row: any) => [
-				`${row.pump_id}:${String(row.session_date).slice(0, 10)}`,
+				`${row.pump_id}:${dateKey(row.session_date)}`,
 				Number(row.attendance_pct)
 			])
 		)

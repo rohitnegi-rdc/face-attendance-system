@@ -11,3 +11,13 @@ plans
 docs
 uploads
 *.log
+datasets
+test-output
+eval
+Bugs
+commands
+playwright-report
+coverage
+.pytest_cache
+__pycache__
+scripts/__pycache__

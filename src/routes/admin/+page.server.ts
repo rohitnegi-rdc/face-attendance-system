@@ -44,10 +44,10 @@ export const load: PageServerLoad = async () => {
 			   LEFT JOIN merge_review_decisions d
 			     ON d.lower_person_id = LEAST(p1.id, p2.id) AND d.higher_person_id = GREATEST(p1.id, p2.id)
 			   WHERE p1.status = 'active' AND d.id IS NULL
-			     AND 1 - (v1.embedding <=> v2.embedding) >= 0.55
+			     AND 1 - (v1.embedding <=> v2.embedding) >= 0.20
 			     AND 1 - (v1.embedding <=> v2.embedding) < $1
 			 ) candidates`,
-			[Number(process.env.FACE_MATCH_THRESHOLD ?? 0.68)]
+			[Number(process.env.FACE_MATCH_THRESHOLD ?? 0.3)]
 		),
 		query<any>(
 			`WITH days AS (
@@ -77,6 +77,8 @@ export const load: PageServerLoad = async () => {
 	const total = Number(attendanceToday?.total ?? 0);
 	return {
 		metrics: {
+			presentToday: present,
+			totalToday: total,
 			attendancePct: total > 0 ? Math.round((present / total) * 100) : 0,
 			activePumps: Number(activePumps?.c ?? 0),
 			totalPersons: Number(totalPersons?.c ?? 0),

@@ -61,7 +61,7 @@ CREATE TABLE persons (
     display_seq INTEGER NOT NULL, -- stable per-pump sequence, e.g. "BGLPRVN1 Worker 3"
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'merged', 'archived')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('pending_review', 'active', 'merged', 'archived')),
     merged_into_person_id UUID REFERENCES persons(id),
     UNIQUE (pump_id, display_seq)
 );
@@ -83,13 +83,14 @@ CREATE TABLE attendance_sessions (
     pump_id UUID NOT NULL REFERENCES pumps(id),
     session_date DATE NOT NULL,
     session_type TEXT NOT NULL CHECK (session_type IN ('morning', 'evening')),
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'review', 'completed', 'failed')),
     pairing_status TEXT NOT NULL DEFAULT 'open' CHECK (pairing_status IN ('open', 'paired', 'expired')),
     photo_url TEXT,
     photo_hash TEXT NOT NULL,
     gps_lat DOUBLE PRECISION,
     gps_lng DOUBLE PRECISION,
     error_reason TEXT,
+    processing_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     processed_at TIMESTAMPTZ,
     paired_session_id UUID REFERENCES attendance_sessions(id)
@@ -115,6 +116,23 @@ CREATE TABLE daily_person_attendance (
     UNIQUE (person_id, session_date)
 );
 
+CREATE TABLE attendance_face_evidence (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL REFERENCES attendance_sessions(id) ON DELETE CASCADE,
+    person_id UUID NOT NULL REFERENCES persons(id),
+    face_crop_url TEXT,
+    match_confidence DOUBLE PRECISION,
+    liveness_status TEXT NOT NULL DEFAULT 'unverified' CHECK (liveness_status IN ('live', 'suspicious', 'unverified')),
+    liveness_score DOUBLE PRECISION,
+    liveness_quality TEXT NOT NULL DEFAULT 'insufficient' CHECK (liveness_quality IN ('sufficient', 'insufficient')),
+    liveness_reason TEXT,
+    liveness_model TEXT,
+    liveness_inference_ms DOUBLE PRECISION,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (session_id, person_id)
+);
+CREATE INDEX ON attendance_face_evidence (person_id, created_at DESC);
+
 CREATE TABLE flagged_guests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id UUID NOT NULL REFERENCES attendance_sessions(id),
@@ -134,6 +152,60 @@ CREATE TABLE fraud_flags (
     reviewed BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE attendance_review_flags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL REFERENCES attendance_sessions(id),
+    person_id UUID REFERENCES persons(id),
+    reason TEXT NOT NULL CHECK (
+        reason IN ('incorrect_match', 'missing_person', 'wrong_session', 'poor_photo', 'other')
+    ),
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved')),
+    flagged_by_admin_id UUID NOT NULL REFERENCES admins(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at TIMESTAMPTZ
+);
+CREATE INDEX ON attendance_review_flags (session_id, status);
+CREATE INDEX ON attendance_review_flags (person_id, status);
+
+CREATE TABLE attendance_corrections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    person_id UUID NOT NULL REFERENCES persons(id),
+    pump_id UUID NOT NULL REFERENCES pumps(id),
+    session_date DATE NOT NULL,
+    previous_morning_matched BOOLEAN NOT NULL,
+    previous_evening_matched BOOLEAN NOT NULL,
+    corrected_morning_matched BOOLEAN NOT NULL,
+    corrected_evening_matched BOOLEAN NOT NULL,
+    reason TEXT NOT NULL,
+    corrected_by_admin_id UUID NOT NULL REFERENCES admins(id),
+    corrected_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX attendance_corrections_person_date_idx ON attendance_corrections (person_id, session_date DESC);
+CREATE INDEX attendance_corrections_pump_date_idx ON attendance_corrections (pump_id, session_date DESC);
+
+CREATE TABLE attendance_duplicate_resolutions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    kept_person_id UUID NOT NULL REFERENCES persons(id),
+    duplicate_person_id UUID NOT NULL REFERENCES persons(id),
+    pump_id UUID NOT NULL REFERENCES pumps(id),
+    session_date DATE NOT NULL,
+    session_type TEXT NOT NULL CHECK (session_type IN ('morning', 'evening')),
+    previous_kept_present BOOLEAN,
+    previous_duplicate_present BOOLEAN,
+    reason TEXT NOT NULL,
+    resolved_by_admin_id UUID NOT NULL REFERENCES admins(id),
+    resolved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reversed_at TIMESTAMPTZ,
+    reversed_by_admin_id UUID REFERENCES admins(id),
+    CHECK (kept_person_id <> duplicate_person_id)
+);
+CREATE INDEX attendance_duplicate_resolutions_pump_date_idx
+    ON attendance_duplicate_resolutions (pump_id, session_date DESC);
+CREATE INDEX attendance_duplicate_resolutions_active_idx
+    ON attendance_duplicate_resolutions (pump_id, session_date, duplicate_person_id)
+    WHERE reversed_at IS NULL;
 
 CREATE TABLE person_merge_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

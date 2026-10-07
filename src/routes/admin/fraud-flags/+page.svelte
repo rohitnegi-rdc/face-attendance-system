@@ -58,17 +58,45 @@
 								<span>Flagged attendance</span>
 								<strong>{flag.flagged_at_pump}</strong>
 								<small>{flag.flagged_at_plant} · {formatDate(flag.flagged_submitted_at)}</small>
-								<a href={`/api/attendance/photo/${flag.session_id}`} target="_blank"
-									>View group photo</a
-								>
+								<dl class="location-meta">
+									<div>
+										<dt>Vendor</dt>
+										<dd>{flag.flagged_at_vendor}</dd>
+									</div>
+									<div>
+										<dt>Area</dt>
+										<dd>{flag.flagged_at_area}</dd>
+									</div>
+								</dl>
+								{#if flag.flagged_photo_available}
+					<a href={`/api/attendance/photo/${flag.session_id}`} target="_blank" rel="noopener noreferrer"
+										>View group photo</a
+									>
+								{:else}
+									<small>Group photo unavailable</small>
+								{/if}
 							</div>
 							<div>
 								<span>Earlier match</span>
 								<strong>{flag.matched_at_pump}</strong>
 								<small>{flag.matched_at_plant} · {formatDate(flag.matched_submitted_at)}</small>
-								<a href={`/api/attendance/photo/${flag.matched_session_id}`} target="_blank"
-									>View group photo</a
-								>
+								<dl class="location-meta">
+									<div>
+										<dt>Vendor</dt>
+										<dd>{flag.matched_at_vendor}</dd>
+									</div>
+									<div>
+										<dt>Area</dt>
+										<dd>{flag.matched_at_area}</dd>
+									</div>
+								</dl>
+								{#if flag.matched_photo_available}
+					<a href={`/api/attendance/photo/${flag.matched_session_id}`} target="_blank" rel="noopener noreferrer"
+										>View group photo</a
+									>
+								{:else}
+									<small>Group photo unavailable</small>
+								{/if}
 							</div>
 						</div>
 					</div>
@@ -173,6 +201,29 @@
 		margin-top: var(--space-2);
 		font-size: var(--text-sm);
 		font-weight: 700;
+	}
+	.location-meta {
+		display: grid;
+		gap: var(--space-1);
+		margin: var(--space-2) 0 0;
+		font-size: var(--text-sm);
+	}
+	.location-meta div {
+		display: grid;
+		grid-template-columns: 4rem minmax(0, 1fr);
+		gap: var(--space-2);
+	}
+	.location-meta dt,
+	.location-meta dd {
+		margin: 0;
+	}
+	.location-meta dt {
+		color: var(--ink-muted);
+		font-weight: 700;
+	}
+	.location-meta dd {
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.review-actions {
 		display: flex;

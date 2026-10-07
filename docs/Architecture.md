@@ -356,3 +356,101 @@ flowchart LR
     L3 --> Stdout
     Stdout --> Aggregator["Future: Loki / CloudWatch / etc.\n(zero code change - already structured)"]
 ```
+
+## 9. Worker Job Claiming & Per-Area Locking
+
+There is no message broker (Redis/BullMQ) in the current implementation — `attendance_jobs` is a plain Postgres table acting as the queue. Every worker process runs the same poll loop every `POLL_INTERVAL_MS` (1.5s). Concurrency safety comes from two separate Postgres mechanisms: `FOR UPDATE SKIP LOCKED` for claiming jobs, and (as of the optimistic-concurrency change below) `SERIALIZABLE` transaction isolation for the matching/write phase.
+
+> **Update (2026-09-03): the per-Area blocking lock described in the diagrams below has been replaced.**
+> `worker/index.js`'s `processJob()` no longer takes `pg_advisory_xact_lock(hashtext(area_id))` before matching. Instead:
+> - AI extraction now happens *before* any transaction is opened at all (it needs no exclusivity), so multiple jobs' extraction calls run fully concurrently regardless of Area.
+> - The matching + fraud-check + write step runs inside a single `BEGIN ISOLATION LEVEL SERIALIZABLE` transaction, with no lock acquired. Two jobs in the same Area (even the same `session_date`) can now enter this phase at the same time — nothing blocks them.
+> - Postgres's Serializable Snapshot Isolation (SSI) tracks what each concurrent transaction actually reads and writes, and aborts one with a `serialization_failure` (SQLSTATE `40001`, or `40P01` for a plain deadlock) if committing both would be impossible under any one-at-a-time ordering — i.e. it catches exactly the same cross-pump race the old lock prevented by blocking, just after the fact instead of before it.
+> - On that error, `processJob()` retries the whole matching/write phase from scratch (up to `SERIALIZATION_RETRY_LIMIT`, default 5) — cheap, since only the DB-only phase repeats, not the AI call. Retries exhausted falls through to the normal job-attempt retry (`MAX_JOB_ATTEMPTS`).
+> - This also subsumes the finer-grained idea of scoping a lock key by `(area_id, session_date)`: SSI's conflict detection is already scoped to whatever rows a transaction actually touched (which includes `session_date` via the existing query filters), so it's strictly more precise than any hand-picked lock key — two jobs that don't actually read/write overlapping rows never conflict at all, Area or date not withstanding.
+>
+> The diagrams and prose immediately below describe the **previous** (blocking-lock) design; they're kept as-is because the *shape* of the problem (per-Area contention under burst load) and the claiming mechanism (`SKIP LOCKED`) are unchanged — only the concurrency-control strategy for the matching/write step changed, from pessimistic (block) to optimistic (detect-and-retry).
+
+```mermaid
+flowchart TB
+    subgraph Workers["Multiple Worker Processes (all run the same loop() every 1.5s)"]
+        W1["Worker 1"]
+        W2["Worker 2"]
+        W3["Worker 3"]
+    end
+
+    subgraph JobsTable["Postgres: attendance_jobs table (acts as the queue)"]
+        J1["job A — Area X — queued"]
+        J2["job B — Area X — queued"]
+        J3["job C — Area Y — queued"]
+    end
+
+    W1 -- "UPDATE ... FOR UPDATE SKIP LOCKED\nLIMIT 1" --> JobsTable
+    W2 -- "UPDATE ... FOR UPDATE SKIP LOCKED\nLIMIT 1" --> JobsTable
+    W3 -- "UPDATE ... FOR UPDATE SKIP LOCKED\nLIMIT 1" --> JobsTable
+
+    JobsTable -- "claims job A\n(row-locked, others skip it)" --> W1
+    JobsTable -- "sees A locked, skips it\nclaims job B instead" --> W2
+    JobsTable -- "claims job C" --> W3
+
+    W1 --> LockX["pg_advisory_xact_lock(hashtext('Area X'))"]
+    W2 --> LockX
+    LockX -- "W1 holds lock\nW2 BLOCKS until W1 commits" --> W2Wait["Worker 2 waits"]
+
+    W3 --> LockY["pg_advisory_xact_lock(hashtext('Area Y'))"]
+    LockY -- "no contention\nruns immediately" --> W3
+
+    W1 -- "POST /internal/face/extract" --> AI["Single AI Microservice\n(FastAPI + ONNX, CPU-bound)"]
+    W2Wait -. "once unblocked" .-> AI
+    W3 -- "POST /internal/face/extract" --> AI
+
+    AI -- "faces: [bbox, embedding, crop]" --> W1
+    AI -- "faces: [...]" --> W3
+
+    W1 --> Commit1["COMMIT\n(releases Area X lock)\njob A -> done"]
+    Commit1 -.-> W2Wait
+    W3 --> Commit3["COMMIT\njob C -> done"]
+```
+
+Same-Area contention in sequence form — two workers claiming different jobs but the same Area serialize at the lock, not at the claim:
+
+```mermaid
+sequenceDiagram
+    participant W1 as Worker 1
+    participant W2 as Worker 2
+    participant PG as Postgres
+    participant AI as AI Microservice
+
+    par Both poll at once
+        W1->>PG: claimNextJob() — SKIP LOCKED
+        W2->>PG: claimNextJob() — SKIP LOCKED
+    end
+    PG-->>W1: job A (Area X)
+    PG-->>W2: job B (Area X)
+
+    W1->>PG: BEGIN; pg_advisory_xact_lock(Area X)
+    Note over PG: lock acquired by W1
+
+    W2->>PG: BEGIN; pg_advisory_xact_lock(Area X)
+    Note over W2,PG: W2 BLOCKS here — same Area lock held by W1
+
+    W1->>AI: POST /internal/face/extract
+    AI-->>W1: embeddings
+
+    W1->>PG: fraud check + local match + writes
+    W1->>PG: COMMIT
+    Note over PG: lock released
+
+    Note over W2,PG: W2 unblocks, acquires lock
+    W2->>AI: POST /internal/face/extract
+    AI-->>W2: embeddings
+    W2->>PG: fraud check + local match + writes
+    W2->>PG: COMMIT
+```
+
+**Scaling notes:**
+- Claiming jobs is fully parallel — `SKIP LOCKED` hands different rows to different workers with no coordination overhead.
+- Processing jobs from the *same* Area is serialized by the advisory lock; processing jobs from *different* Areas runs fully concurrently.
+- The current `docker-compose.yml` runs a single `worker` replica with no `replicas:` count set, but the claiming logic already supports `docker compose up --scale worker=N` safely today.
+- The AI microservice is a single CPU-bound container shared by every worker — it, not the worker count, is the real throughput ceiling until it is scaled out too.
+- Stale/crashed jobs (`status='claimed'` past `JOB_CLAIM_TIMEOUT_MINUTES`) are automatically re-claimable by any worker, up to `MAX_JOB_ATTEMPTS`.

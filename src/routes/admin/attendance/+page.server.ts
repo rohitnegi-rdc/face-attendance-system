@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { query } from '$lib/server/db';
+import { isDateKey } from '$lib/date';
 
 const SORTABLE_COLUMNS: Record<string, string> = {
 	session_date: 'dpa.session_date',
@@ -10,10 +11,20 @@ const SORTABLE_COLUMNS: Record<string, string> = {
 };
 
 export const load: PageServerLoad = async ({ url }) => {
-	const areaId = url.searchParams.get('area') || '';
-	const vendorId = url.searchParams.get('vendor') || '';
-	const plantId = url.searchParams.get('plant') || '';
-	const pumpId = url.searchParams.get('pump') || '';
+	const uuidParam = (name: string) => {
+		const value = url.searchParams.get(name) || '';
+		return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+			? value
+			: '';
+	};
+	const dateParam = (name: string) => {
+		const value = url.searchParams.get(name) || '';
+		return isDateKey(value) ? value : '';
+	};
+	const areaId = uuidParam('area');
+	const vendorId = uuidParam('vendor');
+	const plantId = uuidParam('plant');
+	const pumpId = uuidParam('pump');
 	const session = ['morning', 'evening'].includes(url.searchParams.get('session') || '')
 		? url.searchParams.get('session')!
 		: '';
@@ -26,10 +37,11 @@ export const load: PageServerLoad = async ({ url }) => {
 			: session === 'evening'
 				? 'dpa.evening_matched'
 				: '(dpa.morning_matched AND dpa.evening_matched)';
-	const day = url.searchParams.get('day') || '';
-	let from = url.searchParams.get('from') || '';
-	let to = url.searchParams.get('to') || '';
-	const page = Math.max(1, Number(url.searchParams.get('page') || '1'));
+	const day = dateParam('day');
+	let from = dateParam('from');
+	let to = dateParam('to');
+	const requestedPage = Number(url.searchParams.get('page') || '1');
+	const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
 	const requestedPageSize = Number(url.searchParams.get('page_size') || '50');
 	const pageSize = [25, 50, 100].includes(requestedPageSize) ? requestedPageSize : 50;
 	const sortCol = SORTABLE_COLUMNS[url.searchParams.get('sort') || ''] || 'dpa.session_date';
@@ -71,6 +83,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		conditions.push(status === 'present' ? attendanceExpression : `NOT ${attendanceExpression}`);
 	}
 	const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+	const filterParams = [...params];
 
 	const [{ count: totalCount }] = await query<any>(
 		`SELECT COUNT(*) AS count
@@ -136,7 +149,6 @@ export const load: PageServerLoad = async ({ url }) => {
 		);
 	}
 
-	const summaryParams = params.slice(0, conditions.length);
 	const [summary] = await query<any>(
 		`SELECT
 		   COUNT(*) FILTER (WHERE ${attendanceExpression}) AS present,
@@ -148,7 +160,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		 JOIN plants pl ON pl.id = pu.plant_id
 		 JOIN areas a ON a.id = pl.area_id
 		 ${where}`,
-		summaryParams
+		filterParams
 	);
 	const total = Number(summary?.total ?? 0);
 	const present = Number(summary?.present ?? 0);

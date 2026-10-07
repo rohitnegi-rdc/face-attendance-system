@@ -118,14 +118,14 @@
 		grid-template-columns: 1fr auto 1fr;
 		gap: var(--space-4);
 		align-items: center;
-		margin: var(--space-5) 0;
+		margin: var(--space-4) 0;
 	}
 	.person-evidence {
 		display: grid;
 		justify-items: center;
 		gap: var(--space-1);
 		min-width: 0;
-		padding: var(--space-4);
+		padding: var(--space-3) var(--space-4);
 		text-align: center;
 		background: var(--surface-subtle);
 		border: 1px solid var(--brand-mist);
@@ -161,11 +161,10 @@
 		padding: var(--space-3);
 		color: var(--ink-muted);
 		background: var(--surface-subtle);
-		border-left: 3px solid var(--brand-teal);
 	}
 	.review-actions {
 		justify-content: flex-end;
-		margin-top: var(--space-4);
+		margin-top: var(--space-3);
 	}
 	@media (max-width: 36rem) {
 		.comparison {

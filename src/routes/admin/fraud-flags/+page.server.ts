@@ -5,17 +5,25 @@ export const load: PageServerLoad = async () => {
 	const flags = await query<any>(
 		`SELECT ff.*, p.display_seq,
 		        pu1.pump_code AS flagged_at_pump, pl1.name AS flagged_at_plant,
+		        v1.name AS flagged_at_vendor, a1.name AS flagged_at_area,
 		        pu2.pump_code AS matched_at_pump, pl2.name AS matched_at_plant,
+		        v2.name AS matched_at_vendor, a2.name AS matched_at_area,
 		        s.submitted_at AS flagged_submitted_at,
 		        matched_session.submitted_at AS matched_submitted_at,
+		        (s.photo_url IS NOT NULL) AS flagged_photo_available,
+		        (matched_session.photo_url IS NOT NULL) AS matched_photo_available,
 		        pfv.source_photo_crop_url
 		 FROM fraud_flags ff
 		 JOIN persons p ON p.id = ff.person_id
 		 JOIN attendance_sessions s ON s.id = ff.session_id
 		 JOIN pumps pu1 ON pu1.id = s.pump_id
 		 JOIN plants pl1 ON pl1.id = pu1.plant_id
+		 JOIN vendors v1 ON v1.id = pu1.vendor_id
+		 JOIN areas a1 ON a1.id = pl1.area_id
 		 JOIN pumps pu2 ON pu2.id = ff.matched_at_pump_id
 		 JOIN plants pl2 ON pl2.id = pu2.plant_id
+		 JOIN vendors v2 ON v2.id = pu2.vendor_id
+		 JOIN areas a2 ON a2.id = pl2.area_id
 		 JOIN attendance_sessions matched_session ON matched_session.id = ff.matched_session_id
 		 LEFT JOIN LATERAL (
 		   SELECT source_photo_crop_url FROM person_face_vectors

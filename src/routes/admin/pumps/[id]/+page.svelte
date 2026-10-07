@@ -1,13 +1,14 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
+	import AttendanceDailyBars from '$lib/components/AttendanceDailyBars.svelte';
+	import AttendanceEvidenceButtons from '$lib/components/AttendanceEvidenceButtons.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
-	import Sparkline from '$lib/components/Sparkline.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
-	let { data } = $props();
+	let { data, form } = $props();
 	let from = $state('');
 	let to = $state('');
 	$effect(() => {
@@ -20,12 +21,29 @@
 			label: personDisplayLabel(data.pump.pump_code, person.display_seq)
 		}))
 	);
+	const dailyBreakdownTotals = $derived(
+		data.dailyBreakdown.reduce(
+			(acc: any, d: any) => ({
+				present: acc.present + d.present,
+				morningOnly: acc.morningOnly + d.morningOnly,
+				eveningOnly: acc.eveningOnly + d.eveningOnly
+			}),
+			{ present: 0, morningOnly: 0, eveningOnly: 0 }
+		)
+	);
+	const rangeLabel = $derived(`${formatDate(data.range.from)} – ${formatDate(data.range.to)}`);
+	const trendData = $derived(data.dailyBreakdown.slice(-5));
 
 	function apply() {
 		window.location.search = new URLSearchParams({ from, to }).toString();
 	}
 	function cellValue(personId: string, day: string) {
 		return data.attendanceMap[`${personId}|${day}`] ?? 'absent';
+	}
+	function pageUrl(param: string, page: number) {
+		const params = new URLSearchParams(window.location.search);
+		params.set(param, String(page));
+		return `?${params.toString()}`;
 	}
 </script>
 
@@ -43,27 +61,80 @@
 			</p>
 		</div>
 	</header>
+	{#if data.pump.status === 'disabled'}
+		<div class="alert alert--error" role="status">
+			<p>
+				<strong>Pump login disabled</strong> — {data.pump.disabled_reason ?? 'unknown reason'}
+				{#if data.pump.disabled_at}(since {formatDate(data.pump.disabled_at)}){/if}
+			</p>
+			<form method="POST" action="?/reactivatePump">
+				<button type="submit">Reactivate login</button>
+			</form>
+		</div>
+	{/if}
+
 	<DateRangePicker bind:from bind:to onchange={apply} />
+
+	{#if form?.message}
+		<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+	{/if}
 
 	<div class="pump-summary section">
 		<section class="surface surface--padded">
 			<div class="section-header">
 				<div>
 					<h2>Attendance trend</h2>
-					<p class="supporting-text">Complete attendance in this range.</p>
+					<p class="supporting-text">Latest five days, with newest first.</p>
 				</div>
 			</div>
-			<Sparkline
-				values={data.sparkline}
-				width={500}
-				height={80}
-				label={`${data.pump.pump_code} attendance trend`}
-			/>
+			<div class="daily-bars-frame">
+				<AttendanceDailyBars data={trendData} />
+			</div>
 		</section>
 		<section class="surface surface--padded">
-			<p class="eyebrow">Pairing health</p>
-			<strong>{data.rejectionCounts.morningExpired}</strong>
-			<p>Morning sessions expired without an evening pair in this range.</p>
+			<div class="section-header">
+				<div>
+					<h2>Daily attendance summary</h2>
+					<p class="supporting-text">Totals for {rangeLabel}.</p>
+				</div>
+			</div>
+			<div class="table-wrap daily-summary-frame">
+				<table class="data-table daily-summary-table">
+					<thead>
+						<tr>
+							<th>Day</th>
+							<th>Present</th>
+							<th>Morning</th>
+							<th>Evening</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each [...data.dailyBreakdown].reverse() as d}
+							<tr>
+								<td>{formatDate(d.day)}</td>
+								<td>{d.present}</td>
+								<td>{d.morningOnly}</td>
+								<td>{d.eveningOnly}</td>
+							</tr>
+						{/each}
+					</tbody>
+					<tfoot>
+						<tr>
+							<th>Range total</th>
+							<th>{dailyBreakdownTotals.present}</th>
+							<th>{dailyBreakdownTotals.morningOnly}</th>
+							<th>{dailyBreakdownTotals.eveningOnly}</th>
+						</tr>
+					</tfoot>
+				</table>
+			</div>
+			<p class="footnote">
+				{data.rejectionCounts.morningOnly} morning-only session{data.rejectionCounts.morningOnly ===
+				1
+					? ''
+					: 's'} this range &middot; {data.rejectionCounts.morningAwaiting} awaiting evening &middot;
+				{data.rejectionCounts.morningExpired} expired
+			</p>
 		</section>
 	</div>
 
@@ -71,10 +142,33 @@
 		<div class="section-header">
 			<div>
 				<h2>Attendance calendar</h2>
-				<p class="supporting-text">Person status by day.</p>
+				<p class="supporting-text">
+					Person status by day, {rangeLabel} &middot; scroll for more days
+				</p>
 			</div>
 		</div>
-		<AttendanceCalendarGrid days={data.days} {entities} {cellValue} mode="status" />
+		<div class="calendar-frame">
+			<AttendanceCalendarGrid
+				days={data.days}
+				{entities}
+				{cellValue}
+				mode="status"
+				entityLabel="Person"
+			/>
+		</div>
+		{#if data.rosterPagination.totalPages > 1}
+			<nav class="pager" aria-label="Roster pagination">
+				{#if data.rosterPagination.page > 1}<a
+						class="button button--secondary"
+						href={pageUrl('roster_page', data.rosterPagination.page - 1)}>Previous</a
+					>{:else}<span></span>{/if}
+				<span>Page {data.rosterPagination.page} of {data.rosterPagination.totalPages}</span>
+				{#if data.rosterPagination.page < data.rosterPagination.totalPages}<a
+						class="button button--secondary"
+						href={pageUrl('roster_page', data.rosterPagination.page + 1)}>Next</a
+					>{/if}
+			</nav>
+		{/if}
 	</section>
 
 	<section class="section">
@@ -84,11 +178,11 @@
 				<p class="supporting-text">Persisted sessions and pairing outcomes.</p>
 			</div>
 		</div>
-		<div class="table-wrap">
+		<div class="table-wrap bounded-table-frame">
 			<table class="data-table">
 				<thead
 					><tr
-						><th>Submitted</th><th>Type</th><th>Status</th><th>Pairing</th><th
+						><th>Submitted</th><th>Type</th><th>Status</th><th>Pairing</th><th>Evidence</th><th
 							>Error or rejection</th
 						></tr
 					></thead
@@ -98,16 +192,41 @@
 								><StatusBadge
 									tone={session.status === 'completed'
 										? 'success'
-										: session.status === 'failed'
+										: session.status === 'failed' || session.status === 'fraud_detected'
 											? 'critical'
 											: 'pending'}
 									label={session.status}
 								/></td
 							><td>{session.pairing_status}</td><td
-								>{session.error_reason ||
-									(session.pairing_status === 'expired'
-										? 'Morning session expired unpaired'
-										: '—')}</td
+								><AttendanceEvidenceButtons session={session.evidence} /></td
+							><td
+								>{#if session.status === 'fraud_detected'}<div class="fraud-review">
+										{#if session.fraud_resolution === 'marked_normal'}<span
+												>Marked normal — reprocessed</span
+											>{:else if session.fraud_resolution === 'confirmed_fraud'}<span
+												>Confirmed fraud</span
+											>{:else}<form method="POST" action="?/resolveFraudSession">
+												<input type="hidden" name="session_id" value={session.id} /><input
+													type="hidden"
+													name="resolution"
+													value="marked_normal"
+												/><button type="submit" class="button button--secondary"
+													>Mark as normal</button
+												>
+											</form>
+											<form method="POST" action="?/resolveFraudSession">
+												<input type="hidden" name="session_id" value={session.id} /><input
+													type="hidden"
+													name="resolution"
+													value="confirmed_fraud"
+												/><button type="submit" class="button button--secondary"
+													>Confirm fraud</button
+												>
+											</form>{/if}
+									</div>{:else}{session.error_reason ||
+										(session.pairing_status === 'expired'
+											? 'Morning session expired unpaired'
+											: '—')}{/if}</td
 							></tr
 						>{/each}</tbody
 				>
@@ -117,11 +236,24 @@
 			Nine-hour and duplicate-photo rejections occur before a session is created, so only the
 			operator’s live response contains them.
 		</p>
+		{#if data.sessionPagination.totalPages > 1}
+			<nav class="pager" aria-label="Session log pagination">
+				{#if data.sessionPagination.page > 1}<a
+						class="button button--secondary"
+						href={pageUrl('session_page', data.sessionPagination.page - 1)}>Previous</a
+					>{:else}<span></span>{/if}
+				<span>Page {data.sessionPagination.page} of {data.sessionPagination.totalPages}</span>
+				{#if data.sessionPagination.page < data.sessionPagination.totalPages}<a
+						class="button button--secondary"
+						href={pageUrl('session_page', data.sessionPagination.page + 1)}>Next</a
+					>{/if}
+			</nav>
+		{/if}
 	</section>
 
 	<section class="section">
 		<div class="section-header"><h2>Worker roster</h2></div>
-		<div class="table-wrap">
+		<div class="table-wrap bounded-table-frame">
 			<table class="data-table">
 				<thead
 					><tr
@@ -143,12 +275,22 @@
 				>
 			</table>
 		</div>
+		<p class="footnote">Same page as the calendar above — use its pager to see more people.</p>
 	</section>
 </div>
 
 <style>
 	.detail-page {
 		--content-max: 82rem;
+	}
+	.fraud-review {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-1);
+		align-items: center;
+	}
+	.fraud-review form {
+		display: contents;
 	}
 	.back-link {
 		display: inline-flex;
@@ -168,23 +310,64 @@
 	}
 	.pump-summary {
 		display: grid;
-		grid-template-columns: minmax(0, 1.5fr) minmax(15rem, 0.6fr);
+		grid-template-columns: minmax(0, 55fr) minmax(20rem, 35fr);
 		gap: var(--space-4);
 	}
-	.pump-summary :global(.sparkline) {
-		width: 100%;
-		height: 5rem;
+	.daily-summary-table th,
+	.daily-summary-table td {
+		text-align: right;
 	}
-	.pump-summary section:last-child > strong {
-		display: block;
-		color: var(--ink-strong);
-		font-size: var(--text-3xl);
+	.daily-summary-table th:first-child,
+	.daily-summary-table td:first-child {
+		text-align: left;
 	}
-	.pump-summary section:last-child p:last-child,
+	.daily-summary-frame {
+		max-height: 25rem;
+		overflow-x: hidden;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		scrollbar-gutter: stable;
+		scrollbar-width: thin;
+		scrollbar-color: var(--brand-mist) var(--surface-muted);
+	}
+	.daily-summary-table thead th {
+		position: sticky;
+		top: 0;
+		z-index: 3;
+	}
+	.daily-summary-table tfoot th {
+		position: sticky;
+		top: auto;
+		bottom: 0;
+		z-index: 3;
+		background: var(--surface-muted);
+		box-shadow: 0 -1px 0 var(--brand-mist);
+	}
+	.daily-bars-frame {
+		overflow: hidden;
+	}
+	.bounded-table-frame {
+		max-height: 22rem;
+		overflow: auto;
+		overscroll-behavior: contain;
+		scrollbar-gutter: stable;
+		scrollbar-width: thin;
+		scrollbar-color: var(--brand-mist) var(--surface-muted);
+	}
 	.footnote {
 		margin: var(--space-2) 0 0;
 		color: var(--ink-muted);
 		font-size: var(--text-sm);
+	}
+	.calendar-frame :global(.grid-wrap) {
+		width: 100%;
+	}
+	.pager {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		margin-top: var(--space-3);
 	}
 	@media (max-width: 48rem) {
 		.pump-summary {

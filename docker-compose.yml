@@ -15,6 +15,18 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: .
+      target: build
+    command: ['npm', 'run', 'migrate']
+    environment:
+      DATABASE_URL: postgres://attendance:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a random URL-safe secret}@postgres:5432/attendance
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
   ai-service:
     build: ./ai-service
     environment:
@@ -29,7 +41,13 @@ services:
       ANTI_SPOOF_SUSPICIOUS_THRESHOLD: '${ANTI_SPOOF_SUSPICIOUS_THRESHOLD:-0.20}'
       ANTI_SPOOF_MIN_FACE_SIZE: '${ANTI_SPOOF_MIN_FACE_SIZE:-64}'
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+        ]
       interval: 10s
       timeout: 10s
       retries: 20
@@ -37,6 +55,7 @@ services:
 
   app:
     build: .
+    image: '${APP_IMAGE:-face-attendance/app:local}'
     environment:
       TZ: Asia/Kolkata
       DATABASE_URL: postgres://attendance:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a random URL-safe secret}@postgres:5432/attendance
@@ -52,17 +71,32 @@ services:
       PROTOCOL_HEADER: x-forwarded-proto
     ports:
       - '${APP_BIND_ADDRESS:-127.0.0.1}:${APP_HOST_PORT:-3001}:3000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
       ai-service:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - uploads:/app/uploads
 
   worker:
     build: .
-    command: ["node", "worker/index.js"]
+    image: '${APP_IMAGE:-face-attendance/app:local}'
+    command: ['node', 'worker/index.js']
     environment:
       TZ: Asia/Kolkata
       DATABASE_URL: postgres://attendance:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a random URL-safe secret}@postgres:5432/attendance
@@ -88,6 +122,8 @@ services:
         condition: service_healthy
       ai-service:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - uploads:/app/uploads
 

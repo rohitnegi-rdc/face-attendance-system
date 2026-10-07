@@ -118,7 +118,8 @@
 	}
 	.guest-content {
 		display: grid;
-		gap: var(--space-4);
+		align-content: start;
+		gap: var(--space-3);
 		padding: var(--space-4);
 	}
 	.guest-content h2 {
@@ -150,7 +151,6 @@
 	.fixed-note {
 		padding: var(--space-3);
 		background: var(--surface-subtle);
-		border-left: 3px solid var(--brand-teal);
 	}
 	.guest-actions {
 		display: flex;

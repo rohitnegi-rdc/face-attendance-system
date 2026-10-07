@@ -2,21 +2,31 @@ import type { RequestHandler } from './$types';
 import ExcelJS from 'exceljs';
 import { query } from '$lib/server/db';
 import { personDisplayLabel } from '$lib/personLabel';
+import { dateKey, isDateKey } from '$lib/date';
 
 export const GET: RequestHandler = async ({ url }) => {
-	const areaId = url.searchParams.get('area') || '';
-	const vendorId = url.searchParams.get('vendor') || '';
-	const plantId = url.searchParams.get('plant') || '';
-	const pumpId = url.searchParams.get('pump') || '';
+	const uuidParam = (name: string) => {
+		const value = url.searchParams.get(name) || '';
+		return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+			? value
+			: '';
+	};
+	const areaId = uuidParam('area');
+	const vendorId = uuidParam('vendor');
+	const plantId = uuidParam('plant');
+	const pumpId = uuidParam('pump');
 	const session = ['morning', 'evening'].includes(url.searchParams.get('session') || '')
 		? url.searchParams.get('session')!
 		: '';
 	const status = ['present', 'absent'].includes(url.searchParams.get('status') || '')
 		? url.searchParams.get('status')!
 		: '';
-	const day = url.searchParams.get('day') || '';
-	let from = url.searchParams.get('from') || '';
-	let to = url.searchParams.get('to') || '';
+	const requestedDay = url.searchParams.get('day') || '';
+	const requestedFrom = url.searchParams.get('from') || '';
+	const requestedTo = url.searchParams.get('to') || '';
+	const day = isDateKey(requestedDay) ? requestedDay : '';
+	let from = isDateKey(requestedFrom) ? requestedFrom : '';
+	let to = isDateKey(requestedTo) ? requestedTo : '';
 
 	if (day) {
 		from = day;
@@ -110,7 +120,7 @@ export const GET: RequestHandler = async ({ url }) => {
 							: 'Absent'
 		});
 		const dateCell = row.getCell('session_date');
-		dateCell.value = new Date(r.session_date);
+		dateCell.value = new Date(`${dateKey(r.session_date)}T00:00:00Z`);
 		dateCell.numFmt = 'ddd, dd mmm yyyy';
 	}
 

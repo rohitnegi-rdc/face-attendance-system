@@ -1,5 +1,7 @@
 node_modules
 uploads
+__pycache__/
+*.py[cod]
 /creds.md
 /test-output/
 
@@ -30,7 +32,16 @@ test-results
 
 # Face attendance E2E run artifacts (contain biometric embeddings)
 /test-output/attendance-e2e/
+/test-output/evaluations/
+/test-output/ui-audit/
+
+# External evaluation datasets and generated manifests (contain biometric data / local paths)
+/datasets/
+/eval/datasets.local.json
+/eval/manifests/*.json
+!/eval/manifests/.gitkeep
 
 # Tool artifacts (not application code)
 .codex
 graphify-out
+.lan-tls/
