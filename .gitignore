@@ -53,3 +53,7 @@ deploy.env
 # Real people (names, emails) and machine-specific paths, never commit
 Plant Managers.csv
 eval/datasets.local.json
+
+# Local face photos and screenshots (biometric data, never commit)
+/image.png
+/Test/faces/*
