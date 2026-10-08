@@ -29,3 +29,20 @@ The original 12-row illustrative sample in Prompt A never exposed several real p
 - No live vendor-name near-duplicates today (82 raw strings normalize to 82 distinct keys) — the importer's normalization step is a *forward-looking* safeguard against future re-imports, not a fix for existing dirty data.
 - Sr.No has gaps (162, 183 missing) — rows were likely deleted upstream without renumbering; Sr.No is ignored by the importer anyway, so this doesn't affect anything, just noted in case it signals a missing pump.
 - Kerala and Hyderabad are the two largest Areas (20+ pumps each) — relevant if Area-wide serialization (advisory lock) ever needs load-testing.
+
+## 2026-10-08 — Serving under a sub-path (BASE_PATH, e.g. ops.rdcc.ai/pump-attendance)
+- `BASE_PATH` (read in `vite.config.ts` into `kit.paths.base`) is baked in at build time. The Dockerfile takes it as a build arg, and `app`, `worker` and `migrate` in compose all pass it, because app and worker share one image tag and an un-argued build would overwrite it.
+- `event.url.pathname` in `hooks.server.ts` includes the prefix, so the role guards strip it first. Without that, every `startsWith('/admin')` guard silently stops matching.
+- Build every app URL with `resolve()` / `asset()` from `$app/paths` (the eslint rule `svelte/no-navigation-without-resolve` enforces it for hrefs). Relative `?query` links are fine as they are.
+- Cookies use `COOKIE_PATH` from `src/lib/server/cookies.ts` so other apps on the same domain never see them. It's kept out of `auth.ts` because `scripts/seed.ts` imports that outside SvelteKit.
+- nginx must pass the prefix through: `location ^~ /pump-attendance { proxy_pass http://127.0.0.1:3001; }` with no trailing slash on proxy_pass, unlike OpsMitra whose backend expects it stripped.
+- Git Bash on Windows rewrites `BASE_PATH=/x` env vars into `C:/Program Files/Git/x`. Prefix local commands with `MSYS2_ENV_CONV_EXCL=BASE_PATH`. vite.config.ts rejects the mangled value instead of building with it.
+
+## 2026-10-08 — Pairing window, pump retry and the regression gate
+
+- A 24h pairing window misfiles attendance: morning 08:00, missed evening, next photo at 07:30 the next day is 23.5h later and becomes yesterday's evening. The default is now 16h, editable at /admin/settings (stored in `app_settings`, which wins over env).
+- Pump Retry used to delete completed sessions together with their `fraud_flags`, so a pump caught by the cross-pump check could erase the evidence. It is now limited to `failed`/`review` sessions without fraud evidence. Admin delete/reset is the only full delete and is written to `admin_audit_log`.
+- The cross-pump check compared only against `active` people in `completed` sessions, so a new worker (still `pending_review`) at two pumps on day one was never flagged, and detection depended on which pump approved first. It now includes `pending_review` people and `review` sessions.
+- New accounts default to `must_change_password = TRUE` (migration 016). Test fixtures must insert FALSE explicitly or every request returns "Password change required".
+- A plain POST to a SvelteKit form action renders the page with HTTP 200 even when the action returns `fail()`. Tests call actions with `accept: application/json` and `x-sveltekit-action: true` and check the returned `type`.
+- The duplicate-photo check must run before the "today's morning is still processing" check, or a resubmitted photo gets the wrong message.

@@ -1,52 +1,14 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import fs from 'node:fs/promises';
-import type { PoolClient } from 'pg';
 import { pool } from '$lib/server/db';
 import { logger } from '$lib/server/log';
+import { countFraudEvidence, deleteSession, removePhotoFiles } from '$lib/server/sessionCleanup';
 
-type RollupColumn = 'days_present' | 'days_morning_only' | 'days_evening_only';
-
-async function undoFinalizedRollup(client: PoolClient, pumpId: string, sessionDate: string | Date) {
-	const finalization = await client.query(
-		`DELETE FROM attendance_rollup_finalizations
-		 WHERE pump_id = $1 AND session_date = $2
-		 RETURNING session_id`,
-		[pumpId, sessionDate]
-	);
-	if (!finalization.rowCount) return 0;
-
-	const finalizedPeople = await client.query<{
-		person_id: string;
-		year: number;
-		rollup_column: RollupColumn | null;
-	}>(
-		`SELECT person_id,
-		        EXTRACT(YEAR FROM session_date)::int AS year,
-		        CASE
-		          WHEN morning_matched AND evening_matched THEN 'days_present'
-		          WHEN morning_matched THEN 'days_morning_only'
-		          WHEN evening_matched THEN 'days_evening_only'
-		          ELSE NULL
-		        END AS rollup_column
-		 FROM daily_person_attendance
-		 WHERE pump_id = $1 AND session_date = $2`,
-		[pumpId, sessionDate]
-	);
-
-	for (const row of finalizedPeople.rows) {
-		if (!row.rollup_column) continue;
-		await client.query(
-			`UPDATE person_attendance_yearly
-			 SET ${row.rollup_column} = GREATEST(${row.rollup_column} - 1, 0),
-			     last_updated = now()
-			 WHERE person_id = $1 AND year = $2`,
-			[row.person_id, row.year]
-		);
-	}
-
-	return finalization.rowCount;
-}
+// The pump may only redo a photo it has not signed off yet (failed, or still in its own review).
+// Completed sessions and anything carrying fraud evidence can only be removed by an admin
+// (/admin/pumps/[id]), which is audited; otherwise a pump caught by the cross-pump check could
+// erase the flag by retrying.
+const PUMP_RETRYABLE_STATUSES = ['failed', 'review'];
 
 export const POST: RequestHandler = async ({ params, locals }) => {
 	if (!locals.user || locals.user.role !== 'pump') {
@@ -54,12 +16,10 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 	}
 
 	const client = await pool.connect();
-	let photoPath: string | null = null;
-
 	try {
 		await client.query('BEGIN');
 		const sessionResult = await client.query(
-			`SELECT id, pump_id, session_date, session_type, status, photo_url, paired_session_id
+			`SELECT id, pump_id, session_type, status, paired_session_id
 			 FROM attendance_sessions
 			 WHERE id = $1
 			 FOR UPDATE`,
@@ -71,9 +31,15 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 			await client.query('ROLLBACK');
 			return json({ error: 'Forbidden' }, { status: 403 });
 		}
-		if (!['review', 'completed', 'failed'].includes(session.status)) {
+		if (!PUMP_RETRYABLE_STATUSES.includes(session.status)) {
 			await client.query('ROLLBACK');
-			return json({ error: 'Only reviewed, completed, or failed sessions can be retried' }, { status: 409 });
+			return json(
+				{
+					error:
+						'This attendance is already recorded. Ask your administrator if it needs to be redone.'
+				},
+				{ status: 409 }
+			);
 		}
 		if (session.session_type === 'morning' && session.paired_session_id) {
 			await client.query('ROLLBACK');
@@ -82,70 +48,26 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 				{ status: 409 }
 			);
 		}
-
-		photoPath = session.photo_url;
-		const matchedCol = session.session_type === 'morning' ? 'morning_matched' : 'evening_matched';
-		const confidenceCol =
-			session.session_type === 'morning' ? 'morning_confidence' : 'evening_confidence';
-		const unfinalizedRollups = await undoFinalizedRollup(
-			client,
-			session.pump_id,
-			session.session_date
-		);
-
-		const affectedPersons = await client.query(
-			`SELECT person_id FROM person_face_vectors WHERE session_id = $1
-			 UNION
-			 SELECT person_id FROM attendance_face_evidence WHERE session_id = $1`,
-			[session.id]
-		);
-		const personIds = affectedPersons.rows.map((row) => row.person_id);
-
-		await client.query(`DELETE FROM fraud_flags WHERE session_id = $1 OR matched_session_id = $1`, [
-			session.id
-		]);
-		await client.query(`DELETE FROM attendance_review_flags WHERE session_id = $1`, [session.id]);
-		await client.query(`DELETE FROM flagged_guests WHERE session_id = $1`, [session.id]);
-		await client.query(`DELETE FROM attendance_face_evidence WHERE session_id = $1`, [session.id]);
-		await client.query(`DELETE FROM person_face_vectors WHERE session_id = $1`, [session.id]);
-		await client.query(`DELETE FROM attendance_jobs WHERE session_id = $1`, [session.id]);
-
-		if (personIds.length) {
-			await client.query(
-				`UPDATE daily_person_attendance
-				 SET ${matchedCol} = false, ${confidenceCol} = NULL, updated_at = now()
-				 WHERE session_date = $1 AND person_id = ANY($2::uuid[])`,
-				[session.session_date, personIds]
+		if ((await countFraudEvidence(client, session.id)) > 0) {
+			await client.query('ROLLBACK');
+			logger.warn(
+				{ pumpId: locals.user.id, sessionId: session.id },
+				'attendance retry refused: session has fraud evidence'
 			);
-			await client.query(
-				`DELETE FROM daily_person_attendance
-				 WHERE session_date = $1
-				   AND person_id = ANY($2::uuid[])
-				   AND morning_matched = false
-				   AND evening_matched = false`,
-				[session.session_date, personIds]
-			);
-			await client.query(
-				`DELETE FROM persons WHERE id = ANY($1::uuid[]) AND status = 'pending_review'`,
-				[personIds]
+			return json(
+				{
+					error: 'This photo matched a worker at another pump. Only an administrator can redo it.'
+				},
+				{ status: 409 }
 			);
 		}
 
-		if (session.session_type === 'evening' && session.paired_session_id) {
-			await client.query(
-				`UPDATE attendance_sessions
-				 SET paired_session_id = NULL, pairing_status = 'open'
-				 WHERE id = $1`,
-				[session.paired_session_id]
-			);
-		}
-
-		await client.query(`DELETE FROM attendance_sessions WHERE id = $1`, [session.id]);
+		const cleanup = await deleteSession(client, session.id, { cascadePairedEvening: false });
 		await client.query('COMMIT');
 
-		if (photoPath) await fs.unlink(photoPath).catch(() => {});
+		await removePhotoFiles(cleanup.photoPaths);
 		logger.info(
-			{ pumpId: locals.user.id, sessionId: session.id, unfinalizedRollups },
+			{ pumpId: locals.user.id, sessionId: session.id, peopleRemoved: cleanup.personIds.length },
 			'attendance session cleared for retry'
 		);
 		return json({ ok: true });

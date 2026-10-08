@@ -2,8 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { query, queryOne } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
-
-const EVENING_MIN_GAP_MINUTES = 1;
+import { getAttendanceSettings } from '$lib/server/settings';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user || locals.user.role !== 'pump') {
@@ -11,7 +10,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 	}
 	const pumpId = locals.user.id;
 	const today = todayIST();
-	const pairingWindowHours = Number(process.env.EVENING_PAIRING_WINDOW_HOURS ?? 24);
+	const settings = await getAttendanceSettings();
+	const pairingWindowHours = settings.evening_pairing_window_hours;
 
 	await query(
 		`WITH expired AS (
@@ -58,7 +58,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		 FROM attendance_sessions
 		 WHERE pump_id = $1 AND session_type = 'morning' AND status = 'completed' AND pairing_status = 'open'
 		 ORDER BY submitted_at DESC LIMIT 1`,
-		[pumpId, EVENING_MIN_GAP_MINUTES, pairingWindowHours]
+		[pumpId, settings.evening_min_gap_minutes, pairingWindowHours]
 	);
 	const eveningToday = await queryOne<any>(
 		`SELECT id FROM attendance_sessions

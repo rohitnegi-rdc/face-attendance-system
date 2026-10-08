@@ -9,6 +9,8 @@ import { sendFraudAlertEmail } from './mailer.js';
 import { checkRecapture } from './recaptureCheck.js';
 
 const { Pool } = pg;
+const WORKER_ID = process.env.HOSTNAME || `worker-${process.pid}`;
+const HEARTBEAT_INTERVAL_MS = Number(process.env.WORKER_HEARTBEAT_INTERVAL_MS ?? 5000);
 // max sized to comfortably exceed WORKER_BATCH_SIZE concurrent jobs (each job holds at most
 // one client during its brief locked write phase, plus short-lived query connections).
 const pool = new Pool({
@@ -33,6 +35,9 @@ const MAX_ACTIVE_ATTENDANCE_JOBS = Number(process.env.MAX_ACTIVE_ATTENDANCE_JOBS
 // How many times to retry Phase 3 (see processJob) on a genuine SERIALIZABLE conflict before
 // giving up and falling through to the normal job-attempt retry path.
 const SERIALIZATION_RETRY_LIMIT = Number(process.env.SERIALIZATION_RETRY_LIMIT ?? 5);
+// Falsified-photo check (whole-photo spoof model + Gemini recapture) that disables the pump.
+// Off by default for v1. The cross-pump Area check below is not affected by this switch.
+const PHOTO_SPOOF_CHECK_ENABLED = process.env.PHOTO_SPOOF_CHECK_ENABLED === 'true';
 
 function isSerializationConflict(err) {
 	// 40001 = serialization_failure (SSI conflict under SERIALIZABLE), 40P01 = deadlock_detected.
@@ -48,6 +53,14 @@ function log(level, fields, message) {
 			message,
 			...fields
 		})
+	);
+}
+
+async function writeHeartbeat() {
+	await pool.query(
+		`INSERT INTO worker_heartbeats (worker_id, last_seen_at) VALUES ($1, now())
+		 ON CONFLICT (worker_id) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at`,
+		[WORKER_ID]
 	);
 }
 
@@ -95,8 +108,19 @@ async function extractFaces(photoBuffer, requestId) {
 	return res.json();
 }
 
+// Same precedence as src/lib/server/settings.ts: admin setting > env > default (16h).
+async function pairingWindowHours(db) {
+	const { rows } = await db.query(
+		`SELECT value FROM app_settings WHERE key = 'evening_pairing_window_hours'`
+	);
+	const stored = Number(rows[0]?.value);
+	if (Number.isFinite(stored) && stored > 0) return stored;
+	const fromEnv = Number(process.env.EVENING_PAIRING_WINDOW_HOURS);
+	return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 16;
+}
+
 async function expireStaleMornings(db) {
-	const windowHours = Number(process.env.EVENING_PAIRING_WINDOW_HOURS ?? 24);
+	const windowHours = await pairingWindowHours(db);
 	const { rows } = await db.query(
 		`WITH expired AS (
 		   UPDATE attendance_sessions
@@ -161,9 +185,11 @@ async function processJob(job) {
 		const extractStart = Date.now();
 		const [extraction, recaptureCheck] = await Promise.all([
 			extractFaces(photoBuffer, requestId),
-			session.fraud_resolution === 'marked_normal'
-				? Promise.resolve({ status: 'skipped_marked_normal' })
-				: checkRecapture(photoBuffer)
+			!PHOTO_SPOOF_CHECK_ENABLED
+				? Promise.resolve({ status: 'disabled' })
+				: session.fraud_resolution === 'marked_normal'
+					? Promise.resolve({ status: 'skipped_marked_normal' })
+					: checkRecapture(photoBuffer)
 		]);
 		const {
 			faces,
@@ -244,6 +270,7 @@ async function processJob(job) {
 		// Gemini recapture check (worker/recaptureCheck.js) catches screen photos the whole-frame
 		// model misses, e.g. a laptop screen that is small in the frame. An API error never blocks.
 		const isSessionFraud =
+			PHOTO_SPOOF_CHECK_ENABLED &&
 			session.fraud_resolution !== 'marked_normal' &&
 			(wholeImageLiveness?.liveness_status === 'suspicious' ||
 				recaptureCheck?.status === 'recapture');
@@ -316,6 +343,10 @@ async function processJob(job) {
 					const vec = toVectorLiteral(face.embedding);
 
 					// CROSS-PUMP CHECK — Area-scoped, symmetric for every vendor account (§2).
+					// New workers (pending_review) and sessions still awaiting the pump's review count
+					// too. Comparing only against active people in completed sessions let the same new
+					// worker attend two pumps on day one, and made detection depend on which pump
+					// finished its review first (order-dependent, which §2 forbids).
 					const { rows: crossMatches } = await client.query(
 						`SELECT pfv.person_id, p.pump_id, 1 - (pfv.embedding <=> $1::vector) AS similarity,
 				        dpa.session_date, ats.id AS matched_session_id
@@ -326,7 +357,8 @@ async function processJob(job) {
 					 JOIN pumps pu2 ON pu2.id = p.pump_id
 					 JOIN plants pl2 ON pl2.id = pu2.plant_id
 					 WHERE pl2.area_id = $3 AND p.pump_id != $4
-					   AND p.status = 'active' AND ats.status = 'completed'
+					   AND p.status IN ('active', 'pending_review')
+					   AND ats.status IN ('completed', 'review')
 				 ORDER BY similarity DESC LIMIT 1`,
 						[vec, session.session_date, areaId, session.pump_id]
 					);
@@ -509,6 +541,17 @@ async function loop() {
 		{ workerBatchSize: WORKER_BATCH_SIZE, maxActiveAttendanceJobs: MAX_ACTIVE_ATTENDANCE_JOBS },
 		'worker started, polling attendance_jobs'
 	);
+	await writeHeartbeat();
+	const heartbeatTimer = setInterval(() => {
+		writeHeartbeat().catch((err) =>
+			log(
+				'error',
+				{ workerId: WORKER_ID, error: String(err?.message || err) },
+				'worker heartbeat failed'
+			)
+		);
+	}, HEARTBEAT_INTERVAL_MS);
+	heartbeatTimer.unref();
 	// Periodic sweep for stale open morning sessions across ALL pumps (§2 expiry rule).
 	setInterval(
 		async () => {

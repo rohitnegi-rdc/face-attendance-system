@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
 	import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
@@ -13,6 +14,7 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import LogOut from '@lucide/svelte/icons/log-out';
+	import Settings from '@lucide/svelte/icons/settings';
 
 	let {
 		role,
@@ -26,8 +28,8 @@
 
 	async function signOut(event: SubmitEvent) {
 		event.preventDefault();
-		const response = await fetch('/api/auth/logout', { method: 'POST' });
-		if (response.ok) window.location.assign('/login');
+		const response = await fetch(resolve('/api/auth/logout'), { method: 'POST' });
+		if (response.ok) window.location.assign(resolve('/login'));
 	}
 
 	let drawerOpen = $state(false);
@@ -36,28 +38,29 @@
 	let drawerCloseButton: HTMLButtonElement;
 
 	const adminItems = [
-		{ href: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
-		{ href: '/admin/insights', label: 'Insights', icon: ChartNoAxesCombined },
-		{ href: '/admin/attendance', label: 'Attendance', icon: CalendarCheck },
-		{ href: '/admin/fraud-flags', label: 'Fraud flags', icon: TriangleAlert },
-		{ href: '/admin/flagged-guests', label: 'Guest review', icon: ScanFace },
-		{ href: '/admin/merge-candidates', label: 'Merge review', icon: UsersRound },
-		{ href: '/admin/vendors', label: 'Vendors', icon: Building2 },
-		{ href: '/admin/plant-managers', label: 'Plant managers', icon: Building2 },
-		{ href: '/admin/import', label: 'Imports', icon: FileUp }
+		{ href: resolve('/admin'), label: 'Overview', icon: LayoutDashboard, exact: true },
+		{ href: resolve('/admin/insights'), label: 'Insights', icon: ChartNoAxesCombined },
+		{ href: resolve('/admin/attendance'), label: 'Attendance', icon: CalendarCheck },
+		{ href: resolve('/admin/fraud-flags'), label: 'Fraud flags', icon: TriangleAlert },
+		{ href: resolve('/admin/flagged-guests'), label: 'Guest review', icon: ScanFace },
+		{ href: resolve('/admin/merge-candidates'), label: 'Merge review', icon: UsersRound },
+		{ href: resolve('/admin/vendors'), label: 'Vendors', icon: Building2 },
+		{ href: resolve('/admin/plant-managers'), label: 'Plant managers', icon: Building2 },
+		{ href: resolve('/admin/import'), label: 'Imports', icon: FileUp },
+		{ href: resolve('/admin/settings'), label: 'Settings', icon: Settings }
 	];
 
 	const vendorItems = [
-		{ href: '/vendor', label: 'Overview', icon: LayoutDashboard, exact: true },
-		{ href: '/vendor/attendance', label: 'Attendance', icon: CalendarCheck },
-		{ href: '/vendor/pumps', label: 'Pumps', icon: Fuel },
-		{ href: '/vendor/people', label: 'People', icon: UsersRound }
+		{ href: resolve('/vendor'), label: 'Overview', icon: LayoutDashboard, exact: true },
+		{ href: resolve('/vendor/attendance'), label: 'Attendance', icon: CalendarCheck },
+		{ href: resolve('/vendor/pumps'), label: 'Pumps', icon: Fuel },
+		{ href: resolve('/vendor/people'), label: 'People', icon: UsersRound }
 	];
 	const plantManagerItems = [
-		{ href: '/plant-manager', label: 'Overview', icon: LayoutDashboard, exact: true },
-		{ href: '/plant-manager/attendance', label: 'Attendance', icon: CalendarCheck },
-		{ href: '/plant-manager/pumps', label: 'Pumps', icon: Fuel },
-		{ href: '/plant-manager/people', label: 'People', icon: UsersRound }
+		{ href: resolve('/plant-manager'), label: 'Overview', icon: LayoutDashboard, exact: true },
+		{ href: resolve('/plant-manager/attendance'), label: 'Attendance', icon: CalendarCheck },
+		{ href: resolve('/plant-manager/pumps'), label: 'Pumps', icon: Fuel },
+		{ href: resolve('/plant-manager/people'), label: 'People', icon: UsersRound }
 	];
 
 	let items = $derived(role === 'admin' ? adminItems : role === 'vendor' ? vendorItems : plantManagerItems);
@@ -118,7 +121,7 @@
 		</button>
 		<a
 			class="brand"
-			href={role === 'admin' ? '/admin' : role === 'vendor' ? '/vendor' : '/plant-manager'}
+			href={resolve(role === 'admin' ? '/admin' : role === 'vendor' ? '/vendor' : '/plant-manager')}
 			aria-label="Face Attendance home"
 		>
 			<span class="brand__mark"><ScanFace size={21} /></span>

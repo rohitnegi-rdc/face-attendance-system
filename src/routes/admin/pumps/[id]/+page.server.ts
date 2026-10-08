@@ -1,8 +1,17 @@
 import type { Actions, PageServerLoad } from './$types';
-import { query, queryOne } from '$lib/server/db';
+import { resolve } from '$app/paths';
+import type { PoolClient } from 'pg';
+import { pool, query, queryOne } from '$lib/server/db';
 import { error, fail } from '@sveltejs/kit';
 import { todayStr, addDaysStr, dateKey, daysBetween } from '$lib/date';
 import { createAttendanceReviewFlag } from '$lib/server/attendanceReview';
+import { logger } from '$lib/server/log';
+import {
+	clearPumpAttendance,
+	deleteSession,
+	removePhotoFiles,
+	type CleanupResult
+} from '$lib/server/sessionCleanup';
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -134,7 +143,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		evidence: {
 			id: session.id,
 			sessionType: session.session_type,
-			groupPhotoUrl: session.photo_url ? `/api/attendance/photo/${session.id}` : null,
+			groupPhotoUrl: session.photo_url ? resolve(`/api/attendance/photo/${session.id}`) : null,
 			groupFlagged: session.group_flagged,
 			people: evidenceBySession.get(session.id) ?? []
 		}
@@ -298,5 +307,102 @@ export const actions: Actions = {
 			[sessionId, adminId]
 		);
 		return { success: true, message: 'Confirmed as fraud. Pump login stays disabled.' };
+	},
+	// Deletes one session (a morning also takes its paired evening) so the pump can submit that
+	// slot again. Meant for test records and wrong photos; fraud flags go with it, so it is audited.
+	deleteSession: async ({ params, request, locals }) => {
+		const form = await request.formData();
+		const sessionId = String(form.get('session_id') || '');
+		return runAuditedCleanup(locals.user!.id, params.id, 'delete_session', sessionId, (client) =>
+			deleteSession(client, sessionId, { cascadePairedEvening: true })
+		);
+	},
+	// Wipes every attendance record of this pump. The admin must type the pump code to confirm.
+	clearPumpData: async ({ params, request, locals }) => {
+		const form = await request.formData();
+		const pump = await queryOne<{ pump_code: string }>(
+			'SELECT pump_code FROM pumps WHERE id = $1',
+			[params.id]
+		);
+		if (!pump) return fail(404, { message: 'Pump not found.' });
+		if (String(form.get('confirm_code') || '').trim() !== pump.pump_code) {
+			return fail(400, { message: `Type ${pump.pump_code} exactly to confirm.` });
+		}
+		return runAuditedCleanup(
+			locals.user!.id,
+			params.id,
+			'clear_pump_attendance',
+			params.id,
+			(client) => clearPumpAttendance(client, params.id)
+		);
 	}
 };
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function runAuditedCleanup(
+	adminId: string,
+	pumpId: string,
+	action: 'delete_session' | 'clear_pump_attendance',
+	targetId: string,
+	cleanup: (client: PoolClient) => Promise<CleanupResult>
+) {
+	if (!UUID_PATTERN.test(targetId)) return fail(400, { message: 'Invalid request.' });
+	const client = await pool.connect();
+	let result: CleanupResult;
+	try {
+		await client.query('BEGIN');
+		if (action === 'delete_session') {
+			const { rowCount } = await client.query(
+				'SELECT 1 FROM attendance_sessions WHERE id = $1 AND pump_id = $2',
+				[targetId, pumpId]
+			);
+			if (!rowCount) {
+				await client.query('ROLLBACK');
+				return fail(404, { message: 'Session not found for this pump.' });
+			}
+		}
+		result = await cleanup(client);
+		await client.query(
+			`INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			[
+				adminId,
+				action,
+				action === 'delete_session' ? 'attendance_session' : 'pump',
+				targetId,
+				JSON.stringify({
+					pump_id: pumpId,
+					sessions_deleted: result.sessionIds,
+					people_deleted: result.personIds.length,
+					fraud_flags_deleted: result.fraudFlagsDeleted
+				})
+			]
+		);
+		await client.query('COMMIT');
+	} catch (cleanupError) {
+		await client.query('ROLLBACK').catch(() => {});
+		logger.error(
+			{ adminId, pumpId, action, targetId, error: String(cleanupError) },
+			'admin attendance cleanup failed'
+		);
+		return fail(500, { message: 'Could not delete the attendance records. Nothing was changed.' });
+	} finally {
+		client.release();
+	}
+	await removePhotoFiles(result.photoPaths);
+	logger.warn(
+		{
+			adminId,
+			pumpId,
+			action,
+			sessions: result.sessionIds.length,
+			people: result.personIds.length
+		},
+		'admin deleted attendance records'
+	);
+	return {
+		success: true,
+		message: `Deleted ${result.sessionIds.length} session(s), ${result.personIds.length} worker record(s) and ${result.fraudFlagsDeleted} fraud flag(s). The pump can submit again.`
+	};
+}

@@ -46,3 +46,10 @@ test-results
 .codex
 graphify-out
 .lan-tls/
+
+# Local deploy settings (server login), never commit
+deploy.env
+
+# Real people (names, emails) and machine-specific paths, never commit
+Plant Managers.csv
+eval/datasets.local.json

@@ -294,7 +294,7 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> Open : morning photo submitted\n(session_date = today IST)
 
-    Open --> Paired : evening photo submitted\nwithin EVENING_PAIRING_WINDOW_HOURS (default 24h)\n(evening inherits morning's session_date)
+    Open --> Paired : evening photo submitted\nwithin the pairing window (default 16h, admin setting)\n(evening inherits morning's session_date)
 
     Open --> Expired : EVENING_PAIRING_WINDOW_HOURS elapsed\nwith no evening submission\n(checked lazily on next submit AND via periodic sweep)
 

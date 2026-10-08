@@ -6,9 +6,8 @@ import path from 'node:path';
 import { pool } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
 import { logger } from '$lib/server/log';
+import { getAttendanceSettings } from '$lib/server/settings';
 
-const EVENING_MIN_GAP_MINUTES = 1;
-const EVENING_PAIRING_WINDOW_HOURS = Number(process.env.EVENING_PAIRING_WINDOW_HOURS ?? 24);
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
 const MAX_UPLOAD_BYTES = 18 * 1024 * 1024;
 
@@ -58,6 +57,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			`SELECT pg_advisory_xact_lock(hashtext('attendance-submit'), hashtext($1))`,
 			[pumpId]
 		);
+		// Checked first: a resubmitted photo is the most accurate reason to refuse, whatever
+		// state today's sessions are in.
+		const duplicate = await client.query(
+			'SELECT 1 FROM attendance_sessions WHERE photo_hash = $1',
+			[photoHash]
+		);
+		if (duplicate.rowCount) throw new SubmissionError('Duplicate photo - already submitted');
+		const settings = await getAttendanceSettings(client);
 
 		await client.query(
 			`WITH expired AS (
@@ -87,7 +94,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			 DO UPDATE SET
 			   days_morning_only = person_attendance_yearly.days_morning_only + 1,
 			   last_updated = now()`,
-			[pumpId, EVENING_PAIRING_WINDOW_HOURS]
+			[pumpId, settings.evening_pairing_window_hours]
 		);
 
 		const openMorningResult = await client.query(
@@ -114,26 +121,41 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (completedToday.rowCount) {
 				throw new SubmissionError('Day complete: morning and evening already recorded');
 			}
+			// A morning for today that is not open would otherwise hit the unique index and
+			// surface as a confusing "concurrent submission" error.
+			const { rows: existingMorning } = await client.query(
+				`SELECT status, pairing_status FROM attendance_sessions
+				 WHERE pump_id = $1 AND session_date = $2 AND session_type = 'morning'`,
+				[pumpId, today]
+			);
+			const morning = existingMorning[0];
+			if (morning) {
+				const messages: Record<string, string> = {
+					pending: 'Your morning photo is still being processed. Wait for it to finish.',
+					processing: 'Your morning photo is still being processed. Wait for it to finish.',
+					review: 'Finish reviewing the morning attendance first.',
+					failed: 'Morning attendance failed. Use Retry before submitting again.',
+					fraud_detected: 'Morning attendance is held for admin review.'
+				};
+				throw new SubmissionError(
+					messages[morning.status] ??
+						"The evening window for today has closed. Ask admin to correct today's attendance."
+				);
+			}
 			sessionType = 'morning';
 			sessionDate = today;
 		} else {
 			const elapsed = Number(openMorning.elapsed_minutes);
-			if (elapsed < EVENING_MIN_GAP_MINUTES) {
-				const remaining = Math.ceil(EVENING_MIN_GAP_MINUTES - elapsed);
-				throw new SubmissionError(
-					`Test evening rule: ${remaining} minute remaining before evening submission is allowed`
-				);
+			if (elapsed < settings.evening_min_gap_minutes) {
+				const remaining = Math.ceil(settings.evening_min_gap_minutes - elapsed);
+				const hours = Math.floor(remaining / 60);
+				const wait = hours ? `${hours} h ${remaining % 60} min` : `${remaining} min`;
+				throw new SubmissionError(`Evening attendance opens in ${wait}.`);
 			}
 			sessionType = 'evening';
 			sessionDate = openMorning.session_date;
 			pairedMorningId = openMorning.id;
 		}
-
-		const duplicate = await client.query(
-			'SELECT 1 FROM attendance_sessions WHERE photo_hash = $1',
-			[photoHash]
-		);
-		if (duplicate.rowCount) throw new SubmissionError('Duplicate photo - already submitted');
 
 		await fs.mkdir(UPLOAD_DIR, { recursive: true });
 		photoPath = path.join(UPLOAD_DIR, `${randomUUID()}.jpg`);

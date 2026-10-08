@@ -19,6 +19,8 @@ services:
     build:
       context: .
       target: build
+      args:
+        BASE_PATH: '${BASE_PATH:-}'
     command: ['npm', 'run', 'migrate']
     environment:
       DATABASE_URL: postgres://attendance:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a random URL-safe secret}@postgres:5432/attendance
@@ -35,7 +37,7 @@ services:
       AI_MAX_UPLOAD_BYTES: '18874368'
       AI_MAX_IMAGE_LONG_SIDE: '1920'
       AI_RESIZE_JPEG_QUALITY: '90'
-      ANTI_SPOOF_ENABLED: '${ANTI_SPOOF_ENABLED:-true}'
+      ANTI_SPOOF_ENABLED: '${ANTI_SPOOF_ENABLED:-false}'
       ANTI_SPOOF_MODEL_PATH: /app/models/MiniFASNetV2.onnx
       ANTI_SPOOF_LIVE_THRESHOLD: '${ANTI_SPOOF_LIVE_THRESHOLD:-0.80}'
       ANTI_SPOOF_SUSPICIOUS_THRESHOLD: '${ANTI_SPOOF_SUSPICIOUS_THRESHOLD:-0.20}'
@@ -54,7 +56,10 @@ services:
       start_period: 60s
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        BASE_PATH: '${BASE_PATH:-}'
     image: '${APP_IMAGE:-face-attendance/app:local}'
     environment:
       TZ: Asia/Kolkata
@@ -64,7 +69,8 @@ services:
       GOOGLE_OAUTH_CLIENT_SECRET: '${GOOGLE_OAUTH_CLIENT_SECRET:-}'
       GOOGLE_OAUTH_REDIRECT_URI: '${GOOGLE_OAUTH_REDIRECT_URI:-}'
       FACE_MATCH_THRESHOLD: '0.30'
-      EVENING_PAIRING_WINDOW_HOURS: '24'
+      EVENING_PAIRING_WINDOW_HOURS: '${EVENING_PAIRING_WINDOW_HOURS:-16}'
+      EVENING_MIN_GAP_MINUTES: '${EVENING_MIN_GAP_MINUTES:-540}'
       AI_SERVICE_URL: http://ai-service:8000
       PORT: '3000'
       BODY_SIZE_LIMIT: '20000000'
@@ -77,7 +83,7 @@ services:
           'CMD',
           'node',
           '-e',
-          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+          "fetch('http://127.0.0.1:3000${BASE_PATH:-}/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
         ]
       interval: 15s
       timeout: 5s
@@ -94,19 +100,26 @@ services:
       - uploads:/app/uploads
 
   worker:
-    build: .
+    # Same image as app, so it must get the same build args or it would overwrite the tag.
+    build:
+      context: .
+      args:
+        BASE_PATH: '${BASE_PATH:-}'
     image: '${APP_IMAGE:-face-attendance/app:local}'
     command: ['node', 'worker/index.js']
     environment:
       TZ: Asia/Kolkata
       DATABASE_URL: postgres://attendance:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a random URL-safe secret}@postgres:5432/attendance
       FACE_MATCH_THRESHOLD: '0.30'
-      EVENING_PAIRING_WINDOW_HOURS: '24'
+      EVENING_PAIRING_WINDOW_HOURS: '${EVENING_PAIRING_WINDOW_HOURS:-16}'
       AI_SERVICE_URL: http://ai-service:8000
       AI_REQUEST_TIMEOUT_MS: '30000'
       WORKER_BATCH_SIZE: '${WORKER_BATCH_SIZE:-4}'
       MAX_ACTIVE_ATTENDANCE_JOBS: '30'
       DB_POOL_MAX: '10'
+      WORKER_HEARTBEAT_INTERVAL_MS: '${WORKER_HEARTBEAT_INTERVAL_MS:-5000}'
+      WORKER_HEARTBEAT_TIMEOUT_SECONDS: '${WORKER_HEARTBEAT_TIMEOUT_SECONDS:-20}'
+      PHOTO_SPOOF_CHECK_ENABLED: '${PHOTO_SPOOF_CHECK_ENABLED:-false}'
       GEMINI_API_KEY: '${GEMINI_API_KEY:-}'
       GEMINI_MODEL: '${GEMINI_MODEL:-gemini-3.5-flash-lite}'
       RECAPTURE_BLOCK_CONFIDENCE: '${RECAPTURE_BLOCK_CONFIDENCE:-0.85}'
@@ -126,6 +139,12 @@ services:
         condition: service_completed_successfully
     volumes:
       - uploads:/app/uploads
+    healthcheck:
+      test: ['CMD', 'node', 'worker/healthcheck.js']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   pgdata:

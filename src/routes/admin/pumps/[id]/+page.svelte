@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import AttendanceDailyBars from '$lib/components/AttendanceDailyBars.svelte';
@@ -50,14 +51,17 @@
 <svelte:head><title>{data.pump.pump_code} | Face Attendance</title></svelte:head>
 
 <div class="page detail-page">
-	<a class="back-link" href="/admin/attendance"><ArrowLeft size={16} /> Attendance records</a>
+	<a class="back-link" href={resolve('/admin/attendance')}
+		><ArrowLeft size={16} /> Attendance records</a
+	>
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Pump</p>
 			<h1>{data.pump.pump_code}</h1>
 			<p>
-				<a href={`/admin/vendors/${data.pump.vendor_id}`}>{data.pump.vendor_name}</a> · {data.pump
-					.plant_name} · <a href={`/admin/areas/${data.pump.area_id}`}>{data.pump.area_name}</a>
+				<a href={resolve(`/admin/vendors/${data.pump.vendor_id}`)}>{data.pump.vendor_name}</a> · {data
+					.pump.plant_name} ·
+				<a href={resolve(`/admin/areas/${data.pump.area_id}`)}>{data.pump.area_name}</a>
 			</p>
 		</div>
 	</header>
@@ -184,7 +188,7 @@
 					><tr
 						><th>Submitted</th><th>Type</th><th>Status</th><th>Pairing</th><th>Evidence</th><th
 							>Error or rejection</th
-						></tr
+						><th>Admin</th></tr
 					></thead
 				><tbody
 					>{#each data.sessionLog as session}<tr
@@ -227,6 +231,28 @@
 										(session.pairing_status === 'expired'
 											? 'Morning session expired unpaired'
 											: '—')}{/if}</td
+							><td
+								><form
+									method="POST"
+									action="?/deleteSession"
+									onsubmit={(event) => {
+										const scope =
+											session.session_type === 'morning' && session.pairing_status === 'paired'
+												? 'this morning and its paired evening'
+												: `this ${session.session_type} session`;
+										if (
+											!confirm(
+												`Delete ${scope}? Attendance, new workers and fraud flags from it are removed and the pump can submit again. This cannot be undone.`
+											)
+										)
+											event.preventDefault();
+									}}
+								>
+									<input type="hidden" name="session_id" value={session.id} /><button
+										type="submit"
+										class="button button--secondary">Delete / reset</button
+									>
+								</form></td
 							></tr
 						>{/each}</tbody
 				>
@@ -264,7 +290,7 @@
 				><tbody
 					>{#each data.roster as person}<tr
 							><td
-								><a href={`/admin/persons/${person.id}`}
+								><a href={resolve(`/admin/persons/${person.id}`)}
 									>{personDisplayLabel(data.pump.pump_code, person.display_seq)}</a
 								></td
 							><td>{formatDate(person.first_seen_at)}</td><td>{formatDate(person.last_seen_at)}</td
@@ -276,6 +302,32 @@
 			</table>
 		</div>
 		<p class="footnote">Same page as the calendar above — use its pager to see more people.</p>
+	</section>
+
+	<section class="surface surface--padded section danger-zone" aria-labelledby="danger-heading">
+		<h2 id="danger-heading">Clear test records</h2>
+		<p class="supporting-text">
+			Deletes every session, photo, worker record, roll-up and fraud flag of {data.pump.pump_code}.
+			The pump login stays. Use this only for test data. The action is recorded in the admin audit
+			log.
+		</p>
+		<form
+			method="POST"
+			action="?/clearPumpData"
+			class="danger-form"
+			onsubmit={(event) => {
+				if (
+					!confirm(`Delete ALL attendance data of ${data.pump.pump_code}? This cannot be undone.`)
+				)
+					event.preventDefault();
+			}}
+		>
+			<label>
+				Type <strong>{data.pump.pump_code}</strong> to confirm
+				<input name="confirm_code" autocomplete="off" required />
+			</label>
+			<button type="submit" class="button button--secondary">Delete all attendance data</button>
+		</form>
 	</section>
 </div>
 
@@ -291,6 +343,19 @@
 	}
 	.fraud-review form {
 		display: contents;
+	}
+	.danger-zone {
+		border: 1px solid var(--critical, #b42318);
+	}
+	.danger-form {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		align-items: end;
+	}
+	.danger-form label {
+		display: grid;
+		gap: var(--space-1);
 	}
 	.back-link {
 		display: inline-flex;
