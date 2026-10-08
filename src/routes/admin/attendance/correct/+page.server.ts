@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { resolve } from '$app/paths';
 import { pool, query, queryOne } from '$lib/server/db';
 import { isDateKey } from '$lib/date';
+import { shiftStillOpen } from '$lib/server/shiftSessions';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -128,7 +129,8 @@ export const actions: Actions = {
 				 (person_id, year, days_present, days_morning_only, days_evening_only, last_updated)
 				 SELECT $1, EXTRACT(YEAR FROM $2::date)::int,
 				 COUNT(*) FILTER (WHERE morning_matched AND evening_matched),
-				 COUNT(*) FILTER (WHERE morning_matched AND NOT evening_matched),
+				 COUNT(*) FILTER (WHERE morning_matched AND NOT evening_matched
+				   AND NOT ${shiftStillOpen('daily_person_attendance')}),
 				 COUNT(*) FILTER (WHERE NOT morning_matched AND evening_matched), now()
 				 FROM daily_person_attendance WHERE person_id = $1
 				 AND EXTRACT(YEAR FROM session_date) = EXTRACT(YEAR FROM $2::date)
@@ -274,7 +276,8 @@ async function recalculateYear(client: import('pg').PoolClient, personId: string
 		 (person_id, year, days_present, days_morning_only, days_evening_only, last_updated)
 		 SELECT $1, EXTRACT(YEAR FROM $2::date)::int,
 		 COUNT(*) FILTER (WHERE morning_matched AND evening_matched),
-		 COUNT(*) FILTER (WHERE morning_matched AND NOT evening_matched),
+		 COUNT(*) FILTER (WHERE morning_matched AND NOT evening_matched
+		   AND NOT ${shiftStillOpen('daily_person_attendance')}),
 		 COUNT(*) FILTER (WHERE NOT morning_matched AND evening_matched), now()
 		 FROM daily_person_attendance WHERE person_id = $1
 		 AND EXTRACT(YEAR FROM session_date) = EXTRACT(YEAR FROM $2::date)

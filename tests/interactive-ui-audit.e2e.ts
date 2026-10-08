@@ -75,8 +75,8 @@ function personLabel(pumpCode: string, displaySeq: number) {
 
 function statusLabel(row: { morning_matched: boolean; evening_matched: boolean }) {
 	if (row.morning_matched && row.evening_matched) return 'Present';
-	if (row.morning_matched) return 'Morning only';
-	if (row.evening_matched) return 'Evening only';
+	if (row.morning_matched) return 'Start only';
+	if (row.evening_matched) return 'End only';
 	return 'Absent';
 }
 
@@ -1007,7 +1007,7 @@ test('attendance evidence shows live morning-only totals, both sessions, and per
 
 	await expectHealthyPage(page, `/admin/persons/${morning.person_id}`);
 	const morningMetric = page.locator('.metric').filter({
-		has: page.getByText('Morning only', { exact: true })
+		has: page.getByText('Start only', { exact: true })
 	});
 	await expect(morningMetric.locator('.metric__value')).toHaveText('1');
 	await expect(

@@ -34,9 +34,9 @@
 				<table class="data-table" data-testid="vendor-persons-table">
 					<thead
 						><tr
-							><th>Person</th><th>Pump</th><th>First seen</th><th>Last seen</th><th>Present</th><th
-								>Morning only</th
-							><th>Evening only</th></tr
+							><th>Person</th><th>Pump</th><th>First seen</th><th>Last seen</th><th>Full shift</th><th
+								>Start only</th
+							><th>End only</th></tr
 						></thead
 					><tbody
 						>{#each data.persons as person}<tr

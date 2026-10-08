@@ -2,6 +2,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { query, queryOne } from '$lib/server/db';
 import { error, fail } from '@sveltejs/kit';
 import { createAttendanceReviewFlag } from '$lib/server/attendanceReview';
+import { shiftStillOpen } from '$lib/server/shiftSessions';
 
 export const load: PageServerLoad = async ({ params }) => {
 	const person = await queryOne<any>(
@@ -57,7 +58,10 @@ export const load: PageServerLoad = async ({ params }) => {
 	const yearly = await query<any>(
 		`SELECT EXTRACT(YEAR FROM session_date)::integer AS year,
 		        COUNT(*) FILTER (WHERE morning_matched AND evening_matched) AS days_present,
-		        COUNT(*) FILTER (WHERE morning_matched AND NOT evening_matched) AS days_morning_only,
+		        COUNT(*) FILTER (
+		          WHERE morning_matched AND NOT evening_matched
+		            AND NOT ${shiftStillOpen('daily_person_attendance')}
+		        ) AS days_morning_only,
 		        COUNT(*) FILTER (WHERE NOT morning_matched AND evening_matched) AS days_evening_only
 		 FROM daily_person_attendance
 		 WHERE person_id = $1

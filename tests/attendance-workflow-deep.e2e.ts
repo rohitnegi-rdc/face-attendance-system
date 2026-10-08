@@ -219,7 +219,7 @@ test('retry clears a finalized evening/no-face attendance instead of showing gen
 	});
 
 	await loginAsPump(page);
-	await expect(page.getByTestId('session-title')).toHaveText('Morning attendance');
+	await expect(page.getByTestId('session-title')).toHaveText('Start shift');
 	await choosePhoto(
 		page,
 		await readFixture(
@@ -245,7 +245,7 @@ test('retry clears a finalized evening/no-face attendance instead of showing gen
 	]);
 
 	await page.reload();
-	await expect(page.getByTestId('session-title')).toHaveText('Evening attendance');
+	await expect(page.getByTestId('session-title')).toHaveText('End shift');
 	await choosePhoto(
 		page,
 		await readFixture(['tests/fixtures/group-e2e/negative/no-face.jpg'], 'evening-no-face')
@@ -289,10 +289,10 @@ test('retry clears a finalized evening/no-face attendance instead of showing gen
 	});
 
 	await page.reload();
-	await expect(page.getByTestId('session-title')).toHaveText('Evening attendance');
+	await expect(page.getByTestId('session-title')).toHaveText('End shift');
 	await page.goBack();
 	await page.goForward();
-	await expect(page.getByTestId('session-title')).toHaveText('Evening attendance');
+	await expect(page.getByTestId('session-title')).toHaveText('End shift');
 	await choosePhoto(
 		page,
 		await readFixture(
@@ -305,7 +305,7 @@ test('retry clears a finalized evening/no-face attendance instead of showing gen
 	await closeWorkerPreview(page);
 	await page.screenshot({ path: path.join(screenshotRoot, '05-evening-result-after-retry.png'), fullPage: true });
 	await page.getByRole('button', { name: 'Done reviewing' }).click();
-	await expect(page.getByTestId('session-title')).toHaveText('Attendance complete');
+	await expect(page.getByTestId('session-title')).toHaveText('Shift complete');
 	expect(browserErrors).toEqual([]);
 	expect(failedResponses).toEqual([]);
 });

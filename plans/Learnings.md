@@ -40,7 +40,7 @@ The original 12-row illustrative sample in Prompt A never exposed several real p
 
 ## 2026-10-08 — Pairing window, pump retry and the regression gate
 
-- A 24h pairing window misfiles attendance: morning 08:00, missed evening, next photo at 07:30 the next day is 23.5h later and becomes yesterday's evening. The default is now 16h, editable at /admin/settings (stored in `app_settings`, which wins over env).
+- (Superseded the same day by the single-button shift flow below: the window is back to 24h because the missed end is now closed by End session, admin fix or timeout instead of by the next photo.) A 24h pairing window misfiles attendance: morning 08:00, missed evening, next photo at 07:30 the next day is 23.5h later and becomes yesterday's evening. The default is now 16h, editable at /admin/settings (stored in `app_settings`, which wins over env).
 - Pump Retry used to delete completed sessions together with their `fraud_flags`, so a pump caught by the cross-pump check could erase the evidence. It is now limited to `failed`/`review` sessions without fraud evidence. Admin delete/reset is the only full delete and is written to `admin_audit_log`.
 - The cross-pump check compared only against `active` people in `completed` sessions, so a new worker (still `pending_review`) at two pumps on day one was never flagged, and detection depended on which pump approved first. It now includes `pending_review` people and `review` sessions.
 - New accounts default to `must_change_password = TRUE` (migration 016). Test fixtures must insert FALSE explicitly or every request returns "Password change required".
@@ -52,3 +52,12 @@ The original 12-row illustrative sample in Prompt A never exposed several real p
 - The golden small-group evaluation (2026-08-11) showed 0.68 is far too strict for this model: 60.6% attendance accuracy, 10% match recall, 0 of 2 fraud groups caught. 0.26–0.28 is the lowest range with zero false matches and zero cross-pump false duplicates (98.3% accuracy, 2/2 fraud groups). Default is now 0.28 from env (`FACE_MATCH_THRESHOLD`). docker-compose used to hardcode 0.30 and ignore `.env`.
 - `Number(process.env.X ?? d)` turns an empty env var into 0, which would match every face. Parse with a range check and fall back to the default (see `faceMatchThreshold()`).
 - A cross-pump flag skips the face completely, so nothing can be restored later unless the face is kept. Flags now store the face vector and crop (migration 019); flags raised before that can only be confirmed or fixed through manual correction.
+
+## 2026-10-08 — Single-button shift flow and the live visual walk-through
+
+- Postgres timestamps carry microseconds; a JS `Date` keeps milliseconds. Reading `submitted_at` into JS and passing it back as a parameter (`WHERE submitted_at = $1`, or `>= $1` to find "photos after this one") silently misses or includes the boundary row. Compare inside SQL or by id.
+- `adapter-node` with `PROTOCOL_HEADER=x-forwarded-proto` and no `ORIGIN` assumes https when the header is absent. On plain `http://127.0.0.1:3001` every multipart upload then fails the CSRF check with 403 "Cross-site POST form submissions are forbidden". Production behind the HTTPS proxy is fine; local browser tests send `x-forwarded-proto: http` (see `playwright.live.config.ts`).
+- Playwright dismisses `confirm()` by default, so a click on a confirm-guarded button (End session, Split, Delete) silently does nothing. Register `page.once('dialog', d => d.accept())` before the click, and also test the dismiss path.
+- "Start only" means the shift is closed. Counting `morning_matched AND NOT evening_matched` on its own also counts a shift still waiting for its end. Use `shiftStillOpen()` from `shiftSessions.ts`, and give the pump screen a separate outcome for a start-only day instead of reusing "Shift complete".
+- A fraud flag's `person_id` is the worker at the **other** pump. Labels built from it already contain that pump's code, so "X was also found at <other pump>" repeats the code. Say what the face matched and where.
+- A long-running live test that hard-fails halfway leaves real data behind (open starts). Use `expect.soft` inside steps and keep only helpers and setup hard, so one wrong assertion does not burn another pump.

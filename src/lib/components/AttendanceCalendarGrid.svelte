@@ -67,9 +67,9 @@
 			v === 'present'
 				? 'Present'
 				: v === 'morning_only'
-					? 'Morning only'
+					? 'Start only'
 					: v === 'evening_only'
-						? 'Evening only'
+						? 'End only'
 						: 'Absent';
 		return `${entity}, ${formatDate(day)}: ${status}`;
 	}
@@ -120,8 +120,8 @@
 {#if mode === 'status'}
 	<div class="legend" aria-label="Attendance status legend">
 		<span><b class="legend__swatch st-present">P</b> Present</span>
-		<span><b class="legend__swatch st-morning">M</b> Morning only</span>
-		<span><b class="legend__swatch st-evening">E</b> Evening only</span>
+		<span><b class="legend__swatch st-morning">M</b> Start only</span>
+		<span><b class="legend__swatch st-evening">E</b> End only</span>
 		<span><b class="legend__swatch st-absent">-</b> Absent</span>
 	</div>
 {/if}

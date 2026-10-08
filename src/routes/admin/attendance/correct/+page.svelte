@@ -47,7 +47,7 @@
 				{@const session = data.sessions.find((item: any) => item.session_type === sessionType)}
 				<figure class="evidence-item">
 					<figcaption>
-						<strong>{sessionType === 'morning' ? 'Morning' : 'Evening'}</strong>
+						<strong>{sessionType === 'morning' ? 'Shift start' : 'Shift end'}</strong>
 						<span>{session ? session.status : 'Not submitted'}</span>
 					</figcaption>
 					{#if session?.has_photo}
@@ -106,7 +106,7 @@
 							<div class="duplicate-controls">
 							<label><span>Duplicate of</span><select name="duplicate_person_id"><option value="">Select worker</option>{#each data.people.filter((candidate: any) => candidate.id !== person.id) as candidate}<option value={candidate.id}>{personDisplayLabel(data.pump.pump_code, candidate.display_seq)}</option>{/each}</select></label>
 							<label><span>Duplicate reason</span><input name="duplicate_reason" minlength="5" maxlength="500" placeholder="How did you verify the duplicate?" /></label>
-							<label><span>Session</span><select name="session_type">{#each ['morning', 'evening'] as type}<option value={type} disabled={!availableSessions.has(type)}>{type === 'morning' ? 'Morning' : 'Evening'}</option>{/each}</select></label>
+							<label><span>Session</span><select name="session_type">{#each ['morning', 'evening'] as type}<option value={type} disabled={!availableSessions.has(type)}>{type === 'morning' ? 'Shift start' : 'Shift end'}</option>{/each}</select></label>
 							<button class="button button--secondary" type="submit" formnovalidate formaction={`?/markDuplicate&pump=${data.pump.id}&day=${data.day}`}><UserMinus size={16} /> Mark duplicate</button>
 							</div>
 						</details>

@@ -110,8 +110,8 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 | PAIR-04 | Morning 23:30 IST, evening 08:45 IST next day | Evening has the morning's `session_date` | 1 | P0 | Covered ("midnight pairing") |
 | PAIR-05 | Morning older than the pairing window | Morning `expired`, `days_morning_only` +1 exactly once, next photo is a fresh morning | 1 | P0 | Covered (attendance.spec) |
 | PAIR-06 | Expiry triggered by `/today`, by submit and by the worker sweep, all at once | Rollup counted once | 1 | P0 | Partial |
-| PAIR-07 | Missed evening: morning 08:00, next photo 07:30 the next day | Recorded as the **new day's morning**, not yesterday's evening | 1 | P0 | Covered (attendance.spec, fixed 2026-10-08 (16 h window)) |
-| PAIR-08 | Missed morning: only one photo at 18:00 | Agreed rule from P1 (today it becomes a "morning") | 1 | P1 | **RED** (pending decision) |
+| PAIR-07 | Missed end: a start with no end for longer than the pairing window (default 24 h) | Start auto-closes as start only (`closed_by = timeout`); the next photo is a new shift start | 1 | P0 | Covered (attendance.spec; rule changed 2026-10-08 from a 16 h window to the single-button shift flow) |
+| PAIR-08 | Only one photo at 18:00 | It is a shift start (any time of day); the shift ends by an end photo after the gap, the pump's End session button, an admin fix or the 24 h auto-close | 1 | P1 | Covered (decided 2026-10-08: single-button shift flow, see SHIFT-01..10) |
 | PAIR-09 | `session_date` is computed in IST even when the container TZ is UTC | Run the app with `TZ=UTC` and submit at 00:30 IST | 1 | P0 | Covered (regression run uses TZ=UTC) |
 | PAIR-10 | Morning in `review`: `/today` state is `review`; submit is blocked with a clear message | As stated | 1 | P1 | Partial |
 | PAIR-11 | Morning `failed` (no faces): operator retries, then submits again | New morning accepted | 1 | P0 | Covered |
@@ -187,10 +187,50 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 
 | ID | Scenario | Expected | Tier | Pri | Status |
 |---|---|---|---|---|---|
-| SET-01 | Admin widens the pairing window to 24 h | A photo 17 h after an unpaired morning pairs as its evening | 1 | P0 | Covered (attendance.spec) |
+| SET-01 | Default 24 h pairing window; admin sets 16 h | With 24 h a photo 17 h after the start is its end; with 16 h the start auto-closes and the photo starts a new shift | 1 | P0 | Covered (attendance.spec) |
 | SET-02 | Admin shortens the evening gap to 5 min for testing | Evening refused before 5 min, accepted after; change is in the audit log | 1 | P0 | Covered (attendance.spec) |
 | SET-03 | Invalid values (window not longer than gap, 0, out of range) | Refused, nothing stored | 1 | P0 | Covered (attendance.spec) |
-| SET-04 | Reset to defaults | Stored values removed; 540 min and 16 h apply | 1 | P1 | Covered (attendance.spec) |
+| SET-04 | Reset to defaults | Stored values removed; 540 min and 24 h apply | 1 | P1 | Covered (attendance.spec) |
+
+### SHIFT: single-button shift flow (added 2026-10-08)
+
+UI words: Shift start / Shift end / Full shift / Start only / End only. The database keeps
+`morning` (start) and `evening` (end). Tests: `tests/regression/shift.spec.ts`.
+
+| ID | Scenario | Expected | Tier | Pri | Status |
+|---|---|---|---|---|---|
+| SHIFT-01 | Pump End session before and after the gap | 409 "Shift end opens in X h Y min" before; after, the start closes as start only (`closed_by = pump`), `days_morning_only` +1, next photo is a new start | 1 | P0 | Covered |
+| SHIFT-02 | End session with no open shift, or by a non-pump login | 409 "no open shift"; 403 for other roles | 1 | P0 | Covered |
+| SHIFT-03 | Start late in the evening, end after midnight | End keeps the start's `session_date`; full shift | 1 | P0 | Covered |
+| SHIFT-04 | Admin Split: a mistaken end (pump forgot to end yesterday) becomes today's start | Old start start only (`closed_by = admin`), new open start today, daily rows and yearly roll-up corrected, audited | 1 | P0 | Covered |
+| SHIFT-05 | Split when the photo's day already has a start, or on a start row | Refused, nothing changes | 1 | P0 | Covered |
+| SHIFT-06 | Admin Move to date | Start, end, attendance and finalization move together; occupied, future or bad dates refused; audited | 1 | P0 | Covered |
+| SHIFT-07 | Admin End session | Open start closed at once (`closed_by = admin`), pump locked for the day; repeat or another pump's session refused; audited | 1 | P0 | Covered |
+| SHIFT-08 | No end for 25 h | Lazy check on `/today` closes it with `closed_by = timeout` (same rule as the hourly sweep) | 1 | P0 | Covered |
+| SHIFT-09 | Pump screen after a closed shift | `/today` returns `shift_outcome` `full` or `start_only` (with `shift_closed_by`); the page says "Shift ended (start only)" with a neutral badge, never "Shift complete" | 1 | P1 | Covered (bug found by LIVE-07, fixed 2026-10-08) |
+| SHIFT-10 | Worker counts while a shift is still open | Vendor, plant manager, admin pump and person pages and the admin roll-up rebuild do not count an open shift's day as start only | 1 | P1 | Covered (vendor people page; same `shiftStillOpen` condition on the other pages) |
+
+### LIVE: visual walk-through on a local stack (added 2026-10-08)
+
+`tests/live/shift-live.e2e.ts` with `playwright.live.config.ts`. It runs against a running local
+Docker stack with the real AI service, **existing** pumps, vendor and plant manager (no new accounts,
+no data deleted), a faked camera fed from `tests/fixtures/group-e2e/photos`, and full-page
+screenshots in `test-output/shift-live/<run>/`. Needs `LIVE_DATABASE_URL`, `LIVE_PASSWORD`, `LIVE_MANAGER_EMAIL` and
+`LIVE_ADMIN_PASSWORD`; the pumps must have no shift in the last 3 days. Not part of the gate.
+
+| ID | Scenario | Tier | Status |
+|---|---|---|---|
+| LIVE-01 | Shift start on a phone; photo and End session refused before 9 h (UI and API) | 2 | Covered |
+| LIVE-02 | Admin sets a 1 min gap for testing | 2 | Covered |
+| LIVE-03 | Shift end after the gap: full shift, third photo refused | 2 | Covered |
+| LIVE-04 | Pump End session on a 20 h old start (Cancel does nothing, confirm closes it) | 2 | Covered |
+| LIVE-05 | Admin Move to date | 2 | Covered |
+| LIVE-06 | Mistaken end, admin Split | 2 | Covered |
+| LIVE-07 | Refused Move, admin End session, cancelled Delete, audit rows | 2 | Covered |
+| LIVE-08 | Cross-pump fraud: pump review wording, admin Confirm fraud and Not fraud | 2 | Covered |
+| LIVE-09 | 25 h old start auto-closes | 2 | Covered |
+| LIVE-10 | Vendor, plant manager and admin pages show Full shift / Start only / End only | 2 | Covered |
+| LIVE-11 | Admin resets settings to production defaults | 2 | Covered |
 
 ### ADM (continued): admin delete and reset (added 2026-10-08)
 

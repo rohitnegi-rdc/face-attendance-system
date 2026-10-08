@@ -7,6 +7,7 @@ import { pool } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
 import { logger } from '$lib/server/log';
 import { getAttendanceSettings } from '$lib/server/settings';
+import { expireStaleStarts, shiftEndOpensMessage } from '$lib/server/shiftSessions';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
 const MAX_UPLOAD_BYTES = 18 * 1024 * 1024;
@@ -66,95 +67,62 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (duplicate.rowCount) throw new SubmissionError('Duplicate photo - already submitted');
 		const settings = await getAttendanceSettings(client);
 
-		await client.query(
-			`WITH expired AS (
-		   UPDATE attendance_sessions
-		   SET pairing_status = 'expired'
-		   WHERE pump_id = $1
-		     AND session_type = 'morning'
-		     AND status = 'completed'
-		     AND pairing_status = 'open'
-			     AND now() - submitted_at > ($2 || ' hours')::interval
-			   RETURNING id, pump_id, session_date
-			 ),
-			 finalized AS (
-			   INSERT INTO attendance_rollup_finalizations (pump_id, session_date, session_id)
-			   SELECT pump_id, session_date, id FROM expired
-			   ON CONFLICT (pump_id, session_date) DO NOTHING
-			   RETURNING pump_id, session_date
-			 )
-			 INSERT INTO person_attendance_yearly
-			   (person_id, year, days_morning_only)
-			 SELECT dpa.person_id, EXTRACT(YEAR FROM dpa.session_date)::int, 1
-			 FROM daily_person_attendance dpa
-			 JOIN finalized f
-			   ON f.pump_id = dpa.pump_id AND f.session_date = dpa.session_date
-			 WHERE dpa.morning_matched AND NOT dpa.evening_matched
-			 ON CONFLICT (person_id, year)
-			 DO UPDATE SET
-			   days_morning_only = person_attendance_yearly.days_morning_only + 1,
-			   last_updated = now()`,
-			[pumpId, settings.evening_pairing_window_hours]
-		);
+		await expireStaleStarts(client, pumpId, settings.evening_pairing_window_hours);
 
-		const openMorningResult = await client.query(
-			`SELECT *,
+		// One button for the operator: with no open shift the photo is a shift start (any time of
+		// day); with an open shift it is the shift end, once the evening gap has passed.
+		const openStartResult = await client.query(
+			`SELECT *, session_date::text AS session_date_text,
 			        EXTRACT(EPOCH FROM (now() - submitted_at)) / 60 AS elapsed_minutes
 			 FROM attendance_sessions
-			 WHERE pump_id = $1 AND session_type = 'morning' AND status = 'completed' AND pairing_status = 'open'
+			 WHERE pump_id = $1 AND session_type = 'morning' AND pairing_status = 'open'
 			 ORDER BY submitted_at DESC LIMIT 1`,
 			[pumpId]
 		);
-		const openMorning = openMorningResult.rows[0];
+		const openStart = openStartResult.rows[0];
 		let sessionType: 'morning' | 'evening';
 		let sessionDate: string;
 		let pairedMorningId: string | null = null;
 
-		if (!openMorning) {
-			const today = todayIST();
-			const completedToday = await client.query(
-				`SELECT 1 FROM attendance_sessions
-				 WHERE pump_id = $1 AND session_date = $2
-				   AND session_type = 'evening' AND pairing_status = 'paired'`,
-				[pumpId, today]
-			);
-			if (completedToday.rowCount) {
-				throw new SubmissionError('Day complete: morning and evening already recorded');
+		if (openStart) {
+			const waiting: Record<string, string> = {
+				pending: 'Your shift start photo is still being processed. Wait for it to finish.',
+				processing: 'Your shift start photo is still being processed. Wait for it to finish.',
+				review: 'Finish reviewing the shift start photo first.',
+				failed: 'The shift start photo failed. Use Retry before submitting again.'
+			};
+			if (openStart.status !== 'completed') {
+				throw new SubmissionError(
+					waiting[openStart.status] ?? 'The shift start is held for admin review.'
+				);
 			}
-			// A morning for today that is not open would otherwise hit the unique index and
-			// surface as a confusing "concurrent submission" error.
-			const { rows: existingMorning } = await client.query(
-				`SELECT status, pairing_status FROM attendance_sessions
+			const elapsed = Number(openStart.elapsed_minutes);
+			if (elapsed < settings.evening_min_gap_minutes) {
+				throw new SubmissionError(
+					shiftEndOpensMessage(settings.evening_min_gap_minutes - elapsed)
+				);
+			}
+			sessionType = 'evening';
+			sessionDate = openStart.session_date_text;
+			pairedMorningId = openStart.id;
+		} else {
+			const today = todayIST();
+			// One shift per pump per date; a start for today that is closed or paired would
+			// otherwise hit the unique index and surface as a confusing "concurrent submission".
+			const { rows: existing } = await client.query(
+				`SELECT status FROM attendance_sessions
 				 WHERE pump_id = $1 AND session_date = $2 AND session_type = 'morning'`,
 				[pumpId, today]
 			);
-			const morning = existingMorning[0];
-			if (morning) {
-				const messages: Record<string, string> = {
-					pending: 'Your morning photo is still being processed. Wait for it to finish.',
-					processing: 'Your morning photo is still being processed. Wait for it to finish.',
-					review: 'Finish reviewing the morning attendance first.',
-					failed: 'Morning attendance failed. Use Retry before submitting again.',
-					fraud_detected: 'Morning attendance is held for admin review.'
-				};
+			if (existing[0]) {
 				throw new SubmissionError(
-					messages[morning.status] ??
-						"The evening window for today has closed. Ask admin to correct today's attendance."
+					existing[0].status === 'fraud_detected'
+						? "Today's shift start is held for admin review."
+						: "Today's shift is already recorded. The next shift can start tomorrow."
 				);
 			}
 			sessionType = 'morning';
 			sessionDate = today;
-		} else {
-			const elapsed = Number(openMorning.elapsed_minutes);
-			if (elapsed < settings.evening_min_gap_minutes) {
-				const remaining = Math.ceil(settings.evening_min_gap_minutes - elapsed);
-				const hours = Math.floor(remaining / 60);
-				const wait = hours ? `${hours} h ${remaining % 60} min` : `${remaining} min`;
-				throw new SubmissionError(`Evening attendance opens in ${wait}.`);
-			}
-			sessionType = 'evening';
-			sessionDate = openMorning.session_date;
-			pairedMorningId = openMorning.id;
 		}
 
 		await fs.mkdir(UPLOAD_DIR, { recursive: true });

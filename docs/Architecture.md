@@ -288,20 +288,51 @@ sequenceDiagram
     API-->>Pump: { status: completed, matched[], new_persons[], fraud_flags[] }
 ```
 
-## 5. Session Pairing State Machine
+## 5. Session Pairing State Machine (single-button shift flow)
+
+The pump has one button. UI words are Shift start / Shift end / Full shift / Start only / End only;
+the database keeps `session_type` `morning` (start) and `evening` (end). Logic lives in
+`src/lib/server/shiftSessions.ts`; gap and window come from `src/lib/server/settings.ts`
+(admin `/admin/settings` > env > default 540 min / 24 h).
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Open : morning photo submitted\n(session_date = today IST)
+    [*] --> Open : photo with no open shift = SHIFT START (any time of day)
+(session_date = today IST, one shift per pump per date)
 
-    Open --> Paired : evening photo submitted\nwithin the pairing window (default 16h, admin setting)\n(evening inherits morning's session_date)
+    Open --> Open : photo before the gap (default 9h)
+refused 409 "Shift end opens in X h Y min"
 
-    Open --> Expired : EVENING_PAIRING_WINDOW_HOURS elapsed\nwith no evening submission\n(checked lazily on next submit AND via periodic sweep)
+    Open --> Paired : photo after the gap = SHIFT END
+(end inherits the start's session_date)
 
-    Paired --> [*] : day finalized as PRESENT\n(both morning_matched + evening_matched true)\n-> increments days_present
+    Open --> Expired : closed without an end photo, closed_by =
+ pump (End session button, after the gap)
+ admin (End session / Split on /admin/pumps/[id])
+ timeout (pairing window, default 24h,
+ lazy on submit and /today + hourly worker sweep)
 
-    Expired --> [*] : day finalized as MORNING-ONLY\n(morning_matched true, evening_matched false)\n-> increments days_morning_only\nnext submission at this pump starts a NEW Open morning session
+    Paired --> [*] : FULL SHIFT
+-> days_present
+
+    Expired --> [*] : START ONLY for workers seen at the start
+-> days_morning_only (finalized once via attendance_rollup_finalizations)
+next photo starts a new shift
 ```
+
+Admin fixes on `/admin/pumps/[id]` (each written to `admin_audit_log`):
+
+- **End session**: closes an open start now (`closed_by = admin`); the pump is locked for that date.
+- **Split**: an end photo that was really the next shift's start (pump forgot to end yesterday).
+  The old start becomes start only and the photo becomes an open start on the day it was taken, with
+  daily rows and yearly roll-ups moved. Refused when that day already has a start.
+- **Move to date**: moves the start, its end, the attendance rows and the finalization to another
+  past date that has no shift.
+
+While a shift is still open, its day is "in progress", not start only. Read pages and the roll-up
+rebuild use `shiftStillOpen()` from `shiftSessions.ts` so they never count it early. The pump's
+`/api/attendance/today` returns `shift_outcome` (`full` / `start_only`) for a closed day so the
+screen never says "Shift complete" for a shift without an end photo.
 
 ## 6. Cross-Pump Fraud Check Scope
 

@@ -20,8 +20,8 @@
 	);
 	const metrics = $derived([
 		{ label: 'Days present', value: totals.present },
-		{ label: 'Morning only', value: totals.morning },
-		{ label: 'Evening only', value: totals.evening },
+		{ label: 'Start only', value: totals.morning },
+		{ label: 'End only', value: totals.evening },
 		{ label: 'History records', value: data.history.length }
 	]);
 </script>
@@ -60,7 +60,7 @@
 		<div class="table-wrap">
 			<table class="data-table">
 				<thead
-					><tr><th>Year</th><th>Days present</th><th>Morning only</th><th>Evening only</th></tr
+					><tr><th>Year</th><th>Days present</th><th>Start only</th><th>End only</th></tr
 					></thead
 				><tbody
 					>{#each data.yearly as year}<tr
@@ -78,7 +78,7 @@
 			<table class="data-table">
 				<thead
 					><tr
-						><th>Date</th><th>Morning</th><th>Evening</th><th>Daily status</th><th
+						><th>Date</th><th>Start</th><th>End</th><th>Daily status</th><th
 							>Photo evidence</th
 						></tr
 					></thead
@@ -102,7 +102,7 @@
 							><td class="history-evidence">
 								{#if history.morning_session_id}
 									<div>
-										<strong>Morning</strong>
+										<strong>Shift start</strong>
 										<AttendanceEvidenceButtons
 											session={{
 												id: history.morning_session_id,
@@ -125,7 +125,7 @@
 								{/if}
 								{#if history.evening_session_id}
 									<div>
-										<strong>Evening</strong>
+										<strong>Shift end</strong>
 										<AttendanceEvidenceButtons
 											session={{
 												id: history.evening_session_id,

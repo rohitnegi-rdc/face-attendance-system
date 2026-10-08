@@ -25,7 +25,7 @@
 			<p class="eyebrow">Administration</p>
 			<h1>Attendance settings</h1>
 			<p>
-				Timing rules for pairing morning and evening photos. Changes apply to the next submission.
+				Timing rules for pairing shift start and shift end photos. Changes apply to the next submission.
 			</p>
 		</div>
 	</header>
@@ -35,10 +35,10 @@
 	{/if}
 
 	<section class="surface surface--padded section" aria-labelledby="timing-heading">
-		<h2 id="timing-heading">Morning and evening timing</h2>
+		<h2 id="timing-heading">Shift start and end timing</h2>
 		<form method="POST" action="?/save" class="settings-form">
 			<label class="field">
-				<span>Minimum gap before evening (minutes)</span>
+				<span>Minimum gap before shift end (minutes)</span>
 				<input
 					name="evening_min_gap_minutes"
 					type="number"
@@ -56,7 +56,7 @@
 				</small>
 			</label>
 			<label class="field">
-				<span>Pairing window (hours)</span>
+				<span>Auto-close open shift after (hours)</span>
 				<input
 					name="evening_pairing_window_hours"
 					type="number"
@@ -70,7 +70,7 @@
 				<small>
 					Now {data.settings.evening_pairing_window_hours.value} h ({sourceLabel[
 						data.settings.evening_pairing_window_hours.source
-					]}). After this, an unpaired morning closes and the next photo starts a new day. Default: {data
+					]}). After this, a shift with no end closes as start only and the next photo starts a new shift. The pump can also press End session once the gap has passed. Default: {data
 						.defaults.evening_pairing_window_hours} h.
 				</small>
 			</label>
@@ -83,7 +83,7 @@
 		</form>
 		{#if data.settings.evening_min_gap_minutes.value < data.defaults.evening_min_gap_minutes}
 			<p class="alert alert--error" role="status">
-				The evening gap is below the 9-hour production rule. Reset it before real attendance starts.
+				The shift end gap is below the 9-hour production rule. Reset it before real attendance starts.
 			</p>
 		{/if}
 	</section>

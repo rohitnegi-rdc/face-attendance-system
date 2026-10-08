@@ -19,7 +19,7 @@
 		{ label: 'Reporting pumps', value: data.metrics.activePumps, detail: 'Submitted today' },
 		{ label: 'Active workers', value: data.metrics.totalPersons, detail: 'Known identities' },
 		{
-			label: 'Morning to evening',
+			label: 'Full shifts',
 			value: data.metrics.avgElapsedHours === 'N/A' ? 'Not available' : `${data.metrics.avgElapsedHours}h`,
 			detail: 'Average interval today'
 		}
@@ -81,7 +81,7 @@
 			<div class="section-header">
 				<div>
 					<h2 id="trend-heading">Attendance trend</h2>
-					<p>Workers matched in both morning and evening sessions over seven days.</p>
+					<p>Workers matched at both shift start and shift end over seven days.</p>
 				</div>
 				<strong>{data.trend.at(-1)?.attendance_pct || 0}%</strong>
 			</div>
@@ -129,7 +129,7 @@
 		<div class="section-header">
 			<div>
 				<h2>Latest submissions</h2>
-				<p class="supporting-text">Most recent morning and evening uploads across pumps.</p>
+				<p class="supporting-text">Most recent shift start and end uploads across pumps.</p>
 			</div>
 			<a href={resolve('/admin/attendance')}>View records</a>
 		</div>
@@ -144,7 +144,7 @@
 						<tr>
 							<td><a href={resolve(`/admin/pumps/${session.pump_id}`)}>{session.pump_code}</a></td>
 							<td>{session.plant_name}</td>
-							<td><span class="session-type">{session.session_type === 'morning' ? 'Morning' : 'Evening'}</span></td>
+							<td><span class="session-type">{session.session_type === 'morning' ? 'Shift start' : 'Shift end'}</span></td>
 							<td>{formatDate(session.submitted_at)}</td>
 							<td
 								><StatusBadge

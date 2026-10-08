@@ -126,8 +126,8 @@
 			><span>Session</span><select name="session"
 				><option value="">Full day</option><option
 					value="morning"
-					selected={data.filters.session === 'morning'}>Morning</option
-				><option value="evening" selected={data.filters.session === 'evening'}>Evening</option
+					selected={data.filters.session === 'morning'}>Shift start</option
+				><option value="evening" selected={data.filters.session === 'evening'}>Shift end</option
 				></select
 			></label
 		>

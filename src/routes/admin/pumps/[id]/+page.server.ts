@@ -12,6 +12,15 @@ import {
 	removePhotoFiles,
 	type CleanupResult
 } from '$lib/server/sessionCleanup';
+import { getAttendanceSettings } from '$lib/server/settings';
+import { todayIST } from '$lib/server/time';
+import {
+	ShiftError,
+	adminEndShift,
+	moveShiftDate,
+	shiftStillOpen,
+	splitEndIntoStart
+} from '$lib/server/shiftSessions';
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -54,7 +63,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		          WHERE dpa.morning_matched AND dpa.evening_matched
 		        ) AS days_present,
 		        COUNT(dpa.id) FILTER (
-		          WHERE dpa.morning_matched AND NOT dpa.evening_matched
+		          WHERE dpa.morning_matched AND NOT dpa.evening_matched AND NOT ${shiftStillOpen('dpa')}
 		        ) AS days_morning_only,
 		        COUNT(dpa.id) FILTER (
 		          WHERE NOT dpa.morning_matched AND dpa.evening_matched
@@ -97,7 +106,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	);
 	const sessionLog = await query<any>(
 		`SELECT id, session_date, session_type, status, pairing_status, paired_session_id,
-		        submitted_at, processed_at, error_reason, photo_url,
+		        closed_by, submitted_at, processed_at, error_reason, photo_url,
 		        fraud_resolution, fraud_resolved_at,
 		        EXISTS (
 		          SELECT 1 FROM attendance_review_flags arf
@@ -174,7 +183,10 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const dailyTotals = await query<any>(
 		`SELECT session_date,
 		   COUNT(*) FILTER (WHERE morning_matched AND evening_matched) AS present,
-		   COUNT(*) FILTER (WHERE morning_matched AND NOT evening_matched) AS morning_only,
+		   COUNT(*) FILTER (
+		     WHERE morning_matched AND NOT evening_matched
+		       AND NOT ${shiftStillOpen('daily_person_attendance')}
+		   ) AS morning_only,
 		   COUNT(*) FILTER (WHERE evening_matched AND NOT morning_matched) AS evening_only
 		 FROM daily_person_attendance
 		 WHERE pump_id = $1 AND session_date >= $2 AND session_date <= $3
@@ -317,6 +329,45 @@ export const actions: Actions = {
 			deleteSession(client, sessionId, { cascadePairedEvening: true })
 		);
 	},
+	// Shift fixes for operator mistakes. Each runs in one transaction with an audit row.
+	// End session: close an open shift start as "start only" (no 9 h wait for admin).
+	endShift: async ({ params, request, locals }) => {
+		const sessionId = String((await request.formData()).get('session_id') || '');
+		return runShiftFix(locals.user!.id, params.id, 'end_shift', sessionId, async (client) => {
+			const result = await adminEndShift(client, params.id, sessionId);
+			return { details: result, message: 'Shift ended. Workers keep start-only attendance.' };
+		});
+	},
+	// Split: this shift end was really the next shift's start (the operator forgot to end).
+	splitShift: async ({ params, request, locals }) => {
+		const sessionId = String((await request.formData()).get('session_id') || '');
+		return runShiftFix(locals.user!.id, params.id, 'split_shift', sessionId, async (client) => {
+			const settings = await getAttendanceSettings(client);
+			const result = await splitEndIntoStart(
+				client,
+				params.id,
+				sessionId,
+				settings.evening_pairing_window_hours
+			);
+			return {
+				details: result,
+				message: `Split done. The ${result.fromDate} shift is start only, and this photo is now the shift start of ${result.toDate}${result.newStartOpen ? ' (waiting for its end)' : ''}.`
+			};
+		});
+	},
+	// Move to date: the shift (start and end) and its attendance move to another day.
+	moveShift: async ({ params, request, locals }) => {
+		const form = await request.formData();
+		const sessionId = String(form.get('session_id') || '');
+		const newDate = String(form.get('new_date') || '');
+		return runShiftFix(locals.user!.id, params.id, 'move_shift', sessionId, async (client) => {
+			const result = await moveShiftDate(client, params.id, sessionId, newDate, todayIST());
+			return {
+				details: result,
+				message: `Shift moved from ${result.fromDate} to ${result.toDate}.`
+			};
+		});
+	},
 	// Wipes every attendance record of this pump. The admin must type the pump code to confirm.
 	clearPumpData: async ({ params, request, locals }) => {
 		const form = await request.formData();
@@ -405,4 +456,37 @@ async function runAuditedCleanup(
 		success: true,
 		message: `Deleted ${result.sessionIds.length} session(s), ${result.personIds.length} worker record(s) and ${result.fraudFlagsDeleted} fraud flag(s). The pump can submit again.`
 	};
+}
+
+async function runShiftFix(
+	adminId: string,
+	pumpId: string,
+	action: 'end_shift' | 'split_shift' | 'move_shift',
+	sessionId: string,
+	fix: (client: PoolClient) => Promise<{ details: object; message: string }>
+) {
+	if (!UUID_PATTERN.test(sessionId)) return fail(400, { message: 'Invalid request.' });
+	const client = await pool.connect();
+	try {
+		await client.query('BEGIN');
+		const { details, message } = await fix(client);
+		await client.query(
+			`INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+			 VALUES ($1, $2, 'attendance_session', $3, $4)`,
+			[adminId, action, sessionId, JSON.stringify({ pump_id: pumpId, ...details })]
+		);
+		await client.query('COMMIT');
+		logger.warn({ adminId, pumpId, action, sessionId, ...details }, 'admin shift fix');
+		return { success: true, message };
+	} catch (fixError) {
+		await client.query('ROLLBACK').catch(() => {});
+		if (fixError instanceof ShiftError) return fail(400, { message: fixError.message });
+		logger.error(
+			{ adminId, pumpId, action, sessionId, error: String(fixError) },
+			'admin shift fix failed'
+		);
+		return fail(500, { message: 'Could not apply the fix. Nothing was changed.' });
+	} finally {
+		client.release();
+	}
 }

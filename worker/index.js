@@ -113,7 +113,7 @@ async function extractFaces(photoBuffer, requestId) {
 	return res.json();
 }
 
-// Same precedence as src/lib/server/settings.ts: admin setting > env > default (16h).
+// Same precedence as src/lib/server/settings.ts: admin setting > env > default (24h).
 async function pairingWindowHours(db) {
 	const { rows } = await db.query(
 		`SELECT value FROM app_settings WHERE key = 'evening_pairing_window_hours'`
@@ -121,7 +121,7 @@ async function pairingWindowHours(db) {
 	const stored = Number(rows[0]?.value);
 	if (Number.isFinite(stored) && stored > 0) return stored;
 	const fromEnv = Number(process.env.EVENING_PAIRING_WINDOW_HOURS);
-	return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 16;
+	return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 24;
 }
 
 async function expireStaleMornings(db) {
@@ -129,7 +129,7 @@ async function expireStaleMornings(db) {
 	const { rows } = await db.query(
 		`WITH expired AS (
 		   UPDATE attendance_sessions
-		   SET pairing_status = 'expired'
+		   SET pairing_status = 'expired', closed_by = 'timeout', closed_at = now()
 		   WHERE session_type = 'morning'
 		     AND status = 'completed'
 		     AND pairing_status = 'open'

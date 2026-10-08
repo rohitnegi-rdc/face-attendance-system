@@ -66,7 +66,7 @@ test('PAIR-01 evening is refused before the 9 hour production gap', async () => 
 	const morningId = await recordSession(context, ['PAIR01']);
 	const early = await submit(context, await photo(['PAIR01']));
 	expect(early.status).toBe(409);
-	expect(early.body.error).toMatch(/Evening attendance opens in [89] h/);
+	expect(early.body.error).toMatch(/Shift end opens in [89] h/);
 	expect(early.body.error).not.toContain('Test');
 
 	const today = await (await context.get('/api/attendance/today')).json();
@@ -101,13 +101,13 @@ test('PAIR-02/03 evening after 9 h pairs both rows, then the day is complete', a
 
 	const third = await submit(context, await photo(['PAIR02']));
 	expect(third.status).toBe(409);
-	expect(third.body.error).toContain('Day complete');
+	expect(third.body.error).toContain('already recorded');
 });
 
-test('PAIR-07 a missed evening does not swallow the next morning (16 h window)', async () => {
+test('PAIR-07 an open start older than the 24 h window auto-closes as start only', async () => {
 	const { context } = await newPump();
 	const yesterdayMorning = await recordSession(context, ['PAIR07']);
-	await shiftBack(yesterdayMorning, 17 * 60, true);
+	await shiftBack(yesterdayMorning, 25 * 60, true);
 
 	const next = await submit(context, await photo(['PAIR07']));
 	expect(next.status).toBe(202);
@@ -117,6 +117,10 @@ test('PAIR-07 a missed evening does not swallow the next morning (16 h window)',
 	);
 	expect(rows.find((row) => row.id === next.body.session_id).session_type).toBe('morning');
 	expect(rows.find((row) => row.id === yesterdayMorning).pairing_status).toBe('expired');
+	const closed = await db.query('SELECT closed_by FROM attendance_sessions WHERE id = $1', [
+		yesterdayMorning
+	]);
+	expect(closed.rows[0].closed_by).toBe('timeout');
 
 	const rollup = await db.query(
 		`SELECT y.days_morning_only FROM person_attendance_yearly y
@@ -127,17 +131,22 @@ test('PAIR-07 a missed evening does not swallow the next morning (16 h window)',
 	expect(rollup.rows[0]?.days_morning_only).toBe(1);
 });
 
-test('SET-01 admin can widen the window; the same gap then pairs as evening', async () => {
-	const admin = await login((await createAdmin()).email);
-	expect((await setSettings(admin, 540, 24)).type).toBe('success');
-
+test('SET-01 the 24 h default pairs a 17 h shift; an admin 16 h window closes it instead', async () => {
 	const { context } = await newPump();
-	const morningId = await recordSession(context, ['SET01']);
+	const longShift = await recordSession(context, ['SET01']);
+	await shiftBack(longShift, 17 * 60, true);
+	const end = await submit(context, await photo(['SET01']));
+	expect(end.status).toBe(202);
+	expect((await waitForSession(end.body.session_id, ['review'])).session_type).toBe('evening');
+
+	const admin = await login((await createAdmin()).email);
+	expect((await setSettings(admin, 540, 16)).type).toBe('success');
+	const other = await newPump();
+	const morningId = await recordSession(other.context, ['SET01B']);
 	await shiftBack(morningId, 17 * 60, true);
-	const next = await submit(context, await photo(['SET01']));
+	const next = await submit(other.context, await photo(['SET01B']));
 	expect(next.status).toBe(202);
-	const session = await waitForSession(next.body.session_id, ['review']);
-	expect(session.session_type).toBe('evening');
+	expect((await waitForSession(next.body.session_id, ['review'])).session_type).toBe('morning');
 });
 
 test('SET-02 admin can shorten the evening gap for testing, and it is audited', async () => {

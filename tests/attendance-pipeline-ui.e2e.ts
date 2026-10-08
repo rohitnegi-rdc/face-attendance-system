@@ -143,8 +143,8 @@ test.describe.serial('real pump attendance pipeline', () => {
 		await page.setViewportSize({ width: 390, height: 844 });
 		await page.goto('/pump');
 
-		await expect(page.getByTestId('session-title')).toHaveText('Morning attendance');
-		await expect(page.getByText('Morning open', { exact: true })).toBeVisible();
+		await expect(page.getByTestId('session-title')).toHaveText('Start shift');
+		await expect(page.getByText('Start open', { exact: true })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'Submit group photo' })).toHaveCount(0);
 
 		const morningBytes = await taggedFixture('photos/b-01-baseline.jpg', 'flow-morning');
@@ -190,7 +190,7 @@ test.describe.serial('real pump attendance pipeline', () => {
 		expect(morningStatus.matched).toHaveLength(0);
 
 		await page.getByRole('button', { name: 'Done' }).click();
-		await expect(page.getByTestId('session-title')).toHaveText('Evening attendance scheduled');
+		await expect(page.getByTestId('session-title')).toHaveText('Shift in progress');
 		await expect(page.getByText('Waiting', { exact: true })).toBeVisible();
 		await expect(page.getByText(/^Available /)).toBeVisible();
 		await page.screenshot({
@@ -211,8 +211,8 @@ test.describe.serial('real pump attendance pipeline', () => {
 			[morningSessionId]
 		);
 		await page.reload();
-		await expect(page.getByTestId('session-title')).toHaveText('Evening attendance');
-		await expect(page.getByText('Evening open', { exact: true })).toBeVisible();
+		await expect(page.getByTestId('session-title')).toHaveText('End shift');
+		await expect(page.getByText('End open', { exact: true })).toBeVisible();
 
 		await page.getByTestId('capture-input').setInputFiles({
 			name: 'b-02-lowlight.jpg',
@@ -279,7 +279,7 @@ test.describe.serial('real pump attendance pipeline', () => {
 		});
 
 		await page.getByRole('button', { name: 'Done' }).click();
-		await expect(page.getByTestId('session-title')).toHaveText('Attendance complete');
+		await expect(page.getByTestId('session-title')).toHaveText('Shift complete');
 		await expect(page.getByText('Complete', { exact: true })).toBeVisible();
 		await submitApi(request, pump, 'photos/a-04-center-crop.jpg', 409);
 	});

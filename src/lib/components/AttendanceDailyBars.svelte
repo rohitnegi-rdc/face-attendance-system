@@ -60,7 +60,7 @@
 			orderedData
 				.map((d: any) => {
 					const label = formatDayLabel(d.day);
-					return `${label.weekday} ${label.date}: ${d.present} present, ${d.morningOnly} morning only, ${d.eveningOnly} evening only, ${d.absent} absent`;
+					return `${label.weekday} ${label.date}: ${d.present} present, ${d.morningOnly} start only, ${d.eveningOnly} end only, ${d.absent} absent`;
 				})
 				.join('; ')
 	);
@@ -112,8 +112,8 @@
 
 <div class="legend" aria-label="Attendance trend legend">
 	<span><b class="legend__swatch legend__swatch--present"></b> Present</span>
-	<span><b class="legend__swatch legend__swatch--morning"></b> Morning only</span>
-	<span><b class="legend__swatch legend__swatch--evening"></b> Evening only</span>
+	<span><b class="legend__swatch legend__swatch--morning"></b> Start only</span>
+	<span><b class="legend__swatch legend__swatch--evening"></b> End only</span>
 	<span><b class="legend__swatch legend__swatch--absent"></b> Absent</span>
 </div>
 

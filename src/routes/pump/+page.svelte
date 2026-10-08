@@ -53,6 +53,8 @@
 	let currentSessionId = $state('');
 	let retryingSession = $state(false);
 	let approvingReview = $state(false);
+	let endingSession = $state(false);
+	let endSessionError = $state('');
 	let selectedWorkerPreview = $state<WorkerPreview | null>(null);
 	let workerPreviewDialog = $state<HTMLElement>();
 	let workerPreviewCloseButton = $state<HTMLButtonElement>();
@@ -224,7 +226,7 @@
 			return;
 		}
 
-		const sessionName = today?.state === 'evening' ? 'evening' : 'morning';
+		const sessionName = today?.state === 'evening' ? 'shift-end' : 'shift-start';
 		const file = new File([blob], `camera-${sessionName}-${Date.now()}.jpg`, {
 			type: 'image/jpeg'
 		});
@@ -304,7 +306,7 @@
 			return;
 		}
 
-		const sessionName = today?.state === 'evening' ? 'evening' : 'morning';
+		const sessionName = today?.state === 'evening' ? 'shift-end' : 'shift-start';
 		const file = new File([blob], `video-call-${sessionName}-${Date.now()}.jpg`, {
 			type: 'image/jpeg'
 		});
@@ -436,14 +438,43 @@
 		errorMsg = 'Processing is taking longer than expected. Please retry the status check.';
 	}
 
+	// Faces held by a fraud flag are not counted here until an admin clears them.
+	const peopleFound = $derived((result?.matched?.length || 0) + (result?.new_persons?.length || 0));
+
+	// API states keep the database words: morning = shift start, evening = shift end.
 	const sessionTitle = $derived.by(() => {
-		if (today?.state === 'locked') return 'Attendance complete';
+		if (today?.state === 'locked')
+			return today?.shift_outcome === 'start_only' ? 'Shift ended (start only)' : 'Shift complete';
 		if (today?.state === 'review') return 'Review attendance';
-		if (today?.state === 'evening' && today?.can_submit === false)
-			return 'Evening attendance scheduled';
-		if (today?.state === 'evening') return 'Evening attendance';
-		return 'Morning attendance';
+		if (today?.state === 'evening' && today?.can_submit === false) return 'Shift in progress';
+		if (today?.state === 'evening') return 'End shift';
+		return 'Start shift';
 	});
+
+	async function endSession() {
+		if (endingSession) return;
+		if (
+			!confirm(
+				'End this shift without a photo? Workers keep start-only attendance. Your next photo will start a new shift.'
+			)
+		)
+			return;
+		endingSession = true;
+		endSessionError = '';
+		try {
+			const res = await fetch(resolve('/api/attendance/end'), { method: 'POST' });
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				endSessionError = body.error || 'Could not end the session.';
+				return;
+			}
+			await loadToday();
+		} catch {
+			endSessionError = 'Could not connect. Please try again.';
+		} finally {
+			endingSession = false;
+		}
+	}
 
 	function formatIST(value: string | null | undefined) {
 		if (!value) return '';
@@ -515,7 +546,7 @@
 <div class="capture-page">
 	<header class="capture-heading">
 		<div>
-			<p class="eyebrow">Today's session</p>
+			<p class="eyebrow">Shift attendance</p>
 			<h1 data-testid="session-title">{sessionTitle}</h1>
 			<p>
 				{today?.pump_code ? `${today.pump_code} - ${today.plant_name}` : 'Group photo attendance'}
@@ -524,12 +555,18 @@
 		{#if todayLoading}
 			<span class="status-badge"><LoaderCircle class="spin" size={14} /> Checking</span>
 		{:else if today?.state === 'locked'}
-			<span class="status-badge status-badge--success"><Check size={14} /> Complete</span>
+			{#if today?.shift_outcome === 'start_only'}
+				<span class="status-badge" data-testid="shift-badge">Start only</span>
+			{:else}
+				<span class="status-badge status-badge--success" data-testid="shift-badge"
+					><Check size={14} /> Complete</span
+				>
+			{/if}
 		{:else}
 			<span class="status-badge">
 				{today?.can_submit === false
 					? 'Waiting'
-					: `${today?.state === 'evening' ? 'Evening' : 'Morning'} open`}
+					: `${today?.state === 'evening' ? 'End' : 'Start'} open`}
 			</span>
 		{/if}
 	</header>
@@ -702,12 +739,20 @@
 			{:else if status === 'completed' && result}
 				<div class="results" data-testid="result-screen">
 					<div class="result-summary">
-						<span class="result-icon result-icon--success"><Check size={25} /></span>
+						{#if peopleFound > 0}
+							<span class="result-icon result-icon--success"><Check size={25} /></span>
+						{:else}
+							<span class="result-icon"><ShieldAlert size={25} /></span>
+						{/if}
 						<div>
 							<p class="eyebrow">Review before completing</p>
-							<h2>
-								{(result.matched?.length || 0) + (result.new_persons?.length || 0)} people found
+							<h2 data-testid="result-heading">
+								{peopleFound}
+								{peopleFound === 1 ? 'person' : 'people'} marked present
 							</h2>
+							{#if result.fraud_flags?.length}
+								<p data-testid="result-held">{result.fraud_flags.length} held for admin review</p>
+							{/if}
 						</div>
 					</div>
 					{#if result.liveness_summary?.suspicious || result.liveness_summary?.unverified}
@@ -810,9 +855,11 @@
 						<div class="result-group attention-group">
 							<h3>Needs review <span>{result.fraud_flags.length}</span></h3>
 							{#each result.fraud_flags as flag}
-								<p>
-									{flag.person_label || 'An attendance overlap'} was also found at {flag.other_pump_code ||
-										'another pump'}.
+								<p data-testid="fraud-flag-line">
+									A face in this photo matches {flag.person_label || 'a worker'}, already marked at
+									{flag.other_pump_code || 'another pump'}{flag.other_plant_name
+										? ` (${flag.other_plant_name})`
+										: ''}. Not counted here until an admin checks it.
 								</p>
 							{/each}
 						</div>
@@ -855,21 +902,46 @@
 					<dl>
 						<div>
 							<dt>Date</dt>
-							<dd>{today?.today || 'Today'}</dd>
+							<dd>{today?.shift_date || today?.today || 'Today'}</dd>
 						</div>
+						{#if today?.shift_started_at}
+							<div>
+								<dt>Started</dt>
+								<dd>{formatIST(today.shift_started_at)}</dd>
+							</div>
+						{/if}
 						<div>
 							<dt>Next step</dt>
-							<dd>
+							<dd data-testid="next-step">
 								{today?.state === 'locked'
-									? 'No more uploads today'
+									? today?.shift_outcome === 'start_only'
+										? 'Shift ended without an end photo. The next shift starts tomorrow.'
+										: 'Shift recorded. The next shift starts tomorrow.'
 									: today?.state === 'review'
 										? 'Finish reviewing the submitted group photo'
-										: today?.can_submit === false
-											? `Available ${formatIST(today?.next_allowed_at)}`
-											: 'Submit the group photo'}
+										: today?.state === 'evening' && today?.can_submit === false
+											? `Shift end opens ${formatIST(today?.next_allowed_at)}`
+											: today?.state === 'evening'
+												? 'Submit the group photo to end the shift'
+												: 'Submit the group photo to start the shift'}
 							</dd>
 						</div>
 					</dl>
+					{#if today?.can_end_session}
+						<div class="end-session">
+							<p>Missed the end photo? End the shift here so your next photo starts a new one.</p>
+							<button
+								class="button button--secondary full-button"
+								type="button"
+								onclick={endSession}
+								disabled={endingSession}
+								data-testid="end-session"
+							>
+								{endingSession ? 'Ending session' : 'End session'}
+							</button>
+							{#if endSessionError}<p class="capture-error">{endSessionError}</p>{/if}
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</aside>
@@ -934,7 +1006,7 @@
 			<dl class="worker-preview-meta">
 				<div>
 					<dt>Session</dt>
-					<dd>{result?.session_type === 'evening' ? 'Evening' : 'Morning'}</dd>
+					<dd>{result?.session_type === 'evening' ? 'Shift end' : 'Shift start'}</dd>
 				</div>
 				<div>
 					<dt>Result</dt>
@@ -943,11 +1015,11 @@
 				<div>
 					<dt>Daily match</dt>
 					<dd>
-						{selectedWorkerPreview.morning_matched ? 'Morning' : ''}
+						{selectedWorkerPreview.morning_matched ? 'Start' : ''}
 						{selectedWorkerPreview.morning_matched && selectedWorkerPreview.evening_matched
 							? ' and '
 							: ''}
-						{selectedWorkerPreview.evening_matched ? 'Evening' : ''}
+						{selectedWorkerPreview.evening_matched ? 'End' : ''}
 						{!selectedWorkerPreview.morning_matched && !selectedWorkerPreview.evening_matched
 							? 'New attendance'
 							: ''}
@@ -1454,6 +1526,18 @@
 		gap: var(--space-3);
 		padding-top: var(--space-3);
 		border-top: 1px solid var(--brand-mist);
+	}
+	.end-session {
+		display: grid;
+		gap: var(--space-2);
+		margin-top: var(--space-5);
+		padding-top: var(--space-4);
+		border-top: 1px solid var(--brand-mist);
+	}
+	.end-session p {
+		margin: 0;
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
 	}
 	.session-details dt {
 		color: var(--ink-muted);

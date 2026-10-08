@@ -29,8 +29,14 @@
 		flagged: boolean;
 	};
 
-	let { session, showUnavailable = true }: { session: SessionEvidence; showUnavailable?: boolean } =
-		$props();
+	// collapsePeople folds long worker lists behind a disclosure so table rows stay short.
+	let {
+		session,
+		showUnavailable = true,
+		collapsePeople = false
+	}: { session: SessionEvidence; showUnavailable?: boolean; collapsePeople?: boolean } = $props();
+
+	const folded = $derived(collapsePeople && session.people.length > 3);
 
 	let dialog: HTMLDialogElement;
 	let selected = $state<SelectedEvidence | null>(null);
@@ -72,7 +78,7 @@
 		<span class="evidence-unavailable">Group photo unavailable</span>
 	{/if}
 
-	{#each session.people as person}
+	{#snippet personButton(person: PersonEvidence)}
 		{#if person.cropUrl}
 			<button
 				class="button button--secondary evidence-button"
@@ -92,7 +98,18 @@
 		{:else if showUnavailable}
 			<span class="evidence-unavailable">{person.label} photo unavailable</span>
 		{/if}
-	{/each}
+	{/snippet}
+
+	{#if folded}
+		<details class="evidence-people" data-testid="evidence-people">
+			<summary>{session.people.length} workers</summary>
+			<div class="evidence-people__list">
+				{#each session.people as person}{@render personButton(person)}{/each}
+			</div>
+		</details>
+	{:else}
+		{#each session.people as person}{@render personButton(person)}{/each}
+	{/if}
 </div>
 
 <dialog
@@ -155,6 +172,21 @@
 		min-height: 2.25rem;
 		padding: var(--space-1) var(--space-2);
 		font-size: var(--text-xs);
+	}
+	.evidence-people {
+		flex-basis: 100%;
+	}
+	.evidence-people summary {
+		cursor: pointer;
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
+		font-weight: 700;
+	}
+	.evidence-people__list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		margin-top: var(--space-2);
 	}
 	.evidence-unavailable {
 		align-self: center;

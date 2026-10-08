@@ -5,12 +5,13 @@ import { pool } from './db';
 // Precedence: app_settings row > env var > default. worker/index.js reads the pairing window the
 // same way (it cannot import this file), so keep the key names and defaults in sync with it.
 export const ATTENDANCE_SETTING_DEFAULTS = {
-	// Evening needs this many minutes after the morning photo (non-negotiable: 9h for production).
+	// Shift end needs this many minutes after the shift start photo (non-negotiable: 9h for
+	// production). After it the pump screen also offers "End session" (close without a photo).
 	evening_min_gap_minutes: 540,
-	// An open morning stops waiting for its evening after this many hours. 16h covers a normal
-	// shift plus night shifts that cross midnight, but stops a missed evening from swallowing the
-	// next day's morning photo.
-	evening_pairing_window_hours: 16
+	// An open shift start is auto-closed as "start only" after this many hours. 24h lets a shift
+	// start at any time of day, late evening included; the pump's End session button (and the
+	// admin Split fix) covers a missed end photo.
+	evening_pairing_window_hours: 24
 } as const;
 
 export const ATTENDANCE_SETTING_LIMITS = {

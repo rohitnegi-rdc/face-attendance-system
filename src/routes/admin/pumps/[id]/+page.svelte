@@ -8,6 +8,7 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
+	import { shiftOutcomeLabel, shiftTypeLabel } from '$lib/shiftLabels';
 
 	let { data, form } = $props();
 	let from = $state('');
@@ -107,9 +108,9 @@
 					<thead>
 						<tr>
 							<th>Day</th>
-							<th>Present</th>
-							<th>Morning</th>
-							<th>Evening</th>
+							<th>Full shift</th>
+							<th>Start only</th>
+							<th>End only</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -133,11 +134,10 @@
 				</table>
 			</div>
 			<p class="footnote">
-				{data.rejectionCounts.morningOnly} morning-only session{data.rejectionCounts.morningOnly ===
-				1
+				{data.rejectionCounts.morningOnly} start-only shift{data.rejectionCounts.morningOnly === 1
 					? ''
-					: 's'} this range &middot; {data.rejectionCounts.morningAwaiting} awaiting evening &middot;
-				{data.rejectionCounts.morningExpired} expired
+					: 's'} this range &middot; {data.rejectionCounts.morningAwaiting} waiting for end &middot;
+				{data.rejectionCounts.morningExpired} closed without end
 			</p>
 		</section>
 	</div>
@@ -179,20 +179,27 @@
 		<div class="section-header">
 			<div>
 				<h2>Session log</h2>
-				<p class="supporting-text">Persisted sessions and pairing outcomes.</p>
+				<p class="supporting-text">
+					Every start and end photo. Use Fix shift when the pump forgot to end, or a shift is on the
+					wrong date. Each fix is recorded in the admin audit log.
+				</p>
 			</div>
 		</div>
 		<div class="table-wrap bounded-table-frame">
-			<table class="data-table">
+			<table class="data-table session-log-table">
 				<thead
 					><tr
-						><th>Submitted</th><th>Type</th><th>Status</th><th>Pairing</th><th>Evidence</th><th
+						><th>Submitted</th><th>Photo</th><th>Status</th><th>Shift</th><th>Evidence</th><th
 							>Error or rejection</th
 						><th>Admin</th></tr
 					></thead
 				><tbody
 					>{#each data.sessionLog as session}<tr
-							><td>{formatDate(session.submitted_at)}</td><td>{session.session_type}</td><td
+							><td>{formatDate(session.submitted_at)}</td><td
+								>{shiftTypeLabel(session.session_type)}<br /><small class="supporting-text"
+									>for {formatDate(session.session_date)}</small
+								></td
+							><td
 								><StatusBadge
 									tone={session.status === 'completed'
 										? 'success'
@@ -201,8 +208,8 @@
 											: 'pending'}
 									label={session.status}
 								/></td
-							><td>{session.pairing_status}</td><td
-								><AttendanceEvidenceButtons session={session.evidence} /></td
+							><td>{shiftOutcomeLabel(session)}</td><td
+								><AttendanceEvidenceButtons session={session.evidence} collapsePeople /></td
 							><td
 								>{#if session.status === 'fraud_detected'}<div class="fraud-review">
 										{#if session.fraud_resolution === 'marked_normal'}<span
@@ -227,10 +234,7 @@
 													>Confirm fraud</button
 												>
 											</form>{/if}
-									</div>{:else}{session.error_reason ||
-										(session.pairing_status === 'expired'
-											? 'Morning session expired unpaired'
-											: '—')}{/if}</td
+									</div>{:else}{session.error_reason || '—'}{/if}</td
 							><td
 								><form
 									method="POST"
@@ -238,8 +242,8 @@
 									onsubmit={(event) => {
 										const scope =
 											session.session_type === 'morning' && session.pairing_status === 'paired'
-												? 'this morning and its paired evening'
-												: `this ${session.session_type} session`;
+												? 'this shift start and its shift end'
+												: `this ${shiftTypeLabel(session.session_type).toLowerCase()}`;
 										if (
 											!confirm(
 												`Delete ${scope}? Attendance, new workers and fraud flags from it are removed and the pump can submit again. This cannot be undone.`
@@ -252,15 +256,70 @@
 										type="submit"
 										class="button button--secondary">Delete / reset</button
 									>
-								</form></td
+								</form>
+								{#if session.status !== 'fraud_detected'}
+									<details class="shift-fix" data-testid="shift-fix">
+										<summary>Fix shift</summary>
+										<div class="shift-fix__body">
+											{#if session.session_type === 'morning' && session.pairing_status === 'open' && session.status === 'completed'}
+												<form
+													method="POST"
+													action="?/endShift"
+													onsubmit={(event) => {
+														if (
+															!confirm(
+																'End this shift now? Workers keep start-only attendance and the next photo starts a new shift.'
+															)
+														)
+															event.preventDefault();
+													}}
+												>
+													<input type="hidden" name="session_id" value={session.id} />
+													<button type="submit" class="button button--secondary">End session</button
+													>
+													<small>Close it as start only.</small>
+												</form>
+											{/if}
+											{#if session.session_type === 'evening'}
+												<form
+													method="POST"
+													action="?/splitShift"
+													onsubmit={(event) => {
+														if (
+															!confirm(
+																'Make this photo a new shift start? The earlier start becomes start only and attendance from this photo moves to the day it was taken.'
+															)
+														)
+															event.preventDefault();
+													}}
+												>
+													<input type="hidden" name="session_id" value={session.id} />
+													<button type="submit" class="button button--secondary"
+														>Split: this end is a new start</button
+													>
+													<small>Use when the pump forgot to end the previous shift.</small>
+												</form>
+											{/if}
+											<form method="POST" action="?/moveShift" class="shift-fix__move">
+												<input type="hidden" name="session_id" value={session.id} />
+												<label>
+													Move shift to
+													<input type="date" name="new_date" required />
+												</label>
+												<button type="submit" class="button button--secondary">Move</button>
+												<small>Moves the start, its end and that day's attendance together.</small>
+											</form>
+										</div>
+									</details>
+								{/if}</td
 							></tr
 						>{/each}</tbody
 				>
 			</table>
 		</div>
 		<p class="footnote">
-			Nine-hour and duplicate-photo rejections occur before a session is created, so only the
-			operator’s live response contains them.
+			Shift end too early and duplicate-photo rejections occur before a session is created, so only
+			the operator’s live response contains them.
 		</p>
 		{#if data.sessionPagination.totalPages > 1}
 			<nav class="pager" aria-label="Session log pagination">
@@ -283,9 +342,9 @@
 			<table class="data-table">
 				<thead
 					><tr
-						><th>Person</th><th>First seen</th><th>Last seen</th><th>Present</th><th
-							>Morning only</th
-						><th>Evening only</th></tr
+						><th>Person</th><th>First seen</th><th>Last seen</th><th>Full shift</th><th
+							>Start only</th
+						><th>End only</th></tr
 					></thead
 				><tbody
 					>{#each data.roster as person}<tr
@@ -346,6 +405,45 @@
 	}
 	.danger-zone {
 		border: 1px solid var(--critical, #b42318);
+	}
+	/* Shift outcome and the Admin fixes wrap badly when squeezed. */
+	.session-log-table td:nth-child(4) {
+		min-width: 9rem;
+	}
+	.session-log-table td:nth-child(7) {
+		min-width: 12rem;
+	}
+	.shift-fix {
+		margin-top: var(--space-2);
+	}
+	.shift-fix summary {
+		cursor: pointer;
+		font-size: var(--text-sm);
+		font-weight: 700;
+		color: var(--brand-teal);
+	}
+	.shift-fix__body {
+		display: grid;
+		gap: var(--space-3);
+		min-width: 15rem;
+		margin-top: var(--space-2);
+		padding: var(--space-3);
+		background: var(--surface-subtle);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+	}
+	.shift-fix__body form {
+		display: grid;
+		gap: var(--space-1);
+		justify-items: start;
+	}
+	.shift-fix__body small {
+		color: var(--ink-muted);
+	}
+	.shift-fix__move label {
+		display: grid;
+		gap: var(--space-1);
+		font-size: var(--text-sm);
 	}
 	.danger-form {
 		display: flex;
