@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import ScanFace from '@lucide/svelte/icons/scan-face';
 	import LogOut from '@lucide/svelte/icons/log-out';
 
@@ -9,14 +10,14 @@
 
 	async function signOut(event: SubmitEvent) {
 		event.preventDefault();
-		const response = await fetch('/api/auth/logout', { method: 'POST' });
-		if (response.ok) window.location.assign('/login');
+		const response = await fetch(resolve('/api/auth/logout'), { method: 'POST' });
+		if (response.ok) window.location.assign(resolve('/login'));
 	}
 </script>
 
 <div class="pump-shell">
 	<header class="pump-topbar">
-		<a class="pump-brand" href="/pump" aria-label="Face Attendance pump home">
+		<a class="pump-brand" href={resolve('/pump')} aria-label="Face Attendance pump home">
 			<span class="pump-brand__mark"><ScanFace size={21} /></span>
 			<span>
 				<strong>Face Attendance</strong>

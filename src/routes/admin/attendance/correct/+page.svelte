@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Save from '@lucide/svelte/icons/save';
 	import UserMinus from '@lucide/svelte/icons/user-minus';
@@ -21,7 +22,7 @@
 <div class="page correction-page">
 	<header class="page-header">
 		<div class="page-header__copy">
-			<a class="back-link" href={`/admin/attendance?day=${data.day}`}>
+			<a class="back-link" href={resolve(`/admin/attendance?day=${data.day}`)}>
 				<ArrowLeft size={17} /> Attendance
 			</a>
 			<h1>Correct attendance</h1>
@@ -50,8 +51,8 @@
 						<span>{session ? session.status : 'Not submitted'}</span>
 					</figcaption>
 					{#if session?.has_photo}
-						<a href={`/api/attendance/photo/${session.id}`} target="_blank" rel="noreferrer">
-							<img src={`/api/attendance/photo/${session.id}`} alt={`${sessionType} group attendance evidence`} />
+						<a href={resolve(`/api/attendance/photo/${session.id}`)} target="_blank" rel="noreferrer">
+							<img src={resolve(`/api/attendance/photo/${session.id}`)} alt={`${sessionType} group attendance evidence`} />
 						</a>
 					{:else}
 						<div class="evidence-empty">No photo available</div>

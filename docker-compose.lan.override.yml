@@ -1,0 +1,19 @@
+services:
+  # PostgreSQL is only needed by the app and worker on Docker's internal network.
+  # Avoid publishing it when another local project already owns host port 5433.
+  postgres:
+    ports: !reset []
+
+  lan-https:
+    build: .
+    command: ['node', 'scripts/lan-https-proxy.mjs']
+    environment:
+      LAN_HTTPS_PORT: '3443'
+      UPSTREAM_HOST: app
+      UPSTREAM_PORT: '3000'
+    ports:
+      - '3443:3443'
+    volumes:
+      - ./.lan-tls:/tls:ro
+    depends_on:
+      - app

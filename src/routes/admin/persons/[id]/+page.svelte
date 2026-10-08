@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AttendanceEvidenceButtons from '$lib/components/AttendanceEvidenceButtons.svelte';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
@@ -32,7 +33,7 @@
 >
 
 <div class="page person-page">
-	<a class="back-link" href={`/admin/pumps/${data.person.pump_id}`}
+	<a class="back-link" href={resolve(`/admin/pumps/${data.person.pump_id}`)}
 		><ArrowLeft size={16} /> {data.person.pump_code}</a
 	>
 	<header class="page-header">
@@ -107,7 +108,7 @@
 												id: history.morning_session_id,
 												sessionType: 'morning',
 												groupPhotoUrl: history.morning_photo_url
-													? `/api/attendance/photo/${history.morning_session_id}`
+													? resolve(`/api/attendance/photo/${history.morning_session_id}`)
 													: null,
 												groupFlagged: history.morning_group_flagged,
 												people: [
@@ -130,7 +131,7 @@
 												id: history.evening_session_id,
 												sessionType: 'evening',
 												groupPhotoUrl: history.evening_photo_url
-													? `/api/attendance/photo/${history.evening_session_id}`
+													? resolve(`/api/attendance/photo/${history.evening_session_id}`)
 													: null,
 												groupFlagged: history.evening_group_flagged,
 												people: [

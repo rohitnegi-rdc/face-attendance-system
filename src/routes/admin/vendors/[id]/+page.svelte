@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import ArrowDownUp from '@lucide/svelte/icons/arrow-down-up';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
@@ -42,7 +43,7 @@
 <svelte:head><title>{data.vendor.name} | Face Attendance</title></svelte:head>
 
 <div class="page detail-page">
-	<a class="back-link" href="/admin/attendance"><ArrowLeft size={16} /> Attendance records</a>
+	<a class="back-link" href={resolve('/admin/attendance')}><ArrowLeft size={16} /> Attendance records</a>
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Vendor</p>
@@ -92,7 +93,7 @@
 					></thead
 				><tbody
 					>{#each sortedPumps as pump}<tr
-							><td><a href={`/admin/pumps/${pump.id}`}>{pump.pump_code}</a></td><td
+							><td><a href={resolve(`/admin/pumps/${pump.id}`)}>{pump.pump_code}</a></td><td
 								>{pump.plant_name}</td
 							><td>{pump.area_name}</td><td>{pump.attendancePct}%</td></tr
 						>{/each}</tbody

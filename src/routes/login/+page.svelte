@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
@@ -17,7 +18,7 @@
 		isSubmitting = true;
 
 		try {
-			const res = await fetch('/api/auth/login', {
+			const res = await fetch(resolve('/api/auth/login'), {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ email, password })
@@ -27,7 +28,7 @@
 				error = data.error || 'We could not sign you in. Check your details and try again.';
 				return;
 			}
-			window.location.href = `/${data.role}`;
+			window.location.href = resolve(data.mustChangePassword ? '/change-password' : `/${data.role as 'admin' | 'vendor' | 'plant-manager' | 'pump'}`);
 		} catch {
 			error = 'The service is not reachable right now. Please try again.';
 		} finally {
@@ -108,7 +109,7 @@
 		{#if data.googleOAuthEnabled}
 			<div class="login-divider" aria-hidden="true"><span>or</span></div>
 			{#if data.oauthError}<p class="alert alert--error" role="alert">{data.oauthError}</p>{/if}
-			<a class="button button--secondary google-login" href="/api/auth/google/start">
+			<a class="button button--secondary google-login" href={resolve('/api/auth/google/start')}>
 				Continue with RDC Google account
 			</a>
 			<p class="oauth-note">Only existing rdc.in accounts can sign in.</p>

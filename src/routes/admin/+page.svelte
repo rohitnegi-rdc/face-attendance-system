@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import CalendarCheck from '@lucide/svelte/icons/calendar-check';
 	import ScanSearch from '@lucide/svelte/icons/scan-search';
@@ -28,19 +29,19 @@
 		{
 			label: 'Fraud flags',
 			count: data.metrics.fraudFlagsToday,
-			href: '/admin/fraud-flags',
+			href: resolve('/admin/fraud-flags'),
 			detail: 'Cross-pump overlaps detected today'
 		},
 		{
 			label: 'Guest review',
 			count: data.metrics.pendingGuestReviews,
-			href: '/admin/flagged-guests',
+			href: resolve('/admin/flagged-guests'),
 			detail: 'Unmatched faces awaiting a decision'
 		},
 		{
 			label: 'Merge review',
 			count: data.metrics.pendingMergeReviews,
-			href: '/admin/merge-candidates',
+			href: resolve('/admin/merge-candidates'),
 			detail: 'Possible same-pump duplicates'
 		}
 	]);
@@ -54,7 +55,7 @@
 			<h1>Attendance operations</h1>
 			<p>See today’s coverage, resolve exceptions, and inspect recent submissions.</p>
 		</div>
-		<a class="button button--secondary" href="/admin/insights"
+		<a class="button button--secondary" href={resolve('/admin/insights')}
 			>Open insights <ArrowRight size={17} /></a
 		>
 	</header>
@@ -130,7 +131,7 @@
 				<h2>Latest submissions</h2>
 				<p class="supporting-text">Most recent morning and evening uploads across pumps.</p>
 			</div>
-			<a href="/admin/attendance">View records</a>
+			<a href={resolve('/admin/attendance')}>View records</a>
 		</div>
 		<div class="table-wrap">
 			<table class="data-table">
@@ -141,7 +142,7 @@
 				<tbody>
 					{#each data.recentActivity as session}
 						<tr>
-							<td><a href={`/admin/pumps/${session.pump_id}`}>{session.pump_code}</a></td>
+							<td><a href={resolve(`/admin/pumps/${session.pump_id}`)}>{session.pump_code}</a></td>
 							<td>{session.plant_name}</td>
 							<td><span class="session-type">{session.session_type === 'morning' ? 'Morning' : 'Evening'}</span></td>
 							<td>{formatDate(session.submitted_at)}</td>

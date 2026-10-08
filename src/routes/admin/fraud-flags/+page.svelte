@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import Check from '@lucide/svelte/icons/check';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import EmptyState from '$lib/components/EmptyState.svelte';
@@ -69,7 +70,7 @@
 									</div>
 								</dl>
 								{#if flag.flagged_photo_available}
-					<a href={`/api/attendance/photo/${flag.session_id}`} target="_blank" rel="noopener noreferrer"
+					<a href={resolve(`/api/attendance/photo/${flag.session_id}`)} target="_blank" rel="noopener noreferrer"
 										>View group photo</a
 									>
 								{:else}
@@ -91,7 +92,7 @@
 									</div>
 								</dl>
 								{#if flag.matched_photo_available}
-					<a href={`/api/attendance/photo/${flag.matched_session_id}`} target="_blank" rel="noopener noreferrer"
+					<a href={resolve(`/api/attendance/photo/${flag.matched_session_id}`)} target="_blank" rel="noopener noreferrer"
 										>View group photo</a
 									>
 								{:else}

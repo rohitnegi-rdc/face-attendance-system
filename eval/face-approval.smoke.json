@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "profile": "group-corpus-smoke-approval",
+  "manifest_kind": "group-e2e",
+  "description": "Fast approval smoke profile for the checked-in group-photo corpus.",
+  "face_match_threshold": 0.68,
+  "save_embeddings": false,
+  "approval_gates": {
+    "dataset.min_photos": 4,
+    "detection.min_visible_face_recall": 0.5,
+    "embedding.max_contract_error_rate": 0,
+    "latency.max_p95_processing_ms": 35000,
+    "system.max_failed_images": 0
+  }
+}

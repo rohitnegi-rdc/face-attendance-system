@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { asset, resolve } from '$app/paths';
 	import Download from '@lucide/svelte/icons/download';
 	import FileCheck from '@lucide/svelte/icons/file-check';
 	import FileUp from '@lucide/svelte/icons/file-up';
@@ -69,7 +70,7 @@
 		const form = new FormData();
 		form.append('file', selectedFile);
 		try {
-			const res = await fetch('/api/admin/import/csv', { method: 'POST', body: form });
+			const res = await fetch(resolve('/api/admin/import/csv'), { method: 'POST', body: form });
 			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
 				error = body.error || 'The import could not be completed.';
@@ -130,7 +131,7 @@
 		const form = new FormData();
 		form.append('file', pmSelectedFile);
 		try {
-			const res = await fetch('/api/admin/import/plant-managers', { method: 'POST', body: form });
+			const res = await fetch(resolve('/api/admin/import/plant-managers'), { method: 'POST', body: form });
 			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
 				pmError = body.error || 'The import could not be completed.';
@@ -157,7 +158,7 @@
 				duplicating pumps.
 			</p>
 		</div>
-		<a class="button button--secondary" href="/import-template.csv" download
+		<a class="button button--secondary" href={asset('/import-template.csv')} download
 			><Download size={17} /> Download template</a
 		>
 	</header>
@@ -268,7 +269,7 @@
 				routing notification emails.
 			</p>
 		</div>
-		<a class="button button--secondary" href="/plant-managers-template.csv" download
+		<a class="button button--secondary" href={asset('/plant-managers-template.csv')} download
 			><Download size={17} /> Download template</a
 		>
 	</header>

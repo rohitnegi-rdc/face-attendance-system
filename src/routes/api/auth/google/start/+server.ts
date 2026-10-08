@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { redirect } from '@sveltejs/kit';
 import { CodeChallengeMethod } from 'google-auth-library';
 import type { RequestHandler } from './$types';
+import { COOKIE_PATH } from '$lib/server/cookies';
 import { createGoogleOAuthClient, googleOAuthConfig } from '$lib/server/googleOAuth';
 
 export const GET: RequestHandler = async ({ cookies }) => {
@@ -16,7 +17,7 @@ export const GET: RequestHandler = async ({ cookies }) => {
 	const { codeVerifier, codeChallenge } = await client.generateCodeVerifierAsync();
 	const secure = new URL(config.redirectUri).protocol === 'https:';
 	const cookieOptions = {
-		path: '/',
+		path: COOKIE_PATH,
 		httpOnly: true,
 		sameSite: 'lax' as const,
 		secure,

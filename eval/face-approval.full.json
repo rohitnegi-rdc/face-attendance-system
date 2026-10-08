@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "profile": "full-100-identity-approval",
+  "manifest_kind": "identity-face-eval",
+  "description": "Release approval profile for the 100-identity face attendance benchmark.",
+  "face_match_threshold": 0.68,
+  "gallery_strategy": "max_similarity",
+  "save_embeddings": false,
+  "approval_gates": {
+    "dataset.min_identities": 100,
+    "dataset.min_gallery_images": 500,
+    "dataset.min_probe_images": 1000,
+    "detection.min_success_rate": 0.95,
+    "embedding.max_contract_error_rate": 0,
+    "recognition.min_top1_accuracy": 0.9,
+    "recognition.min_verified_top1_accuracy": 0.85,
+    "recognition.max_false_accept_rate": 0.01,
+    "recognition.max_false_reject_rate": 0.1,
+    "recognition.max_equal_error_rate": 0.08,
+    "latency.max_p95_processing_ms": 2500,
+    "system.max_failed_images": 0
+  }
+}

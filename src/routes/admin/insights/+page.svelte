@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import ArrowDown from '@lucide/svelte/icons/arrow-down';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
@@ -72,7 +73,7 @@
 		{#if data.pumpsNeedingAttention.length}
 			<div class="attention-list">
 				{#each data.pumpsNeedingAttention as pump, index}
-					<a href={`/admin/pumps/${pump.id}`}>
+					<a href={resolve(`/admin/pumps/${pump.id}`)}>
 						<span class="rank">{index + 1}</span>
 						<span><strong>{pump.pump_code}</strong><small>{pump.reasons.join(' · ')}</small></span>
 						<ArrowRight size={18} />
@@ -105,7 +106,7 @@
 				>
 				<tbody
 					>{#each data.vendorRollup as vendor}{@const DeltaIcon = deltaIcon(vendor.delta)}<tr
-							><td><a href={`/admin/vendors/${vendor.id}`}>{vendor.name}</a></td><td
+							><td><a href={resolve(`/admin/vendors/${vendor.id}`)}>{vendor.name}</a></td><td
 								>{vendor.pumpCount}</td
 							><td>{vendor.distinctPersons}</td><td>{vendor.todayPct}%</td><td
 								>{vendor.baselinePct}%</td
@@ -142,7 +143,7 @@
 				>
 				<tbody
 					>{#each data.areaRollup as area}{@const DeltaIcon = deltaIcon(area.delta)}<tr
-							><td><a href={`/admin/areas/${area.id}`}>{area.name}</a></td><td>{area.pumpCount}</td
+							><td><a href={resolve(`/admin/areas/${area.id}`)}>{area.name}</a></td><td>{area.pumpCount}</td
 							><td>{area.distinctPersons}</td><td>{area.todayPct}%</td><td>{area.baselinePct}%</td
 							><td><span class="delta"><DeltaIcon size={14} /> {fmtDelta(area.delta)}pp</span></td
 							><td

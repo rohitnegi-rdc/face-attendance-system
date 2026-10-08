@@ -3,9 +3,11 @@ import { query, queryOne } from '$lib/server/db';
 import { fail } from '@sveltejs/kit';
 import { hashPassword } from '$lib/server/auth';
 import { slugify, slugifyLogin } from '$lib/server/csvImport';
+import { randomBytes } from 'node:crypto';
 
-// Matches the dev-only default used by the CSV importer and seed script (creds.md).
-const DEFAULT_PASSWORD = 'Test1234!';
+function temporaryPassword() {
+	return randomBytes(15).toString('base64url');
+}
 
 export const load: PageServerLoad = async () => {
 	const vendors = await query<any>(
@@ -23,8 +25,13 @@ export const load: PageServerLoad = async () => {
 		 FROM plants pl JOIN areas a ON a.id = pl.area_id
 		 ORDER BY a.name, pl.name`
 	);
+	const pumps = await query<any>(
+		`SELECT p.id, p.pump_code, p.login_email, v.name AS vendor_name, pl.name AS plant_name
+		 FROM pumps p JOIN vendors v ON v.id = p.vendor_id JOIN plants pl ON pl.id = p.plant_id
+		 ORDER BY p.pump_code`
+	);
 
-	return { vendors, areas, plants };
+	return { vendors, areas, plants, pumps };
 };
 
 export const actions: Actions = {
@@ -64,17 +71,19 @@ export const actions: Actions = {
 		const email = areaName
 			? `${slugify(name)}-${slugify(areaName)}@vendors.rdc`
 			: `${slugify(name)}@vendors.rdc`;
-		const passwordHash = await hashPassword(DEFAULT_PASSWORD);
+		const password = temporaryPassword();
+		const passwordHash = await hashPassword(password);
 		await query(
-			`INSERT INTO vendors (name, email, password_hash, area_id, group_name)
-			 VALUES ($1, $2, $3, $4, $5)`,
+			`INSERT INTO vendors (name, email, password_hash, area_id, group_name, must_change_password)
+			 VALUES ($1, $2, $3, $4, $5, TRUE)`,
 			[name, email, passwordHash, areaId, areaId ? name : null]
 		);
 
 		return {
 			formKind: 'vendor',
 			success: true,
-			message: `Vendor created — login: ${email} / ${DEFAULT_PASSWORD}`
+			message: 'Vendor created. The user must change this password at first sign-in.',
+			credentials: { email, password }
 		};
 	},
 
@@ -111,17 +120,49 @@ export const actions: Actions = {
 			});
 		}
 
-		const passwordHash = await hashPassword(DEFAULT_PASSWORD);
+		const password = temporaryPassword();
+		const passwordHash = await hashPassword(password);
 		await query(
-			`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash)
-			 VALUES ($1, $2, $3, $4, $5)`,
+			`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash, must_change_password)
+			 VALUES ($1, $2, $3, $4, $5, TRUE)`,
 			[plantId, vendorId, pumpCode, loginEmail, passwordHash]
 		);
 
 		return {
 			formKind: 'pump',
 			success: true,
-			message: `Pump created — login: ${loginEmail} / ${DEFAULT_PASSWORD}`
+			message: 'Pump created. The user must change this password at first sign-in.',
+			credentials: { email: loginEmail, password }
+		};
+	},
+	resetVendorPassword: async ({ request }) => {
+		const form = await request.formData();
+		const id = String(form.get('id') || '').trim();
+		const password = temporaryPassword();
+		const result = await query(
+			'UPDATE vendors SET password_hash = $1, must_change_password = TRUE WHERE id = $2 RETURNING email',
+			[await hashPassword(password), id]
+		);
+		if (!result.length) return fail(404, { formKind: 'reset', message: 'Vendor account not found.' });
+		return {
+			formKind: 'reset', success: true,
+			message: 'Temporary password issued. It is shown once; the user must replace it at sign-in.',
+			credentials: { email: result[0].email, password }
+		};
+	},
+	resetPumpPassword: async ({ request }) => {
+		const form = await request.formData();
+		const id = String(form.get('id') || '').trim();
+		const password = temporaryPassword();
+		const result = await query(
+			'UPDATE pumps SET password_hash = $1, must_change_password = TRUE WHERE id = $2 RETURNING login_email',
+			[await hashPassword(password), id]
+		);
+		if (!result.length) return fail(404, { formKind: 'reset', message: 'Pump account not found.' });
+		return {
+			formKind: 'reset', success: true,
+			message: 'Temporary password issued. It is shown once; the user must replace it at sign-in.',
+			credentials: { email: result[0].login_email, password }
 		};
 	}
 };

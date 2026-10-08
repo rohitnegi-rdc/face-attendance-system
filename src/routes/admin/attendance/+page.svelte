@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Download from '@lucide/svelte/icons/download';
 	import Search from '@lucide/svelte/icons/search';
@@ -83,7 +84,7 @@
 			<h1>Attendance records</h1>
 			<p>Filter daily outcomes, inspect grouped attendance, and export the same result set.</p>
 		</div>
-		<a class="button button--secondary" href={`/api/admin/attendance/export?${exportQuery}`}>
+		<a class="button button--secondary" href={resolve(`/api/admin/attendance/export?${exportQuery}`)}>
 			<Download size={17} /> Export XLSX
 		</a>
 	</header>
@@ -177,7 +178,7 @@
 		>
 		<div class="filter-actions">
 			<button class="button button--primary" type="submit"><Search size={17} /> Apply</button>
-			<a class="button button--quiet" href="/admin/attendance">Clear</a>
+			<a class="button button--quiet" href={resolve('/admin/attendance')}>Clear</a>
 		</div>
 	</form>
 
@@ -195,10 +196,10 @@
 			</div>
 			{#each groupedByArea as [areaId, area] (areaId)}
 				<div class="area-group">
-					<h3><a href={`/admin/areas/${areaId}`}>{area.name}</a></h3>
+					<h3><a href={resolve(`/admin/areas/${areaId}`)}>{area.name}</a></h3>
 					{#each area.vendors as [vendorId, vendor] (vendorId)}
 						<div class="vendor-group">
-							<h4><a href={`/admin/vendors/${vendorId}`}>{vendor.name}</a></h4>
+							<h4><a href={resolve(`/admin/vendors/${vendorId}`)}>{vendor.name}</a></h4>
 							<div class="table-wrap">
 								<table class="data-table pump-summary">
 									<thead
@@ -221,16 +222,16 @@
 														><ChevronDown size={18} /></button
 													></td
 												>
-												<td><a href={`/admin/pumps/${pump.pump_id}`}>{pump.pump_code}</a></td>
+												<td><a href={resolve(`/admin/pumps/${pump.pump_id}`)}>{pump.pump_code}</a></td>
 								<td>{pump.present}</td><td>{pump.absent}</td><td>{pump.total}</td>
-								<td><a class="button button--secondary correction-link" href={`/admin/attendance/correct?pump=${pump.pump_id}&day=${data.filters.day}`}>Correct attendance</a></td>
+								<td><a class="button button--secondary correction-link" href={resolve(`/admin/attendance/correct?pump=${pump.pump_id}&day=${data.filters.day}`)}>Correct attendance</a></td>
 											</tr>
 											{#if expandedPumps.has(pump.pump_id)}
 												<tr class="detail-row"
 									><td colspan="6"
 														><div class="person-records">
 															{#each pumpRows(pump.pump_id) as row}<a
-																	href={`/admin/persons/${row.person_id}`}
+																	href={resolve(`/admin/persons/${row.person_id}`)}
 																	><span>{personDisplayLabel(row.pump_code, row.display_seq)}</span
 																	><StatusBadge
 																		tone={isPresent(row) ? 'success' : 'neutral'}
@@ -272,18 +273,18 @@
 					<tbody
 						>{#each data.rows as row}<tr
 								><td>{formatDate(row.session_date)}</td><td
-									><a href={`/admin/persons/${row.person_id}`}
+									><a href={resolve(`/admin/persons/${row.person_id}`)}
 										>{personDisplayLabel(row.pump_code, row.display_seq)}</a
 									></td
-								><td><a href={`/admin/pumps/${row.pump_id}`}>{row.pump_code}</a></td><td
-									><a href={`/admin/vendors/${row.vendor_id}`}>{row.vendor_name}</a></td
+								><td><a href={resolve(`/admin/pumps/${row.pump_id}`)}>{row.pump_code}</a></td><td
+									><a href={resolve(`/admin/vendors/${row.vendor_id}`)}>{row.vendor_name}</a></td
 								><td>{row.plant_name}</td><td
-									><a href={`/admin/areas/${row.area_id}`}>{row.area_name}</a></td
+									><a href={resolve(`/admin/areas/${row.area_id}`)}>{row.area_name}</a></td
 								><td
 									><StatusBadge
 										tone={isPresent(row) ? 'success' : 'neutral'}
 									label={isPresent(row) ? 'Present' : 'Absent'}
-								/></td><td><a class="button button--secondary correction-link" href={`/admin/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`}>Correct attendance</a></td
+								/></td><td><a class="button button--secondary correction-link" href={resolve(`/admin/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`)}>Correct attendance</a></td
 								></tr
 							>{/each}</tbody
 					>
@@ -293,7 +294,7 @@
 				{#each data.rows as row}
 					<article class="mobile-record">
 						<div>
-							<a href={`/admin/persons/${row.person_id}`}
+							<a href={resolve(`/admin/persons/${row.person_id}`)}
 								>{personDisplayLabel(row.pump_code, row.display_seq)}</a
 							><StatusBadge
 								tone={isPresent(row) ? 'success' : 'neutral'}
@@ -307,7 +308,7 @@
 							</div>
 							<div>
 								<dt>Pump</dt>
-								<dd><a href={`/admin/pumps/${row.pump_id}`}>{row.pump_code}</a></dd>
+								<dd><a href={resolve(`/admin/pumps/${row.pump_id}`)}>{row.pump_code}</a></dd>
 							</div>
 							<div>
 								<dt>Vendor</dt>
@@ -318,7 +319,7 @@
 								<dd>{row.plant_name}, {row.area_name}</dd>
 							</div>
 						</dl>
-						<a class="button button--secondary correction-link" href={`/admin/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`}>Correct attendance</a>
+						<a class="button button--secondary correction-link" href={resolve(`/admin/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`)}>Correct attendance</a>
 					</article>
 				{/each}
 			</div>

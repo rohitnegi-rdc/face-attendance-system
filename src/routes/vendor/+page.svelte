@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
@@ -23,7 +24,7 @@
 			<h1>Overview</h1>
 			<p>Attendance and submission health across your assigned pumps.</p>
 		</div>
-		<a class="button button--primary" href="/vendor/attendance"
+		<a class="button button--primary" href={resolve('/vendor/attendance')}
 			>View attendance <ArrowRight size={17} /></a
 		>
 	</header>
@@ -52,7 +53,7 @@
 				<h2>Pump activity</h2>
 				<p class="supporting-text">Pumps needing attention appear first.</p>
 			</div>
-			<a href="/vendor/pumps">All pumps</a>
+			<a href={resolve('/vendor/pumps')}>All pumps</a>
 		</div>
 		<div class="table-wrap">
 			<table class="data-table" data-testid="vendor-pumps-table">

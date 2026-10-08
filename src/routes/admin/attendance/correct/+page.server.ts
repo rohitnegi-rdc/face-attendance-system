@@ -1,5 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { resolve } from '$app/paths';
 import { pool, query, queryOne } from '$lib/server/db';
 import { isDateKey } from '$lib/date';
 
@@ -8,7 +9,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 export const load: PageServerLoad = async ({ url }) => {
 	const pumpId = url.searchParams.get('pump') || '';
 	const day = url.searchParams.get('day') || '';
-	if (!UUID_PATTERN.test(pumpId) || !isDateKey(day)) redirect(303, '/admin/attendance');
+	if (!UUID_PATTERN.test(pumpId) || !isDateKey(day)) redirect(303, resolve('/admin/attendance'));
 
 	const pump = await queryOne<any>(
 		`SELECT pu.id, pu.pump_code, v.name AS vendor_name, pl.name AS plant_name, a.name AS area_name

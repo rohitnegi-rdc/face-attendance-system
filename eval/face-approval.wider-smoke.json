@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "profile": "wider-bbox-smoke",
+  "manifest_kind": "wider-face-detection-eval",
+  "description": "WIDER FACE bbox smoke profile for checking detection recall, precision, count accuracy, contract validity, and latency on labeled validation images.",
+  "iou_threshold": 0.5,
+  "save_embeddings": false,
+  "approval_gates": {
+    "dataset.min_images": 25,
+    "dataset.min_ground_truth_faces": 25,
+    "detection.min_bbox_recall": 0.5,
+    "detection.min_bbox_precision": 0.5,
+    "detection.max_count_mae": 2,
+    "embedding.max_contract_error_rate": 0,
+    "latency.max_p95_processing_ms": 35000,
+    "system.max_failed_images": 0
+  }
+}

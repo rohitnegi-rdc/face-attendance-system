@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { onDestroy, onMount, tick } from 'svelte';
 	import Camera from '@lucide/svelte/icons/camera';
 	import Check from '@lucide/svelte/icons/check';
@@ -28,7 +29,9 @@
 		liveness_reason?: string | null;
 	};
 
+	// null when the spoof check is switched off (ai-service ANTI_SPOOF_ENABLED=false): show no badge.
 	function livenessLabel(person: WorkerResult) {
+		if (person.liveness_reason === 'disabled') return null;
 		if (person.liveness_status === 'live') return 'Live check passed';
 		if (person.liveness_status === 'suspicious') return 'Needs review';
 		return 'Could not verify';
@@ -79,11 +82,11 @@
 	async function loadToday() {
 		todayLoading = true;
 		try {
-			const res = await fetch('/api/attendance/today');
+			const res = await fetch(resolve('/api/attendance/today'));
 			if (!res.ok) return;
 			today = await res.json();
 			if (today.review_session_id && status === 'idle') {
-				const review = await fetch(`/api/attendance/status/${today.review_session_id}`);
+				const review = await fetch(resolve(`/api/attendance/status/${today.review_session_id}`));
 				if (review.ok) {
 					result = await review.json();
 					currentSessionId = today.review_session_id;
@@ -325,7 +328,7 @@
 		form.append('photo', selectedFile);
 
 		try {
-			const res = await fetch('/api/attendance/submit', { method: 'POST', body: form });
+			const res = await fetch(resolve('/api/attendance/submit'), { method: 'POST', body: form });
 			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
 				status = 'failed';
@@ -351,7 +354,7 @@
 		errorMsg = '';
 		selectedWorkerPreview = null;
 		try {
-			const res = await fetch(`/api/attendance/retry/${sessionId}`, { method: 'POST' });
+			const res = await fetch(resolve(`/api/attendance/retry/${sessionId}`), { method: 'POST' });
 			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
 				errorMsg =
@@ -373,7 +376,7 @@
 		approvingReview = true;
 		errorMsg = '';
 		try {
-			const res = await fetch(`/api/attendance/approve/${sessionId}`, { method: 'POST' });
+			const res = await fetch(resolve(`/api/attendance/approve/${sessionId}`), { method: 'POST' });
 			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
 				errorMsg = body.error || 'Could not complete this attendance review.';
@@ -401,7 +404,7 @@
 			await new Promise((resolve) => setTimeout(resolve, 2000));
 			processingStep = Math.min(2, Math.floor(i / 3));
 			try {
-				const res = await fetch(`/api/attendance/status/${sessionId}`);
+				const res = await fetch(resolve(`/api/attendance/status/${sessionId}`));
 				if (!res.ok) throw new Error('status unavailable');
 				const body = await res.json();
 				connectionFailures = 0;
@@ -462,7 +465,12 @@
 			...person,
 			group,
 			label,
-			statusLabel: `${group === 'matched' ? 'Matched existing worker' : 'New worker found'} · ${livenessLabel(person)}`
+			statusLabel: [
+				group === 'matched' ? 'Matched existing worker' : 'New worker found',
+				livenessLabel(person)
+			]
+				.filter(Boolean)
+				.join(' · ')
 		};
 		await tick();
 		workerPreviewCloseButton?.focus();
@@ -744,10 +752,12 @@
 											<span class="face-label"
 												>{personDisplayLabel(person.pump_code, person.display_seq)}</span
 											>
-											<span
-												class:liveness-warning={person.liveness_status !== 'live'}
-												class="liveness-badge">{livenessLabel(person)}</span
-											>
+											{#if livenessLabel(person)}
+												<span
+													class:liveness-warning={person.liveness_status !== 'live'}
+													class="liveness-badge">{livenessLabel(person)}</span
+												>
+											{/if}
 											<span class="face-row-icons">
 												<Check size={16} aria-hidden="true" />
 												<Eye size={15} aria-hidden="true" />
@@ -782,10 +792,12 @@
 											<span class="face-label"
 												>{personDisplayLabel(person.pump_code, person.display_seq)}</span
 											>
-											<span
-												class:liveness-warning={person.liveness_status !== 'live'}
-												class="liveness-badge">{livenessLabel(person)}</span
-											>
+											{#if livenessLabel(person)}
+												<span
+													class:liveness-warning={person.liveness_status !== 'live'}
+													class="liveness-badge">{livenessLabel(person)}</span
+												>
+											{/if}
 											<span class="face-row-icons"><Eye size={15} aria-hidden="true" /></span>
 										</button>
 									</li>

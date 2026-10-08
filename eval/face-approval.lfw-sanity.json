@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "profile": "lfw-20-identity-sanity",
+  "manifest_kind": "identity-face-eval",
+  "description": "Sanity approval profile for a smaller LFW identity benchmark. This checks detector and ranking behavior without treating LFW as the final 100-user attendance benchmark.",
+  "face_match_threshold": 0.68,
+  "gallery_strategy": "max_similarity",
+  "save_embeddings": false,
+  "approval_gates": {
+    "dataset.min_identities": 20,
+    "dataset.min_gallery_images": 40,
+    "dataset.min_probe_images": 60,
+    "detection.min_success_rate": 0.95,
+    "embedding.max_contract_error_rate": 0,
+    "recognition.min_top1_accuracy": 0.9,
+    "recognition.max_false_accept_rate": 0.01,
+    "recognition.max_equal_error_rate": 0.08,
+    "latency.max_p95_processing_ms": 2500,
+    "system.max_failed_images": 0
+  }
+}

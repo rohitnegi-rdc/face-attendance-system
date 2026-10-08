@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Download from '@lucide/svelte/icons/download';
+	import { resolve } from '$app/paths';
 	import Plus from '@lucide/svelte/icons/plus';
 
 	let { data, form } = $props();
@@ -14,10 +14,16 @@
 			<h1>Vendors</h1>
 			<p>Every vendor login, its scope, and the pumps it can see.</p>
 		</div>
-		<a class="button button--secondary" href="/api/admin/vendors/creds.csv" download
-			><Download size={17} /> Vendor login creds CSV</a
-		>
 	</header>
+	{#if form?.formKind === 'reset'}
+		<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+	{/if}
+	{#if form?.credentials}
+		<div class="credential-notice" role="status">
+			<strong>Copy these one-time credentials now. The password cannot be viewed again.</strong>
+			<code>{form.credentials.email}</code><code>{form.credentials.password}</code>
+		</div>
+	{/if}
 
 	<div class="creation-grid">
 		<section class="surface surface--padded">
@@ -97,7 +103,7 @@
 		<div class="table-wrap bounded-table-frame">
 			<table class="data-table">
 				<thead>
-					<tr><th>Vendor</th><th>Scope</th><th>Login email</th><th>Pumps</th><th></th></tr>
+					<tr><th>Vendor</th><th>Scope</th><th>Login email</th><th>Pumps</th><th>Access</th><th></th></tr>
 				</thead>
 				<tbody>
 					{#each data.vendors as vendor}
@@ -106,18 +112,32 @@
 							<td>{vendor.area_name ?? 'National'}</td>
 							<td>{vendor.email}</td>
 							<td>{vendor.pump_count}</td>
+							<td><form method="POST" action="?/resetVendorPassword"><input type="hidden" name="id" value={vendor.id} /><button class="button button--secondary" type="submit">Reset password</button></form></td>
 							<td
-								><a class="button button--secondary" href={`/admin/vendors/${vendor.id}`}>View</a
+								><a class="button button--secondary" href={resolve(`/admin/vendors/${vendor.id}`)}>View</a
 								></td
 							>
 						</tr>
 					{/each}
 					{#if !data.vendors.length}
-						<tr><td colspan="5">No vendors yet — create one above or import a CSV.</td></tr>
+						<tr><td colspan="6">No vendors yet — create one above or import a CSV.</td></tr>
 					{/if}
 				</tbody>
 			</table>
 		</div>
+	</section>
+
+	<section class="section">
+		<div class="section-header"><div><h2>Pump accounts</h2><p class="supporting-text">Reset a pump login when its user cannot sign in.</p></div></div>
+		<div class="table-wrap bounded-table-frame"><table class="data-table">
+			<thead><tr><th>Pump</th><th>Vendor</th><th>Plant</th><th>Login email</th><th>Access</th></tr></thead>
+			<tbody>
+				{#each data.pumps as pump}
+					<tr><td>{pump.pump_code}</td><td>{pump.vendor_name}</td><td>{pump.plant_name}</td><td>{pump.login_email}</td><td><form method="POST" action="?/resetPumpPassword"><input type="hidden" name="id" value={pump.id} /><button class="button button--secondary" type="submit">Reset password</button></form></td></tr>
+				{/each}
+				{#if !data.pumps.length}<tr><td colspan="5">No pump accounts.</td></tr>{/if}
+			</tbody>
+		</table></div>
 	</section>
 </div>
 
@@ -167,6 +187,8 @@
 	.alert {
 		margin-bottom: var(--space-3);
 	}
+	.credential-notice { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); padding: var(--space-3); background: var(--surface-muted); border-left: 3px solid var(--brand-teal); }
+	.credential-notice code { user-select: all; overflow-wrap: anywhere; }
 	.bounded-table-frame {
 		max-height: 32rem;
 		overflow: auto;

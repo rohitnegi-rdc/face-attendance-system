@@ -1,0 +1,68 @@
+{
+	"schema_version": 1,
+	"scenario_id": "attendance-50-concurrent",
+	"description": "Fifty existing-pump agents submitting golden morning and evening group photos in synchronized waves.",
+	"dataset": {
+		"manifest": "datasets/golden-small-groups-v1/manifest.json",
+		"case_count": 50,
+		"thresholds": {
+			"start": 0.2,
+			"end": 0.86,
+			"step": 0.02,
+			"application_threshold": 0.3
+		}
+	},
+	"target": {
+		"app_url": "http://127.0.0.1:3001",
+		"database_url_env": "DATABASE_URL",
+		"environment": "local-test-only",
+		"use_existing_pumps": true,
+		"create_pumps": false,
+		"required_eligible_pumps": 50
+	},
+	"load": {
+		"virtual_agents": 50,
+		"waves": [
+			{
+				"name": "morning",
+				"requests": 50,
+				"barrier_release": true
+			},
+			{
+				"name": "evening",
+				"requests": 50,
+				"barrier_release": true,
+				"requires_wave_terminal": "morning"
+			}
+		],
+		"queue_sample_interval_ms": 250,
+		"status_poll_interval_ms": 500,
+		"request_timeout_ms": 30000,
+		"session_timeout_ms": 1800000
+	},
+	"time_control": {
+		"mode": "scoped_session_timestamp_adjustment",
+		"apply_only_to_run_owned_morning_sessions": true,
+		"verify_evening_available_before_release": true
+	},
+	"authentication": {
+		"mode": "signed_local_test_session",
+		"allow_temporary_password_reset": false,
+		"restore_original_password_hashes": false
+	},
+	"safety": {
+		"preflight_before_mutation": true,
+		"record_run_ledger": true,
+		"automatic_cleanup": false,
+		"fail_on_production_target": true,
+		"fail_if_fewer_than_required_pumps": true
+	},
+	"report": {
+		"output_root": "test-output/load-evaluations",
+		"lazy_threshold_chunks": true,
+		"lazy_image_previews": true,
+		"thumbnail_lists": true,
+		"deterministic_static_output": true,
+		"default_sort": "errors_then_slowest"
+	}
+}

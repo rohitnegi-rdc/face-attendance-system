@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { COOKIE_PATH } from '$lib/server/cookies';
 import { findAccountByEmail, checkPassword, signToken } from '$lib/server/auth';
 import { logger } from '$lib/server/log';
 
@@ -19,17 +20,23 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		return json({ error: 'Account disabled. Contact your Plant Manager.' }, { status: 403 });
 	}
 
-	const token = signToken({ role: account.role, id: account.id, email: account.email });
+	const mustChangePassword = account.must_change_password;
+	const token = signToken({
+		role: account.role,
+		id: account.id,
+		email: account.email,
+		...(mustChangePassword ? { mustChangePassword: true } : {})
+	}, mustChangePassword ? '15m' : '7d');
 	const isHttps = request.headers.get('x-forwarded-proto')?.split(',')[0].trim() === 'https';
 	cookies.set(isHttps ? 'session' : 'session_http', token, {
-		path: '/',
+		path: COOKIE_PATH,
 		httpOnly: true,
 		sameSite: 'lax',
 		// LAN HTTP is used only for local device testing; deployed HTTPS sessions stay secure.
 		secure: isHttps,
-		maxAge: 60 * 60 * 24 * 7
+		maxAge: mustChangePassword ? 15 * 60 : 60 * 60 * 24 * 7
 	});
 
 	logger.info({ email, role: account.role }, 'login success');
-	return json({ role: account.role, id: account.id, email: account.email });
+	return json({ role: account.role, id: account.id, email: account.email, mustChangePassword });
 };

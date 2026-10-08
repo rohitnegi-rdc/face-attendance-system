@@ -16,10 +16,11 @@ export interface AuthToken {
 	role: Role;
 	id: string;
 	email: string;
+	mustChangePassword?: boolean;
 }
 
-export function signToken(payload: AuthToken): string {
-	return jwt.sign(payload, getJwtSecret(), { expiresIn: '7d' });
+export function signToken(payload: AuthToken, expiresIn: jwt.SignOptions['expiresIn'] = '7d'): string {
+	return jwt.sign(payload, getJwtSecret(), { expiresIn });
 }
 
 export function verifyToken(token: string): AuthToken | null {
@@ -44,28 +45,29 @@ export async function findAccountByEmail(email: string): Promise<{
 	id: string;
 	email: string;
 	password_hash: string;
+	must_change_password: boolean;
 	status?: string;
 } | null> {
 	const admin = await queryOne<any>(
-		'SELECT id, email, password_hash FROM admins WHERE lower(email) = lower($1)',
+		'SELECT id, email, password_hash, must_change_password FROM admins WHERE lower(email) = lower($1)',
 		[email]
 	);
 	if (admin) return { role: 'admin', ...admin };
 
 	const vendor = await queryOne<any>(
-		'SELECT id, email, password_hash FROM vendors WHERE lower(email) = lower($1)',
+		'SELECT id, email, password_hash, must_change_password FROM vendors WHERE lower(email) = lower($1)',
 		[email]
 	);
 	if (vendor) return { role: 'vendor', ...vendor };
 
 	const plantManager = await queryOne<any>(
-		`SELECT id, email, password_hash FROM plant_managers WHERE lower(email) = lower($1)`,
+		`SELECT id, email, password_hash, must_change_password FROM plant_managers WHERE lower(email) = lower($1)`,
 		[email]
 	);
 	if (plantManager) return { role: 'plant-manager', ...plantManager };
 
 	const pump = await queryOne<any>(
-		'SELECT id, login_email AS email, password_hash, status FROM pumps WHERE lower(login_email) = lower($1)',
+		'SELECT id, login_email AS email, password_hash, status, must_change_password FROM pumps WHERE lower(login_email) = lower($1)',
 		[email]
 	);
 	if (pump) return { role: 'pump', ...pump };

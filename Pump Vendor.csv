@@ -1,204 +1,205 @@
-Sr.No,Area Name,Plant Name,PUMP Name,Vendor Name
-1,Assam,ASM-Guwahati 1,ASLPWWI2,M/S Welworth Infra
-2,Assam,ASM-Guwahati 1,ASLPWWI3,Welworth Ready Mix Concrete
-3,Uttar Pradesh,UP-Ayodhya,AYLPADA1,Adarsh Infra
-4,Bangalore,BG-Veerasandra,BGLPDD2,Venkatasai Earth Movers_New
-5,Bangalore,BG-Anjanapura,BGLPHSE1,H S Enterprises.
-6,Bangalore,BG-Anjanapura,BGLPHSE2,H S Enterprises.
-7,Bangalore,BG-Hedge Nagar,BGLPME1,MARUTHI ENTERPRISES - BLR TM
-8,Bangalore,BG-Mysore Road,BGLPRAJ1,Raj Enterprises.
-9,Bangalore,BG-Yelhanka,BGLPRVN1,R V N Enterprises
-10,Bangalore,BG-Hedge Nagar,BGLPRVN2,KS Enterprises
-11,Bangalore,BG-Yelhanka,BGLPRVN3,R V N Enterprises
-12,Bangalore,BG-Yelhanka,BGLPRVN4,R V N Enterprises
-13,Bangalore,BG-Veerasandra,BGLPSHIVA1,SHIVA ENTERPRISES - BLR
-14,Bangalore,BG-Mysore Road,BGLPSHIVA2,SHIVA ENTERPRISES - BLR
-15,Bangalore,BG-Whitefield,BGLPSHIVA3,SHIVA ENTERPRISES - BLR
-16,Bangalore,BG-Yelhanka,BGLPSHIVA4,SHIVA ENTERPRISES - BLR
-17,Bangalore,BG-Whitefield,BGLPSHIVA5,SHIVA ENTERPRISES - BLR
-18,Bangalore,BG-Yelhanka,BGLPSS1,S&S Pumps Services
-19,Bangalore,BG-Doddaballapura,BGLPSS2,S&S Pumps Services
-20,Bangalore,BG-Tumkur Road,BGLPSS3,S&S Pumps Services
-21,Bangalore,BG-Budigere,BGLPSSE1,Sri Sai Enterprise
-22,Bangalore,BG-Doddaballapura,BGLPSSE2,Sri Sai Enterprise
-23,Bangalore,BG-Hedge Nagar,BGLPSSE3,Sri Balaji Enterprises
-24,Bangalore,BG-Mysore Road,BGLPSVE1,Sri Vaishnavi Enterprises
-25,Bangalore,BG-Budigere,BGLPSVN2,SVN Enterprises
-26,Bangalore,BG-Whitefield,BGLPVGE1,V V G Enterprises
-27,Bangalore,BG-Tumkur Road,BGLPVJL1,Vijayalakshmi Enterprises
-28,Bangalore,BG-Whitefield,BGLPVKE1,Vakula Transport
-29,Bhopal,MP-Bhopal 1,BHLPDSE1,D S ENTERPRISES- MP
-30,Bhopal,MP-Bhopal 1,BHLPTAJ3,Taj Infra Service
-31,Chennai,CHE-Poonamallee,BOOM 3,Sri Lakshmi Venkateshwara Associates
-32,Chennai,CHE-Medavakkam,BOOM2,Giant Construction Company
-33,Odisha- Commercial,ODI-Bhubaneswar 2,BUMPDEL1,Delta Engineering & Services
-34,Odisha- Commercial,ODI-Bhubaneswar 2,BUMPDEL2,Delta Engineering & Services
-35,Odisha- Commercial,ODI-Bhubaneswar 2,BUMPDEL3,Delta Engineering & Services
-36,Chattisgarh,CHA-Durg,CGLPOWN1,RDC Concrete (India) Ltd
-37,Chennai,CHE-Poonamallee,CHBPGSC1,GS CONCRETE
-38,Chennai,CHE-ZOHO,CHLP10SME1,Sri Balamurugar Enterprises
-39,Chennai,CHE-ZOHO,CHLP11SBE4,Sri Balamurugar Enterprises
-40,Chennai,CHE-Casahola,CHLP13,Giant Construction Company
-41,Chennai,CHE-Madhavaram,CHLP2,PEARL DENTAL LABORATORY
-42,Chennai,CHE-Medavakkam,CHLP3,AKSHAYA ASSOCIATES
-43,Chennai,CHE-Medavakkam,CHLP5,AKSHAYA ASSOCIATES
-44,Chennai,CHE-Medavakkam,CHLP6AKE1,AKSHAYA ASSOCIATES
-45,Chennai,CHE-Medavakkam,CHLP7,AKSHAYA ASSOCIATES
-46,Chennai,CHE-Madhavaram,CHLP9SBE3,Sri Balamurugar Enterprises
-47,Chennai,CHE-Medavakkam,CHLPRDC1,RDC Concrete (India) Ltd
-48,Chennai,CHE-Madhavaram,CHLPRDC2,RDC Concrete (India) Ltd
-49,Uttarakhand,UK- Dehradun,DDPUMP01,Om Sai Enterprises (Hr/Dl)
-50,Uttarakhand,UK- Dehradun,DDPUMP02,Keso Trans India
-51,Uttarakhand,UK-Haridwar,DDPUMP03,RBM INFRA SERVICES PRIVATE LIMITED
-52,Punjab,PB-Derabassi,DELP3TRI2,Trident Engineering
-53,Punjab,PB-Derabassi,DELP5TRI3,Trident Engineering
-54,Delhi,NCR-Gurgaon Kherki,DLBPOWN1,RDC Concrete (India) Ltd
-55,Delhi,NCR-Gurgaon Shikohpur M3M 1,DLBPOWN3,RDC Concrete (India) Ltd
-56,Delhi,NCR- Gurgaon M3M 2,DLL06PSAI1,Om Sai Enterprises (Hr/Dl)
-57,Delhi,NCR-Ghewra,DLLP01SAI11,Om Sai Enterprises (Hr/Dl)
-58,Delhi,NCR-Faridabad,DLLP02SAI4,Om Sai Enterprises (Hr/Dl)
-59,Delhi,NCR- Vinta,DLLP03SAI5,Om Sai Enterprises (Hr/Dl)
-60,Delhi,NCR-Gurgaon,DLLP04AAR2,Aarav Construction Co.
-61,Delhi,NCR-Faridabad,DLLP07SAI2,Om Sai Enterprises (Hr/Dl)
-62,Delhi,NCR- Classic Engg,DLLP08SAI6,Om Sai Enterprises (Hr/Dl)
-63,Delhi,NCR-Greater Noida 3,DLLP09AAR4,Aarav Construction Co.
-64,Delhi,NCR-Gurgaon Kherki,DLLP11VAA1,Vashu Infratech
-65,Delhi,NCR-Gurgaon,DLLP12AAR3,Aarav Construction Co.
-66,Delhi,NCR-Gurgaon Kherki,DLLP13VAA2,Vashu Infratech
-67,Delhi,NCR-Greater Noida 2,DLLP15SRI1,S R Infratech
-68,Delhi,NCR-Faridabad,DLLP19SAI8,Om Sai Enterprises (Hr/Dl)
-69,Delhi,NCR-Gurgaon Shikohpur M3M 1,DLLP20SAI9,Om Sai Enterprises (Hr/Dl)
-70,Delhi,NCR-Greater Noida 3,DLLP23SAA1,Saarza Traders
-71,Delhi,NCR-Greater Noida 2,DLLP25AAR5,Aarav Construction Co.
-72,Delhi,NCR-Greater Noida 2,DLLP26SAAR,Saarza Traders
-73,Delhi,NCR-Gurgaon Shikohpur M3M 1,DLLP27SAI12,Om Sai Enterprises (Hr/Dl)
-74,Delhi,NCR- Gurgaon M3M 2,DLLP28SAI13,Om Sai Enterprises (Hr/Dl)
-75,Delhi,NCR- Vinta,DLLP29SAI14,RBM INFRA SERVICES PRIVATE LIMITED
-76,Bhopal,MP-Bhopal 2,DSPUMP2,D S ENTERPRISES- MP
-77,Bhopal,MP-Bhopal 1,DSPUMP3,D S ENTERPRISES- MP
-78,Uttar Pradesh,UP-Gorakpur,GKLPADA1,Adarsh Infra
-79,Uttar Pradesh,UP-Gorakpur,GKLPADA2,Adarsh Infra
-80,Goa,GOA-Goa 1,GOLPKAP1,KAPCOM INDIA
-81,Goa,GOA-Goa 2,GOLPKAP2,KAPCOM INDIA
-82,Goa,Goa-DLF Bayview,GOLPKAP3,KAPCOM INDIA
-83,Kerala,KER-Thrissur 1,HEAVEN1400,Heaven Logistics
-84,Kerala,KER-Thrissur 1,HEAVEN14002,Heaven Logistics
-85,Chattisgarh,CHA-Raipur 1,HSKPUMP2,Harmeet Singh Kapoor
-86,Hyderabad,HYD-Bachupally,HYBPOWN1,Narra Aruna
-87,Hyderabad,HYD-Patancheru,HYBPOWN2,RDC Concrete (India) Ltd
-88,Hyderabad,HYD-Tukkuguda,HYLP04PUMP,M A ENTERPRISES - HYD
-89,Hyderabad,HYD-Bachupally,HYLP09UMA2,Uma Enterprises
-90,Hyderabad,HYD-Kollur,HYLP10PUMP,SRI RAMA ENTERPRISES
-91,Hyderabad,HYD-Kollur,HYLP11CHA1,Charvi Enterprises
-92,Hyderabad,HYD-Nacharam,HYLP12SRE2,SR Enterprises
-93,Hyderabad,HYD-Rajender Nagar,HYLP13RK1,RK ENTERPRISES
-94,Hyderabad,HYD-Nacharam,HYLP14GAN1,Gangulothu Ramsing
-95,Hyderabad,HYD-Khanapur,HYLP15VIS1OWN,RDC Concrete (India) Ltd
-96,Hyderabad,HYD-Bachupally,HYLP16RP4,RAMPRASAD KONAKATI
-97,Hyderabad,HYD-Nacharam,HYLP17GAN3,Gangulothu Ramsing
-98,Hyderabad,HYD-Khanapur,HYLP20OWN2,Narra Aruna
-99,Hyderabad,HYD-Tukkuguda,HYLP21MA2_6179,M A ENTERPRISES - HYD
-100,Hyderabad,HYD-Kollur,HYLP22DSR2,Dagadapally Sujith Kumar Reddy
-101,Hyderabad,HYD-Nacharam,HYLP25ANE1,Anjali Enterprises-Hyd
-102,Hyderabad,HYD-Kollur,HYLP25RK2,RK ENTERPRISES
-103,Hyderabad,HYD-Patancheru,HYLP26UMA1,Uma Enterprises
-104,Hyderabad,HYD-Kalpataru,HYLP2MR2,MOHARWALA RAJESHWARI
-105,Hyderabad,HYD-Bachupally,HYLP2RP2,RAMPRASAD KONAKATI
-106,Hyderabad,HYD-Bachupally,HYLP3DS1,Dibbarao Samudrala
-107,Hyderabad,HYD-Kalpataru,HYLP4PUMP,MOHARWALA RAJESHWARI
-108,Hyderabad,HYD-Kalpataru,HYLP4PUMPNEW,MOHARWALA RAJESHWARI
-109,Hyderabad,HYD-Bachupally,HYLP5RP1,RAMPRASAD KONAKATI
-110,Hyderabad,HYD-Kalpataru,HYLP6PUMP,MOHARWALA RAJESHWARI
-111,Hyderabad,HYD-Khanapur,HYLP7OWN1,Narra Aruna
-112,Hyderabad,HYD-Bachupally,HYLP8DSR1,Dagadapally Sujith Kumar Reddy
-113,Bhopal,MP-Jabalpur,JA1PUMP,Taj Infra Service
-114,Rajasthan,RAJ-Jaipur,JALPSAI1,Om Sai Enterprises (Hr/Dl)
-115,Rajasthan,RAJ-Jaipur,JALPSAI2,Om Sai Enterprises (Hr/Dl)
-116,Jharkhand,JHA-Jamshedpur,JMLPRAJ1,Dhananjay Prasad Sinha
-117,Delhi,NCR-Greater Noida 3,KEBPOWN1,RDC Concrete (India) Ltd
-118,Kerala,KER-Kochi 1 Edyar,KELPOWN1,RDC Concrete (India) Ltd
-119,Kerala,KER-Kochi 1 Edyar,KELPOWN10,RDC Concrete (India) Ltd
-120,Kerala,KER-Trivandrum 1,KELPOWN2,RDC Concrete (India) Ltd
-121,Kerala,KER-Kochi 1 Edyar,KELPOWN5,RDC Concrete (India) Ltd
-122,Kerala,KER-Wayanad,KELPOWN8,RDC Concrete (India) Ltd
-123,Kerala,KER-Kottayam,KELPSTM1,STM CONCRETE-KL
-124,Kerala,KER-Kozikode,KELPSTM10,STM CONCRETE-KL
-125,Kerala,KER-Kottayam,KELPSTM2,STM CONCRETE-KL
-126,Kerala,KER-Trivandrum 2,KELPSTM5,STM CONCRETE-KL
-127,Kerala,KER-Kozikode,KELPSTM6,STM CONCRETE-KL
-128,Kerala,KER-Thrissur 1,KELPSTM7,STM CONCRETE-KL
-129,Kerala,KER-Kozikode,KELPSTM9,STM CONCRETE-KL
-130,Kerala,KER-Kozikode,KL22T9723,RDC Concrete (India) Ltd
-131,Kolkata,KOL-New Town,KOLPOWN1407D1,RDC Concrete (India) Ltd
-132,Kolkata,KOL-New Town,KOLPOWN1407D3,RDC Concrete (India) Ltd
-133,Kolkata,KOL-New Town,KOLPOWN4,RDC Concrete (India) Ltd
-134,Kolkata,KOL-New Town,KOLPOWN5,RDC Concrete (India) Ltd
-135,Punjab,PB-Kurali,KULP6TRI4,Trident Engineering
-136,Chattisgarh,CHA-Durg,KVDURGPUMP1,KAPOOR VENTURES
-137,Chattisgarh,CHA-Raipur 1,KVPUMP1,KAPOOR VENTURES
-138,Hyderabad,HYD-Patancheru,LP24,SRI MALLIKARJUNA ENTERPRISES
-139,Hyderabad,HYD-Tellapur,LP28PUMP,SRI MALLIKARJUNA ENTERPRISES
-140,Punjab,PB-Ludhiana,LULP1SMB1,Simer Builders
-141,Punjab,PB-Ludhiana,LULP2SMB2,Simer Builders
-142,Uttar Pradesh,UP-Lucknow,LULPADA1,Adarsh Infra
-143,Mangalore,KAR-Mangalore,MANGLPATH2,Atharva Enterprises
-144,Mangalore,KAR-Mangalore,MGLPATH1,RDC Concrete (India) Ltd
-145,Punjab,PB-Mohali,MLLP1SAI1,Saini Concrete Systems Pvt. Ltd.
-146,Punjab,PB-Mohali,MLLP2TRI1,Trident Engineering
-147,Punjab,PB-Mohali,MLLP4SAI2,Saini Concrete Systems Pvt. Ltd.
-148,Andhra Pradesh,AP-Mangalagiri,MMKENTERPRISESPUMP1,M MK ENTERPRISES
-149,Kerala,KER-Kochi 2 Amb,MRP1005,MRP RMC Equipments & Contractors
-150,Coimbatore,TN-Coimbatore 1,MRPCM1SP1,MRP RMC Equipments & Contractors
-151,Mumbai,MUM-Deonar,MULP1OWN1,RDC Concrete (India) Ltd
-152,Mumbai,MUM-Deonar,MULP2OWN2,RDC Concrete (India) Ltd
-153,Mumbai,MUM-Deonar,MULP3DHA1,Crisana Synthetics Private Limited
-154,Mumbai,MUM-Deonar,MULP3OWNP3,RDC Concrete (India) Ltd
-155,Mumbai,MUM-Sakinaka,MULP4KAP1,KAPCOM INDIA
-156,Mumbai,MUM-Deonar,MULP4OWN4,RDC Concrete (India) Ltd
-157,Mumbai,MUM-Deonar,MULP5VAS5,VISHWAKARMA ENTERPRISES
-158,Patna,BHR-Patna Comm,PALPWEL1,M/S Welworth Infra
-159,Patna,BHR-Patna Comm,PALPWEL3,Welworth Ready Mix Concrete
-160,Patna,BHR-Patna Comm,PALPWWI2,Welworth Ready Mix Concrete
-161,Punjab,PB-Ludhiana 3,PBLP1TE1,Simer Builders
-163,Pune,PUN-Hadapsar,PULP1SHR1,Shraddha Enterprises Pune Tm
-164,Pune,PUN-Hinjewadi,PULP2DIK1,Diksha Enterprises
-165,Pune,PUN- Jambe,PULP3DIK2,Diksha Enterprises
-166,Pune,PUN-Sinhgarh,PULP4SHR2,Shraddha Enterprises Pune Tm
-167,Pune,PUN-Sinhgarh,PULP5,Shraddha Enterprises Pune Tm
-168,Pune,PUN- Jambe,PULP5SHY1,Shraddha Enterprises Pune Tm
-169,Gujarat,GUJ- Sanand,PUMP1400,JAY GOGA ENTERPRISE
-170,Nagpur,MH-Nagpur 2,PUMP1405D,Skyline Enterprises
-171,Nagpur,MH-Nagpur 2,PUMP1407D,Skyline Enterprises
-172,Kerala,KER-Wayanad,PUMPAQUARIS,RDC Concrete (India) Ltd
-173,Gujarat,GUJ-Vadodara - Dumad,PUMPL17,Lotus Enterprises-Vadodara
-174,Hyderabad,HYD-Medchal,PUMPLP1,RAMPRASAD KONAKATI
-175,Hyderabad,HYD-Khanapur,PUMPLP19KKR,KKR Contractors
-176,Hyderabad,HYD-Kollur,PUMPLP24,PEORIA PRIVATE LIMITED
-177,Hyderabad,HYD-Tellapur,PUMPLP29,Uma Enterprises
-178,Hyderabad,HYD-Medchal,PUMPLP6,LAKSHMI NARASIMHA ENTERPRISES
-179,Mumbai,MUM-Turbhe,PUMPMU10,KAPCOM INDIA
-180,Mumbai,MUM-Mankoli,PUMPMU6,SHREE SAI TRADERS (PUMP)
-181,Gujarat,GUJ- Vapi,PUMPVAPI,AKASH OFFSET PRINT
-182,Jammu,Kathua,RAPUMP1KATHUA,Veerbhadra Enterprises
-184,Jharkhand,JHA-Ranchi,RNCRAM1,RAMESH KUMAR
-185,Jammu,Jammu,SONJK1PUMP2,Sonam Construction Co.
-186,Kerala,KER-Kozikode,SP.1800,STM CONCRETE-KL
-187,Kerala,KER-Trivandrum 1,SP1400,STM CONCRETE-KL
-188,Kerala,KER-Kochi 2 Amb,SP1420,MRP RMC Equipments & Contractors
-189,Kerala,KER-Trivandrum 1,SP1800,STM CONCRETE-KL
-190,Kerala,KER-Trivandrum 2,SP1807,STM CONCRETE-KL
-191,Pune,PUN-TPL Metro,SP1807PUMP,STM CONCRETE-KL
-192,Kerala,KER-Wayanad,SP_1400,STM CONCRETE-KL
-193,Gujarat,GUJ-Surat 1,SRLPPUR1,Purvi Transport
-194,Gujarat,GUJ-Surat 2,SRLPSHI1,Shiv Logistics
-195,Kerala,KER-Thrissur 2,STM1400,STM CONCRETE-KL
-196,Jharkhand,JHA-Ranchi,SWINGPUMP2,RAMESH KUMAR
-197,Nagpur,MH-Nagpur 1,TIWARI1405,Tiwari construction
-198,Indore,MP-Indore,TPPUMP2,TP Equipments
-199,Jammu,Jammu,TRIJK1PUMP3,Trident Engineering
-200,Kerala,KER-Trivandrum 2,TVM2STM1,STM CONCRETE-KL
-201,Kerala,KER-Trivandrum 2,TVM2STM2,STM CONCRETE-KL
-202,Coimbatore,TN-Trichy,TYLPRMC1,BEST READYMIX
-203,Uttar Pradesh,UP-Lucknow,UPLPADA1,Adarsh Infra
-204,Andhra Pradesh,AP-Vizag,VZLPJAY1,G JAYALAKSHMI
-205,Andhra Pradesh,AP-Vizag,VZLPJAY2,G JAYALAKSHMI
+Sr.No,Area Name,Plant Name,PUMP Name,Vendor Name,Pump Login Email
+1,Assam,ASM-Guwahati 1,ASLPWWI2,M/S Welworth Infra,aslpwwi2@pumps.rdc
+2,Assam,ASM-Guwahati 1,ASLPWWI3,Welworth Ready Mix Concrete,aslpwwi3@pumps.rdc
+3,Uttar Pradesh,UP-Ayodhya,AYLPADA1,Adarsh Infra,aylpada1@pumps.rdc
+4,Bangalore,BG-Veerasandra,BGLPDD2,Venkatasai Earth Movers_New,bglpdd2@pumps.rdc
+5,Bangalore,BG-Anjanapura,BGLPHSE1,H S Enterprises.,bglphse1@pumps.rdc
+6,Bangalore,BG-Anjanapura,BGLPHSE2,H S Enterprises.,bglphse2@pumps.rdc
+7,Bangalore,BG-Hedge Nagar,BGLPME1,MARUTHI ENTERPRISES - BLR TM,bglpme1@pumps.rdc
+8,Bangalore,BG-Mysore Road,BGLPRAJ1,Raj Enterprises.,bglpraj1@pumps.rdc
+9,Bangalore,BG-Yelhanka,BGLPRVN1,R V N Enterprises,bglprvn1@pumps.rdc
+10,Bangalore,BG-Hedge Nagar,BGLPRVN2,KS Enterprises,bglprvn2@pumps.rdc
+11,Bangalore,BG-Yelhanka,BGLPRVN3,R V N Enterprises,bglprvn3@pumps.rdc
+12,Bangalore,BG-Yelhanka,BGLPRVN4,R V N Enterprises,bglprvn4@pumps.rdc
+13,Bangalore,BG-Veerasandra,BGLPSHIVA1,SHIVA ENTERPRISES - BLR,bglpshiva1@pumps.rdc
+14,Bangalore,BG-Mysore Road,BGLPSHIVA2,SHIVA ENTERPRISES - BLR,bglpshiva2@pumps.rdc
+15,Bangalore,BG-Whitefield,BGLPSHIVA3,SHIVA ENTERPRISES - BLR,bglpshiva3@pumps.rdc
+16,Bangalore,BG-Yelhanka,BGLPSHIVA4,SHIVA ENTERPRISES - BLR,bglpshiva4@pumps.rdc
+17,Bangalore,BG-Whitefield,BGLPSHIVA5,SHIVA ENTERPRISES - BLR,bglpshiva5@pumps.rdc
+18,Bangalore,BG-Yelhanka,BGLPSS1,S&S Pumps Services,bglpss1@pumps.rdc
+19,Bangalore,BG-Doddaballapura,BGLPSS2,S&S Pumps Services,bglpss2@pumps.rdc
+20,Bangalore,BG-Tumkur Road,BGLPSS3,S&S Pumps Services,bglpss3@pumps.rdc
+21,Bangalore,BG-Budigere,BGLPSSE1,Sri Sai Enterprise,bglpsse1@pumps.rdc
+22,Bangalore,BG-Doddaballapura,BGLPSSE2,Sri Sai Enterprise,bglpsse2@pumps.rdc
+23,Bangalore,BG-Hedge Nagar,BGLPSSE3,Sri Balaji Enterprises,bglpsse3@pumps.rdc
+24,Bangalore,BG-Mysore Road,BGLPSVE1,Sri Vaishnavi Enterprises,bglpsve1@pumps.rdc
+25,Bangalore,BG-Budigere,BGLPSVN2,SVN Enterprises,bglpsvn2@pumps.rdc
+26,Bangalore,BG-Whitefield,BGLPVGE1,V V G Enterprises,bglpvge1@pumps.rdc
+27,Bangalore,BG-Tumkur Road,BGLPVJL1,Vijayalakshmi Enterprises,bglpvjl1@pumps.rdc
+28,Bangalore,BG-Whitefield,BGLPVKE1,Vakula Transport,bglpvke1@pumps.rdc
+29,Bhopal,MP-Bhopal 1,BHLPDSE1,D S ENTERPRISES- MP,bhlpdse1@pumps.rdc
+30,Bhopal,MP-Bhopal 1,BHLPTAJ3,Taj Infra Service,bhlptaj3@pumps.rdc
+31,Chennai,CHE-Poonamallee,BOOM 3,Sri Lakshmi Venkateshwara Associates,boom-3@pumps.rdc
+32,Chennai,CHE-Medavakkam,BOOM2,Giant Construction Company,boom2@pumps.rdc
+33,Odisha- Commercial,ODI-Bhubaneswar 2,BUMPDEL1,Delta Engineering & Services,bumpdel1@pumps.rdc
+34,Odisha- Commercial,ODI-Bhubaneswar 2,BUMPDEL2,Delta Engineering & Services,bumpdel2@pumps.rdc
+35,Odisha- Commercial,ODI-Bhubaneswar 2,BUMPDEL3,Delta Engineering & Services,bumpdel3@pumps.rdc
+36,Chattisgarh,CHA-Durg,CGLPOWN1,RDC Concrete (India) Ltd,cglpown1@pumps.rdc
+37,Chennai,CHE-Poonamallee,CHBPGSC1,GS CONCRETE,chbpgsc1@pumps.rdc
+38,Chennai,CHE-ZOHO,CHLP10SME1,Sri Balamurugar Enterprises,chlp10sme1@pumps.rdc
+39,Chennai,CHE-ZOHO,CHLP11SBE4,Sri Balamurugar Enterprises,chlp11sbe4@pumps.rdc
+40,Chennai,CHE-Casahola,CHLP13,Giant Construction Company,chlp13@pumps.rdc
+41,Chennai,CHE-Madhavaram,CHLP2,PEARL DENTAL LABORATORY,chlp2@pumps.rdc
+42,Chennai,CHE-Medavakkam,CHLP3,AKSHAYA ASSOCIATES,chlp3@pumps.rdc
+43,Chennai,CHE-Medavakkam,CHLP5,AKSHAYA ASSOCIATES,chlp5@pumps.rdc
+44,Chennai,CHE-Medavakkam,CHLP6AKE1,AKSHAYA ASSOCIATES,chlp6ake1@pumps.rdc
+45,Chennai,CHE-Medavakkam,CHLP7,AKSHAYA ASSOCIATES,chlp7@pumps.rdc
+46,Chennai,CHE-Madhavaram,CHLP9SBE3,Sri Balamurugar Enterprises,chlp9sbe3@pumps.rdc
+47,Chennai,CHE-Medavakkam,CHLPRDC1,RDC Concrete (India) Ltd,chlprdc1@pumps.rdc
+48,Chennai,CHE-Madhavaram,CHLPRDC2,RDC Concrete (India) Ltd,chlprdc2@pumps.rdc
+49,Uttarakhand,UK- Dehradun,DDPUMP01,Om Sai Enterprises (Hr/Dl),ddpump01@pumps.rdc
+50,Uttarakhand,UK- Dehradun,DDPUMP02,Keso Trans India,ddpump02@pumps.rdc
+51,Uttarakhand,UK-Haridwar,DDPUMP03,RBM INFRA SERVICES PRIVATE LIMITED,ddpump03@pumps.rdc
+52,Punjab,PB-Derabassi,DELP3TRI2,Trident Engineering,delp3tri2@pumps.rdc
+53,Punjab,PB-Derabassi,DELP5TRI3,Trident Engineering,delp5tri3@pumps.rdc
+54,Delhi,NCR-Gurgaon Kherki,DLBPOWN1,RDC Concrete (India) Ltd,dlbpown1@pumps.rdc
+55,Delhi,NCR-Gurgaon Shikohpur M3M 1,DLBPOWN3,RDC Concrete (India) Ltd,dlbpown3@pumps.rdc
+56,Delhi,NCR- Gurgaon M3M 2,DLL06PSAI1,Om Sai Enterprises (Hr/Dl),dll06psai1@pumps.rdc
+57,Delhi,NCR-Ghewra,DLLP01SAI11,Om Sai Enterprises (Hr/Dl),dllp01sai11@pumps.rdc
+58,Delhi,NCR-Faridabad,DLLP02SAI4,Om Sai Enterprises (Hr/Dl),dllp02sai4@pumps.rdc
+59,Delhi,NCR- Vinta,DLLP03SAI5,Om Sai Enterprises (Hr/Dl),dllp03sai5@pumps.rdc
+60,Delhi,NCR-Gurgaon,DLLP04AAR2,Aarav Construction Co.,dllp04aar2@pumps.rdc
+61,Delhi,NCR-Faridabad,DLLP07SAI2,Om Sai Enterprises (Hr/Dl),dllp07sai2@pumps.rdc
+62,Delhi,NCR- Classic Engg,DLLP08SAI6,Om Sai Enterprises (Hr/Dl),dllp08sai6@pumps.rdc
+63,Delhi,NCR-Greater Noida 3,DLLP09AAR4,Aarav Construction Co.,dllp09aar4@pumps.rdc
+64,Delhi,NCR-Gurgaon Kherki,DLLP11VAA1,Vashu Infratech,dllp11vaa1@pumps.rdc
+65,Delhi,NCR-Gurgaon,DLLP12AAR3,Aarav Construction Co.,dllp12aar3@pumps.rdc
+66,Delhi,NCR-Gurgaon Kherki,DLLP13VAA2,Vashu Infratech,dllp13vaa2@pumps.rdc
+67,Delhi,NCR-Greater Noida 2,DLLP15SRI1,S R Infratech,dllp15sri1@pumps.rdc
+68,Delhi,NCR-Faridabad,DLLP19SAI8,Om Sai Enterprises (Hr/Dl),dllp19sai8@pumps.rdc
+69,Delhi,NCR-Gurgaon Shikohpur M3M 1,DLLP20SAI9,Om Sai Enterprises (Hr/Dl),dllp20sai9@pumps.rdc
+70,Delhi,NCR-Greater Noida 3,DLLP23SAA1,Saarza Traders,dllp23saa1@pumps.rdc
+71,Delhi,NCR-Greater Noida 2,DLLP25AAR5,Aarav Construction Co.,dllp25aar5@pumps.rdc
+72,Delhi,NCR-Greater Noida 2,DLLP26SAAR,Saarza Traders,dllp26saar@pumps.rdc
+73,Delhi,NCR-Gurgaon Shikohpur M3M 1,DLLP27SAI12,Om Sai Enterprises (Hr/Dl),dllp27sai12@pumps.rdc
+74,Delhi,NCR- Gurgaon M3M 2,DLLP28SAI13,Om Sai Enterprises (Hr/Dl),dllp28sai13@pumps.rdc
+75,Delhi,NCR- Vinta,DLLP29SAI14,RBM INFRA SERVICES PRIVATE LIMITED,dllp29sai14@pumps.rdc
+76,Bhopal,MP-Bhopal 2,DSPUMP2,D S ENTERPRISES- MP,dspump2@pumps.rdc
+77,Bhopal,MP-Bhopal 1,DSPUMP3,D S ENTERPRISES- MP,dspump3@pumps.rdc
+78,Uttar Pradesh,UP-Gorakpur,GKLPADA1,Adarsh Infra,gklpada1@pumps.rdc
+79,Uttar Pradesh,UP-Gorakpur,GKLPADA2,Adarsh Infra,gklpada2@pumps.rdc
+80,Goa,GOA-Goa 1,GOLPKAP1,KAPCOM INDIA,golpkap1@pumps.rdc
+81,Goa,GOA-Goa 2,GOLPKAP2,KAPCOM INDIA,golpkap2@pumps.rdc
+82,Goa,Goa-DLF Bayview,GOLPKAP3,KAPCOM INDIA,golpkap3@pumps.rdc
+83,Kerala,KER-Thrissur 1,HEAVEN1400,Heaven Logistics,heaven1400@pumps.rdc
+84,Kerala,KER-Thrissur 1,HEAVEN14002,Heaven Logistics,heaven14002@pumps.rdc
+85,Chattisgarh,CHA-Raipur 1,HSKPUMP2,Harmeet Singh Kapoor,hskpump2@pumps.rdc
+86,Hyderabad,HYD-Bachupally,HYBPOWN1,Narra Aruna,hybpown1@pumps.rdc
+87,Hyderabad,HYD-Patancheru,HYBPOWN2,RDC Concrete (India) Ltd,hybpown2@pumps.rdc
+88,Hyderabad,HYD-Tukkuguda,HYLP04PUMP,M A ENTERPRISES - HYD,hylp04pump@pumps.rdc
+89,Hyderabad,HYD-Bachupally,HYLP09UMA2,Uma Enterprises,hylp09uma2@pumps.rdc
+90,Hyderabad,HYD-Kollur,HYLP10PUMP,SRI RAMA ENTERPRISES,hylp10pump@pumps.rdc
+91,Hyderabad,HYD-Kollur,HYLP11CHA1,Charvi Enterprises,hylp11cha1@pumps.rdc
+92,Hyderabad,HYD-Nacharam,HYLP12SRE2,SR Enterprises,hylp12sre2@pumps.rdc
+93,Hyderabad,HYD-Rajender Nagar,HYLP13RK1,RK ENTERPRISES,hylp13rk1@pumps.rdc
+94,Hyderabad,HYD-Nacharam,HYLP14GAN1,Gangulothu Ramsing,hylp14gan1@pumps.rdc
+95,Hyderabad,HYD-Khanapur,HYLP15VIS1OWN,RDC Concrete (India) Ltd,hylp15vis1own@pumps.rdc
+96,Hyderabad,HYD-Bachupally,HYLP16RP4,RAMPRASAD KONAKATI,hylp16rp4@pumps.rdc
+97,Hyderabad,HYD-Nacharam,HYLP17GAN3,Gangulothu Ramsing,hylp17gan3@pumps.rdc
+98,Hyderabad,HYD-Khanapur,HYLP20OWN2,Narra Aruna,hylp20own2@pumps.rdc
+99,Hyderabad,HYD-Tukkuguda,HYLP21MA2_6179,M A ENTERPRISES - HYD,hylp21ma2-6179@pumps.rdc
+100,Hyderabad,HYD-Kollur,HYLP22DSR2,Dagadapally Sujith Kumar Reddy,hylp22dsr2@pumps.rdc
+101,Hyderabad,HYD-Nacharam,HYLP25ANE1,Anjali Enterprises-Hyd,hylp25ane1@pumps.rdc
+102,Hyderabad,HYD-Kollur,HYLP25RK2,RK ENTERPRISES,hylp25rk2@pumps.rdc
+103,Hyderabad,HYD-Patancheru,HYLP26UMA1,Uma Enterprises,hylp26uma1@pumps.rdc
+104,Hyderabad,HYD-Kalpataru,HYLP2MR2,MOHARWALA RAJESHWARI,hylp2mr2@pumps.rdc
+105,Hyderabad,HYD-Bachupally,HYLP2RP2,RAMPRASAD KONAKATI,hylp2rp2@pumps.rdc
+106,Hyderabad,HYD-Bachupally,HYLP3DS1,Dibbarao Samudrala,hylp3ds1@pumps.rdc
+107,Hyderabad,HYD-Kalpataru,HYLP4PUMP,MOHARWALA RAJESHWARI,hylp4pump@pumps.rdc
+108,Hyderabad,HYD-Kalpataru,HYLP4PUMPNEW,MOHARWALA RAJESHWARI,hylp4pumpnew@pumps.rdc
+109,Hyderabad,HYD-Bachupally,HYLP5RP1,RAMPRASAD KONAKATI,hylp5rp1@pumps.rdc
+110,Hyderabad,HYD-Kalpataru,HYLP6PUMP,MOHARWALA RAJESHWARI,hylp6pump@pumps.rdc
+111,Hyderabad,HYD-Khanapur,HYLP7OWN1,Narra Aruna,hylp7own1@pumps.rdc
+112,Hyderabad,HYD-Bachupally,HYLP8DSR1,Dagadapally Sujith Kumar Reddy,hylp8dsr1@pumps.rdc
+113,Bhopal,MP-Jabalpur,JA1PUMP,Taj Infra Service,ja1pump@pumps.rdc
+114,Rajasthan,RAJ-Jaipur,JALPSAI1,Om Sai Enterprises (Hr/Dl),jalpsai1@pumps.rdc
+115,Rajasthan,RAJ-Jaipur,JALPSAI2,Om Sai Enterprises (Hr/Dl),jalpsai2@pumps.rdc
+116,Jharkhand,JHA-Jamshedpur,JMLPRAJ1,Dhananjay Prasad Sinha,jmlpraj1@pumps.rdc
+117,Delhi,NCR-Greater Noida 3,KEBPOWN1,RDC Concrete (India) Ltd,kebpown1@pumps.rdc
+118,Kerala,KER-Kochi 1 Edyar,KELPOWN1,RDC Concrete (India) Ltd,kelpown1@pumps.rdc
+119,Kerala,KER-Kochi 1 Edyar,KELPOWN10,RDC Concrete (India) Ltd,kelpown10@pumps.rdc
+120,Kerala,KER-Trivandrum 1,KELPOWN2,RDC Concrete (India) Ltd,kelpown2@pumps.rdc
+121,Kerala,KER-Kochi 1 Edyar,KELPOWN5,RDC Concrete (India) Ltd,kelpown5@pumps.rdc
+122,Kerala,KER-Wayanad,KELPOWN8,RDC Concrete (India) Ltd,kelpown8@pumps.rdc
+123,Kerala,KER-Kottayam,KELPSTM1,STM CONCRETE-KL,kelpstm1@pumps.rdc
+124,Kerala,KER-Kozikode,KELPSTM10,STM CONCRETE-KL,kelpstm10@pumps.rdc
+125,Kerala,KER-Kottayam,KELPSTM2,STM CONCRETE-KL,kelpstm2@pumps.rdc
+126,Kerala,KER-Trivandrum 2,KELPSTM5,STM CONCRETE-KL,kelpstm5@pumps.rdc
+127,Kerala,KER-Kozikode,KELPSTM6,STM CONCRETE-KL,kelpstm6@pumps.rdc
+128,Kerala,KER-Thrissur 1,KELPSTM7,STM CONCRETE-KL,kelpstm7@pumps.rdc
+129,Kerala,KER-Kozikode,KELPSTM9,STM CONCRETE-KL,kelpstm9@pumps.rdc
+130,Kerala,KER-Kozikode,KL22T9723,RDC Concrete (India) Ltd,kl22t9723@pumps.rdc
+131,Kolkata,KOL-New Town,KOLPOWN1407D1,RDC Concrete (India) Ltd,kolpown1407d1@pumps.rdc
+132,Kolkata,KOL-New Town,KOLPOWN1407D3,RDC Concrete (India) Ltd,kolpown1407d3@pumps.rdc
+133,Kolkata,KOL-New Town,KOLPOWN4,RDC Concrete (India) Ltd,kolpown4@pumps.rdc
+134,Kolkata,KOL-New Town,KOLPOWN5,RDC Concrete (India) Ltd,kolpown5@pumps.rdc
+135,Punjab,PB-Kurali,KULP6TRI4,Trident Engineering,kulp6tri4@pumps.rdc
+136,Chattisgarh,CHA-Durg,KVDURGPUMP1,KAPOOR VENTURES,kvdurgpump1@pumps.rdc
+137,Chattisgarh,CHA-Raipur 1,KVPUMP1,KAPOOR VENTURES,kvpump1@pumps.rdc
+138,Hyderabad,HYD-Patancheru,LP24,SRI MALLIKARJUNA ENTERPRISES,lp24@pumps.rdc
+139,Hyderabad,HYD-Tellapur,LP28PUMP,SRI MALLIKARJUNA ENTERPRISES,lp28pump@pumps.rdc
+140,Punjab,PB-Ludhiana,LULP1SMB1,Simer Builders,lulp1smb1@pumps.rdc
+141,Punjab,PB-Ludhiana,LULP2SMB2,Simer Builders,lulp2smb2@pumps.rdc
+142,Uttar Pradesh,UP-Lucknow,LULPADA1,Adarsh Infra,lulpada1@pumps.rdc
+143,Mangalore,KAR-Mangalore,MANGLPATH2,Atharva Enterprises,manglpath2@pumps.rdc
+144,Mangalore,KAR-Mangalore,MGLPATH1,RDC Concrete (India) Ltd,mglpath1@pumps.rdc
+145,Punjab,PB-Mohali,MLLP1SAI1,Saini Concrete Systems Pvt. Ltd.,mllp1sai1@pumps.rdc
+146,Punjab,PB-Mohali,MLLP2TRI1,Trident Engineering,mllp2tri1@pumps.rdc
+147,Punjab,PB-Mohali,MLLP4SAI2,Saini Concrete Systems Pvt. Ltd.,mllp4sai2@pumps.rdc
+148,Andhra Pradesh,AP-Mangalagiri,MMKENTERPRISESPUMP1,M MK ENTERPRISES,mmkenterprisespump1@pumps.rdc
+149,Kerala,KER-Kochi 2 Amb,MRP1005,MRP RMC Equipments & Contractors,mrp1005@pumps.rdc
+150,Coimbatore,TN-Coimbatore 1,MRPCM1SP1,MRP RMC Equipments & Contractors,mrpcm1sp1@pumps.rdc
+151,Mumbai,MUM-Deonar,MULP1OWN1,RDC Concrete (India) Ltd,mulp1own1@pumps.rdc
+152,Mumbai,MUM-Deonar,MULP2OWN2,RDC Concrete (India) Ltd,mulp2own2@pumps.rdc
+153,Mumbai,MUM-Deonar,MULP3DHA1,Crisana Synthetics Private Limited,mulp3dha1@pumps.rdc
+154,Mumbai,MUM-Deonar,MULP3OWNP3,RDC Concrete (India) Ltd,mulp3ownp3@pumps.rdc
+155,Mumbai,MUM-Sakinaka,MULP4KAP1,KAPCOM INDIA,mulp4kap1@pumps.rdc
+156,Mumbai,MUM-Deonar,MULP4OWN4,RDC Concrete (India) Ltd,mulp4own4@pumps.rdc
+157,Mumbai,MUM-Deonar,MULP5VAS5,VISHWAKARMA ENTERPRISES,mulp5vas5@pumps.rdc
+158,Patna,BHR-Patna Comm,PALPWEL1,M/S Welworth Infra,palpwel1@pumps.rdc
+159,Patna,BHR-Patna Comm,PALPWEL3,Welworth Ready Mix Concrete,palpwel3@pumps.rdc
+160,Patna,BHR-Patna Comm,PALPWWI2,Welworth Ready Mix Concrete,palpwwi2@pumps.rdc
+161,Punjab,PB-Ludhiana 3,PBLP1TE1,Simer Builders,pblp1te1@pumps.rdc
+163,Pune,PUN-Hadapsar,PULP1SHR1,Shraddha Enterprises Pune Tm,pulp1shr1@pumps.rdc
+164,Pune,PUN-Hinjewadi,PULP2DIK1,Diksha Enterprises,pulp2dik1@pumps.rdc
+165,Pune,PUN- Jambe,PULP3DIK2,Diksha Enterprises,pulp3dik2@pumps.rdc
+166,Pune,PUN-Sinhgarh,PULP4SHR2,Shraddha Enterprises Pune Tm,pulp4shr2@pumps.rdc
+167,Pune,PUN-Sinhgarh,PULP5,Shraddha Enterprises Pune Tm,pulp5@pumps.rdc
+168,Pune,PUN- Jambe,PULP5SHY1,Shraddha Enterprises Pune Tm,pulp5shy1@pumps.rdc
+169,Gujarat,GUJ- Sanand,PUMP1400,JAY GOGA ENTERPRISE,pump1400@pumps.rdc
+170,Nagpur,MH-Nagpur 2,PUMP1405D,Skyline Enterprises,pump1405d@pumps.rdc
+171,Nagpur,MH-Nagpur 2,PUMP1407D,Skyline Enterprises,pump1407d@pumps.rdc
+172,Kerala,KER-Wayanad,PUMPAQUARIS,RDC Concrete (India) Ltd,pumpaquaris@pumps.rdc
+173,Gujarat,GUJ-Vadodara - Dumad,PUMPL17,Lotus Enterprises-Vadodara,pumpl17@pumps.rdc
+174,Hyderabad,HYD-Medchal,PUMPLP1,RAMPRASAD KONAKATI,pumplp1@pumps.rdc
+175,Hyderabad,HYD-Khanapur,PUMPLP19KKR,KKR Contractors,pumplp19kkr@pumps.rdc
+176,Hyderabad,HYD-Kollur,PUMPLP24,PEORIA PRIVATE LIMITED,pumplp24@pumps.rdc
+177,Hyderabad,HYD-Tellapur,PUMPLP29,Uma Enterprises,pumplp29@pumps.rdc
+178,Hyderabad,HYD-Medchal,PUMPLP6,LAKSHMI NARASIMHA ENTERPRISES,pumplp6@pumps.rdc
+179,Mumbai,MUM-Turbhe,PUMPMU10,KAPCOM INDIA,pumpmu10@pumps.rdc
+180,Mumbai,MUM-Mankoli,PUMPMU6,SHREE SAI TRADERS (PUMP),pumpmu6@pumps.rdc
+181,Gujarat,GUJ- Vapi,PUMPVAPI,AKASH OFFSET PRINT,pumpvapi@pumps.rdc
+182,Jammu,Kathua,RAPUMP1KATHUA,Veerbhadra Enterprises,rapump1kathua@pumps.rdc
+184,Jharkhand,JHA-Ranchi,RNCRAM1,RAMESH KUMAR,rncram1@pumps.rdc
+185,Jammu,Jammu,SONJK1PUMP2,Sonam Construction Co.,sonjk1pump2@pumps.rdc
+186,Kerala,KER-Kozikode,SP.1800,STM CONCRETE-KL,sp-1800@pumps.rdc
+187,Kerala,KER-Trivandrum 1,SP1400,STM CONCRETE-KL,sp1400@pumps.rdc
+188,Kerala,KER-Kochi 2 Amb,SP1420,MRP RMC Equipments & Contractors,sp1420@pumps.rdc
+189,Kerala,KER-Trivandrum 1,SP1800,STM CONCRETE-KL,sp1800@pumps.rdc
+190,Kerala,KER-Trivandrum 2,SP1807,STM CONCRETE-KL,sp1807@pumps.rdc
+191,Pune,PUN-TPL Metro,SP1807PUMP,STM CONCRETE-KL,sp1807pump@pumps.rdc
+192,Kerala,KER-Wayanad,SP_1400,STM CONCRETE-KL,sp-1400@pumps.rdc
+193,Gujarat,GUJ-Surat 1,SRLPPUR1,Purvi Transport,srlppur1@pumps.rdc
+194,Gujarat,GUJ-Surat 2,SRLPSHI1,Shiv Logistics,srlpshi1@pumps.rdc
+195,Kerala,KER-Thrissur 2,STM1400,STM CONCRETE-KL,stm1400@pumps.rdc
+196,Jharkhand,JHA-Ranchi,SWINGPUMP2,RAMESH KUMAR,swingpump2@pumps.rdc
+197,Nagpur,MH-Nagpur 1,TIWARI1405,Tiwari construction,tiwari1405@pumps.rdc
+198,Indore,MP-Indore,TPPUMP2,TP Equipments,tppump2@pumps.rdc
+199,Jammu,Jammu,TRIJK1PUMP3,Trident Engineering,trijk1pump3@pumps.rdc
+200,Kerala,KER-Trivandrum 2,TVM2STM1,STM CONCRETE-KL,tvm2stm1@pumps.rdc
+201,Kerala,KER-Trivandrum 2,TVM2STM2,STM CONCRETE-KL,tvm2stm2@pumps.rdc
+202,Coimbatore,TN-Trichy,TYLPRMC1,BEST READYMIX,tylprmc1@pumps.rdc
+203,Uttar Pradesh,UP-Lucknow,UPLPADA1,Adarsh Infra,uplpada1@pumps.rdc
+204,Andhra Pradesh,AP-Vizag,VZLPJAY1,G JAYALAKSHMI,vzlpjay1@pumps.rdc
+205,Andhra Pradesh,AP-Vizag,VZLPJAY2,G JAYALAKSHMI,vzlpjay2@pumps.rdc
+
