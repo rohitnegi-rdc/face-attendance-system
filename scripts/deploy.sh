@@ -1,73 +1,122 @@
 #!/usr/bin/env bash
-# One-command deploy from your machine (Git Bash on Windows works). You must be on the
-# server's network. Usage: npm run deploy
+# Deploy from GitHub. Run it ON the server, inside the git clone:
+#   cd ~/projects/face-attendance-system && bash scripts/deploy.sh
 #
-#   1. Runs checks locally. If anything fails it stops and the server is never touched.
-#   2. Ships the committed code (git HEAD) to the server over ONE ssh connection, so a
-#      password login asks for the password only once.
-#   3. scripts/deploy-remote.sh then runs on the server: backs up the DB + photos, rebuilds,
-#      health-checks, and rolls back to the previous version if the new one is unhealthy.
+#   1. Refuses if the server copy is not on main or has local edits.
+#   2. Fetches GitHub and fast-forwards to origin/main (refuses if they diverged), so the server
+#      always runs exactly what is on GitHub.
+#   3. Backs up the database and photos (when a version is already running).
+#   4. Rebuilds and starts the containers. Migrations run automatically.
+#   5. Health-checks. On failure it puts the previous commit and images back.
 #
-# Settings live in deploy.env (gitignored, never commit it):
-#   DEPLOY_HOST=developer@RDC-AI-UBUNTU     # or developer@<server-ip>
-#   DEPLOY_CHECKS="npm run test:regression" # optional, commands that must pass first
-#   DEPLOY_BRANCH=main                      # optional, the only branch allowed to deploy
+# The server does not run tests. Run `npm run test:regression` on your machine before pushing.
+# Rollback restores code and containers, not the database: migrations must stay additive, or
+# restore the backup printed in step 3.
+#
+# Options (env): DEPLOY_BRANCH (default main), HEALTH_TIMEOUT seconds (default 180),
+# REBUILD=1 to rebuild even when nothing new was pulled.
 set -euo pipefail
-cd "$(dirname "$0")/.."
 
-# Deploys are switched off until the app is stabilised (see
-# plans/ProductionReadinessAudit-2026-10-08.md). Turn them on deliberately, in a commit of its
-# own, by setting this to true.
-DEPLOY_ENABLED=false
-if [[ "$DEPLOY_ENABLED" != true ]]; then
-	echo 'Deploy is disabled (DEPLOY_ENABLED=false in scripts/deploy.sh). Nothing was done.' >&2
-	exit 1
-fi
+# Everything runs from inside main(), so bash has read the whole script before git replaces
+# this file during the pull.
+main() {
+	cd "$(dirname "$0")/.."
+	local branch="${DEPLOY_BRANCH:-main}"
+	local health_timeout="${HEALTH_TIMEOUT:-180}"
 
-if [[ -f deploy.env ]]; then
-	# shellcheck disable=SC1091
-	source deploy.env
-fi
-DEPLOY_HOST="${DEPLOY_HOST:?Create deploy.env with DEPLOY_HOST=developer@RDC-AI-UBUNTU}"
-# The regression gate (scripts/run-regression.mjs) type-checks, builds and runs every scenario
-# against a throwaway database. It needs Docker running locally. Logs: test-output/regression/.
-DEPLOY_CHECKS="${DEPLOY_CHECKS:-npm run test:regression}"
+	log() { printf '[deploy %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
-if [[ -n "$(git status --porcelain)" ]]; then
-	echo 'You have uncommitted changes. Only committed code is deployed, so commit or stash first.' >&2
-	exit 1
-fi
+	if [[ ! -f .env ]]; then
+		log 'Missing .env. Create it once (copy .env.example and fill in the secrets), then deploy again.'
+		exit 1
+	fi
+	if [[ "$(git branch --show-current)" != "$branch" ]]; then
+		log "The server copy is on '$(git branch --show-current)'. Run: git checkout $branch"
+		exit 1
+	fi
+	if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+		log 'The server copy has local edits. Deploys only run what is on GitHub. Discard them first:'
+		git status --short --untracked-files=no
+		exit 1
+	fi
 
-# Only deploy main, and only when it is exactly what is on GitHub (pushed, nothing extra).
-deploy_branch="${DEPLOY_BRANCH:-main}"
-current_branch="$(git branch --show-current)"
-if [[ "$current_branch" != "$deploy_branch" ]]; then
-	echo "You are on '$current_branch'. Deploys only run from '$deploy_branch'." >&2
-	exit 1
-fi
-echo "==> Checking local $deploy_branch matches origin/$deploy_branch"
-git fetch --quiet origin "$deploy_branch"
-if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$deploy_branch")" ]]; then
-	echo "Local $deploy_branch and origin/$deploy_branch differ. Push or pull until they match, then deploy." >&2
-	git status -sb | head -n1 >&2
-	exit 1
-fi
-release="$(git rev-parse --short HEAD)"
-echo "==> Deploying $release ($(git log -1 --format=%s)) to $DEPLOY_HOST"
+	log "Fetching origin/$branch"
+	git fetch --quiet origin "$branch"
+	local previous target
+	previous="$(git rev-parse HEAD)"
+	target="$(git rev-parse "origin/$branch")"
+	if ! git merge-base --is-ancestor "$previous" "$target"; then
+		log "The server copy and origin/$branch have diverged. Nothing was changed."
+		exit 1
+	fi
 
-echo "==> Local checks: $DEPLOY_CHECKS"
-if ! eval "$DEPLOY_CHECKS"; then
-	echo 'Checks failed. Nothing was deployed, the server still runs the previous version.' >&2
-	echo 'See the summary above and the full logs in test-output/regression/ (newest folder).' >&2
-	exit 1
-fi
+	env_value() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- | tr -d "'\"" || true; }
+	local app_port base_path app_image ai_image
+	app_port="$(env_value APP_HOST_PORT)"
+	app_port="${app_port:-3001}"
+	base_path="$(env_value BASE_PATH)" # e.g. /pump-attendance, empty when served at the root
+	app_image="$(env_value APP_IMAGE)"
+	app_image="${app_image:-face-attendance/app:local}"
+	ai_image="$(basename "$PWD")-ai-service"
 
-# core.autocrlf=false keeps LF line endings in the archive, otherwise Windows would ship
-# CRLF files and the shell scripts would break on Linux.
-echo '==> Uploading code and deploying on the server (enter the server password if asked)'
-git -c core.autocrlf=false archive --format=tar HEAD |
-	ssh "$DEPLOY_HOST" "set -e
-		staging=\$HOME/projects/.deploy-staging
-		rm -rf \"\$staging\" && mkdir -p \"\$staging\"
-		tar -x -C \"\$staging\"
-		bash \"\$staging/scripts/deploy-remote.sh\" \"\$staging\" '$release'"
+	local has_previous=false
+	if [[ -n "$(docker compose ps --status running -q app 2>/dev/null || true)" ]]; then
+		has_previous=true
+	fi
+	if [[ "$previous" == "$target" ]] && $has_previous && [[ "${REBUILD:-}" != 1 ]]; then
+		log "Already running $(git rev-parse --short HEAD), nothing new on GitHub. REBUILD=1 forces a rebuild."
+		exit 0
+	fi
+	log "Deploying $(git log -1 --format='%h %s' "$target")"
+
+	if $has_previous; then
+		log 'Backing up database and photos'
+		BACKUP_DIR="$PWD/backups" bash scripts/backup-production.sh
+		log 'Saving current images for rollback'
+		docker tag "$app_image" "${app_image%:*}:previous"
+		docker tag "$ai_image:latest" "$ai_image:previous" 2>/dev/null || true
+	else
+		log 'No running version found, first deploy: skipping backup'
+	fi
+
+	rollback() {
+		trap - ERR
+		log "DEPLOY FAILED for $(git rev-parse --short "$target")"
+		if ! $has_previous; then
+			log 'No previous version to roll back to. Fix the error, push, and deploy again.'
+			exit 1
+		fi
+		log "Rolling back to $(git rev-parse --short "$previous")"
+		git reset --quiet --hard "$previous"
+		docker tag "${app_image%:*}:previous" "$app_image"
+		docker tag "$ai_image:previous" "$ai_image:latest" 2>/dev/null || true
+		docker compose up -d --no-build --remove-orphans
+		log 'Rolled back. The previous version is running again. Run git pull later to catch up.'
+		exit 1
+	}
+	trap rollback ERR
+
+	git merge --quiet --ff-only "$target"
+	log 'Building and starting containers (migrations run automatically)'
+	docker compose up -d --build --remove-orphans
+
+	log "Health check (up to ${health_timeout}s)"
+	local deadline=$((SECONDS + health_timeout))
+	until curl -fsS "http://127.0.0.1:$app_port$base_path/api/health" >/dev/null 2>&1 &&
+		[[ -n "$(docker compose ps --status running -q worker)" ]]; do
+		if ((SECONDS >= deadline)); then
+			log 'Health check timed out'
+			docker compose ps
+			docker compose logs --tail 40 app worker || true
+			false # triggers rollback
+		fi
+		sleep 3
+	done
+
+	trap - ERR
+	docker image prune -f >/dev/null || true
+	log "SUCCESS: $(git rev-parse --short HEAD) is live on port $app_port"
+}
+
+main "$@"
+exit

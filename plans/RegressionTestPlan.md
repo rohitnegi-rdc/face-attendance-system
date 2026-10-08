@@ -15,8 +15,8 @@ pass once the fix lands.
 
 | Tier | What | Runs | Time budget | Command (target) |
 |---|---|---|---|---|
-| 0 Static | `svelte-check`, ESLint, Prettier, `bash -n` on scripts | Every change, in `deploy.sh` | < 1 min | `npm run check && npm run lint` |
-| 1 API + worker (regression gate) | HTTP calls against the built app, real Postgres, real worker, **stub AI service** with deterministic embeddings | Every change, in `deploy.sh` | about 2 min | `npm run test:regression` |
+| 0 Static | `svelte-check`, ESLint, Prettier, `bash -n` on scripts | Every change, before push | < 1 min | `npm run check && npm run lint` |
+| 1 API + worker (regression gate) | HTTP calls against the built app, real Postgres, real worker, **stub AI service** with deterministic embeddings | Every change, before push | about 3 min | `npm run test:regression` |
 | 2 Browser E2E | Playwright per role, desktop and phone width | Before every deploy (manual), and after UI changes | < 15 min | existing `test:e2e:*` configs |
 | 3 Model accuracy | Golden small-group corpus, Pins/LFW approval gate | Only when detection model, embedding model, threshold or matching logic changes | 10–60 min | `eval:golden:run`, `eval:approve` |
 | 4 Load and concurrency | Burst submissions, same-Area contention, worker scaling | Before go-live, and after worker or DB changes | 10–30 min | `test:attendance:load`, `eval:attendance:concurrency:*` |
@@ -279,7 +279,7 @@ screenshots in `test-output/shift-live/<run>/`. Needs `LIVE_DATABASE_URL`, `LIVE
 | OPS-03 | `/api/health` with each dependency down (DB, AI, worker) | 503 and names the failed part | 1 | P0 | Missing |
 | OPS-04 | Deploy a release that fails its health check | Automatic rollback; previous version serving | Manual drill | P0 | Missing |
 | OPS-05 | Backup then restore into a scratch database | Row counts and photo files match | Manual drill | P0 | Missing (`restore-drill.sh` exists) |
-| OPS-06 | `deploy.sh` when local `main` differs from `origin/main` | Refuses | 0 | P0 | Missing |
+| OPS-06 | Server `deploy.sh` when the server copy has local edits or has diverged from `origin/main` | Refuses, nothing changes | 0 | P0 | Missing |
 | OPS-07 | App starts without `JWT_SECRET` or with a short one | Fails fast with a clear message | 1 | P1 | Missing |
 | OPS-08 | Logs contain no passwords, tokens or photo bytes | grep of logs after a Tier 1 run | 1 | P1 | Missing |
 
