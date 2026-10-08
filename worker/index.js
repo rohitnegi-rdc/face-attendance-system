@@ -19,7 +19,12 @@ const pool = new Pool({
 });
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://ai-service:8000';
-const FACE_MATCH_THRESHOLD = Number(process.env.FACE_MATCH_THRESHOLD ?? 0.3);
+// Same default and parsing as src/lib/server/matching.ts (0.28, from the golden small-group
+// evaluation). An empty or invalid env value falls back to the default instead of becoming 0.
+const FACE_MATCH_THRESHOLD = (() => {
+	const value = Number(process.env.FACE_MATCH_THRESHOLD?.trim() || NaN);
+	return value > 0 && value < 1 ? value : 0.28;
+})();
 const POLL_INTERVAL_MS = 1500;
 const GALLERY_SIZE = 5;
 const CLAIM_TIMEOUT_MINUTES = Number(process.env.JOB_CLAIM_TIMEOUT_MINUTES ?? 10);
@@ -366,14 +371,19 @@ async function processJob(job) {
 
 					if (crossMatch && crossMatch.similarity >= FACE_MATCH_THRESHOLD) {
 						await client.query(
-							`INSERT INTO fraud_flags (session_id, person_id, matched_at_pump_id, matched_session_id, similarity_score)
-					 VALUES ($1, $2, $3, $4, $5)`,
+							// The face is skipped below, so keep it on the flag: an admin who rules the
+							// flag "not fraud" needs it to mark this worker present at this pump.
+							`INSERT INTO fraud_flags (session_id, person_id, matched_at_pump_id, matched_session_id,
+					                          similarity_score, face_embedding, face_crop_url)
+					 VALUES ($1, $2, $3, $4, $5, $6::vector, $7)`,
 							[
 								session.id,
 								crossMatch.person_id,
 								crossMatch.pump_id,
 								crossMatch.matched_session_id,
-								crossMatch.similarity
+								crossMatch.similarity,
+								vec,
+								face.crop_base64 ? `data:image/jpeg;base64,${face.crop_base64}` : null
 							]
 						);
 						fraudFlags.push({ person_id: crossMatch.person_id, similarity: crossMatch.similarity });

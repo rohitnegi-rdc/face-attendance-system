@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { query, queryOne } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
+import { faceMatchThreshold } from '$lib/server/matching';
 
 export const load: PageServerLoad = async () => {
 	const today = todayIST();
@@ -47,7 +48,7 @@ export const load: PageServerLoad = async () => {
 			     AND 1 - (v1.embedding <=> v2.embedding) >= 0.20
 			     AND 1 - (v1.embedding <=> v2.embedding) < $1
 			 ) candidates`,
-			[Number(process.env.FACE_MATCH_THRESHOLD ?? 0.3)]
+			[faceMatchThreshold()]
 		),
 		query<any>(
 			`WITH days AS (

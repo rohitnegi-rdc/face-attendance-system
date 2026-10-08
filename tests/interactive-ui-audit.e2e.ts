@@ -791,7 +791,7 @@ test('guest dismiss/create-person and fraud review buttons update only audit fix
 		.locator('.review-item')
 		.filter({ has: page.locator(`input[value="${fraud.id}"]`) });
 	await expect(fraudArticle).toContainText(`${auditTag}-P02`);
-	await fraudArticle.getByRole('button', { name: 'Mark reviewed' }).click();
+	await fraudArticle.getByRole('button', { name: 'Confirm fraud' }).click();
 	expect(
 		(await pool.query('SELECT reviewed FROM fraud_flags WHERE id = $1', [fraud.id])).rows[0]
 			.reviewed

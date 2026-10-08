@@ -69,7 +69,7 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 | AUTH-10 | Logout | Cookie removed, protected page redirects to login | 1, 2 | P0 | Covered (`interactive-ui-audit`) |
 | AUTH-11 | HTTPS (`x-forwarded-proto: https`) sets a `Secure` cookie named `session`; HTTP sets `session_http` | As stated | 1 | P1 | Missing |
 | AUTH-12 | Google OAuth: unknown email, disabled pump, valid account | Rejected, rejected, logged in | 1 (stub Google) | P2 | Missing |
-| AUTH-13 | Brute force: 20 wrong passwords for one email in 1 min | Throttled (429) | 1 | P1 | **RED** (no rate limit) |
+| AUTH-13 | Brute force: 20 wrong passwords for one email in 1 min | Throttled (429) | 1 | P1 | Won't do (decided 2026-10-08, no rate limit for v1) |
 | AUTH-14 | Admin resets a vendor or pump password | Old password fails; new one forces a password change | 1 | P1 | Missing |
 
 ### RBAC: who can see what
@@ -137,7 +137,7 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 | MATCH-03 | Similarity just below the threshold | New person (then the merge-candidate flow) | 1 | P0 | Covered (fraud-review-admin.spec) |
 | MATCH-04 | Morning and evening, same pump, same face | Same person, both flags true, **no fraud flag** | 1 | P0 | Covered (fraud-review-admin.spec) |
 | MATCH-05 | Five workers in one photo | Five evidence rows, five attendance rows | 1 | P0 | Covered (fraud-review-admin.spec) |
-| MATCH-06 | Threshold comes from env | Changing `FACE_MATCH_THRESHOLD` changes the MATCH-02/03 outcome | 1 | P1 | **RED** (compose hardcodes 0.30) |
+| MATCH-06 | Threshold comes from env | Changing `FACE_MATCH_THRESHOLD` changes the MATCH-02/03 outcome | 1 | P1 | Covered (fraud-review-admin.spec, default 0.28 from env, fixed 2026-10-08) |
 | MATCH-07 | Gallery: a match against any of the ~5 recent vectors counts | As stated | 1 | P2 | Missing |
 | MATCH-08 | `display_seq` stays unique and gap-free under concurrency | As stated | 4 | P1 | Missing |
 
@@ -152,9 +152,10 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 | FRD-05 | Brand-new worker (`pending_review`) at A, same face at B | Flagged | 1 | P0 | Covered (fraud-review-admin.spec, fixed 2026-10-08) |
 | FRD-06 | Pump A's session still in `review` when B submits the same face | Flagged | 1 | P0 | Covered (fraud-review-admin.spec, fixed 2026-10-08) |
 | FRD-07 | Pump retries a completed session that carries a fraud flag | Refused; flag stays | 1 | P0 | Covered (fraud-review-admin.spec, fixed 2026-10-08) |
-| FRD-08 | Admin marks a flag "not fraud" | Worker becomes present for that day, rollups adjusted | 1 | P1 | **RED** (no such action) |
+| FRD-08 | Admin marks a flag "not fraud" | Worker becomes present for that day, rollups adjusted | 1 | P1 | Covered (fraud-review-admin.spec: new worker and existing worker, fixed 2026-10-08) |
 | FRD-09 | `PHOTO_SPOOF_CHECK_ENABLED=false` | A screen-capture photo is processed normally; pump not disabled | 1 | P0 | Covered (`attendance-anti-spoof`, needs re-run) |
 | FRD-10 | `fraud_detected` session marked normal by admin | Reprocessed once; pump re-enabled; never re-flagged | 1 | P1 | Partial |
+| FRD-11 | Admin confirms fraud; a resolved flag cannot be resolved again | Worker stays absent; second decision refused | 1 | P1 | Covered (fraud-review-admin.spec) |
 
 ### REV: pump review, approve, retry
 

@@ -25,7 +25,10 @@ async function sameAreaPumps(n: number) {
 	return pumps;
 }
 
-async function submitAndWait(context: Parameters<typeof submit>[0], faces: string[]) {
+async function submitAndWait(
+	context: Parameters<typeof submit>[0],
+	faces: Parameters<typeof photo>[0]
+) {
 	const submitted = await submit(context, await photo(faces));
 	expect(submitted.status, JSON.stringify(submitted.body)).toBe(202);
 	await waitForSession(submitted.body.session_id, ['review']);
@@ -221,4 +224,102 @@ test('ADM-13 clearing a pump needs the exact pump code, then removes all its dat
 	).toBe(1);
 	// The pump account stays and can start fresh.
 	expect((await submit(pump.context, await photo(['ADM13C']))).status).toBe(202);
+});
+
+test('MATCH-06 the default threshold is 0.28 when FACE_MATCH_THRESHOLD is empty', async () => {
+	// The regression runner starts the worker with FACE_MATCH_THRESHOLD='' on purpose.
+	for (const [similarity, expectedPeople] of [
+		[0.29, 1],
+		[0.27, 2]
+	] as const) {
+		const [pump] = await sameAreaPumps(1);
+		const morningId = await recordSession(pump.context, [`MATCH06${similarity * 100}`]);
+		await shiftBack(morningId, 541);
+		await recordSession(pump.context, [{ identity: `MATCH06${similarity * 100}`, similarity }]);
+		expect(
+			await count('SELECT 1 FROM persons WHERE pump_id = $1', [pump.id]),
+			`similarity ${similarity}`
+		).toBe(expectedPeople);
+	}
+});
+
+async function flaggedAtB(identity: string) {
+	const [a, b] = await sameAreaPumps(2);
+	await recordSession(a.context, [identity]);
+	const sessionB = await submitAndWait(b.context, [identity]);
+	const { rows } = await db.query('SELECT id FROM fraud_flags WHERE session_id = $1', [sessionB]);
+	expect(rows).toHaveLength(1);
+	return { a, b, sessionB, flagId: rows[0].id as string };
+}
+
+test('FRD-08 admin "not fraud" marks the worker present at the flagged pump as a new worker', async () => {
+	const adminAccount = await createAdmin();
+	const admin = await login(adminAccount.email);
+	const { b, sessionB, flagId } = await flaggedAtB('FRD08new');
+
+	const result = await action(admin, '/admin/fraud-flags?/notFraud', { id: flagId });
+	expect(result.type).toBe('success');
+	const { rows: people } = await db.query(
+		`SELECT p.id, p.status FROM persons p WHERE p.pump_id = $1`,
+		[b.id]
+	);
+	expect(people).toEqual([{ id: expect.any(String), status: 'active' }]);
+	const { rows: attendance } = await db.query(
+		'SELECT morning_matched FROM daily_person_attendance WHERE person_id = $1',
+		[people[0].id]
+	);
+	expect(attendance).toEqual([{ morning_matched: true }]);
+	expect(
+		await count('SELECT 1 FROM attendance_face_evidence WHERE session_id = $1', [sessionB])
+	).toBe(1);
+	const { rows: flag } = await db.query(
+		'SELECT reviewed, resolution, resolved_person_id, resolved_by_admin_id FROM fraud_flags WHERE id = $1',
+		[flagId]
+	);
+	expect(flag[0]).toEqual({
+		reviewed: true,
+		resolution: 'not_fraud',
+		resolved_person_id: people[0].id,
+		resolved_by_admin_id: adminAccount.id
+	});
+	expect(
+		await count(
+			`SELECT 1 FROM admin_audit_log WHERE action = 'fraud_flag_not_fraud' AND target_id = $1`,
+			[flagId]
+		)
+	).toBe(1);
+});
+
+test('FRD-08 admin "not fraud" reuses the flagged pump’s existing worker', async () => {
+	const admin = await login((await createAdmin()).email);
+	const [a, b] = await sameAreaPumps(2);
+	// B already knows this worker from an earlier day.
+	const earlier = await recordSession(b.context, ['FRD08known']);
+	await shiftBack(earlier, 24 * 60, true);
+	await db.query(`UPDATE attendance_sessions SET pairing_status = 'expired' WHERE id = $1`, [
+		earlier
+	]);
+	await recordSession(a.context, ['FRD08known']);
+	const sessionB = await submitAndWait(b.context, [{ identity: 'FRD08known', similarity: 0.9 }]);
+	const { rows } = await db.query('SELECT id FROM fraud_flags WHERE session_id = $1', [sessionB]);
+	expect(rows).toHaveLength(1);
+
+	expect((await action(admin, '/admin/fraud-flags?/notFraud', { id: rows[0].id })).type).toBe(
+		'success'
+	);
+	expect(await count('SELECT 1 FROM persons WHERE pump_id = $1', [b.id])).toBe(1);
+	expect(await count('SELECT 1 FROM daily_person_attendance WHERE pump_id = $1', [b.id])).toBe(2);
+});
+
+test('FRD-11 confirm fraud keeps the worker absent, and a resolved flag cannot be resolved again', async () => {
+	const admin = await login((await createAdmin()).email);
+	const { b, flagId } = await flaggedAtB('FRD11');
+	expect((await action(admin, '/admin/fraud-flags?/review', { id: flagId })).type).toBe('success');
+	const { rows } = await db.query('SELECT resolution FROM fraud_flags WHERE id = $1', [flagId]);
+	expect(rows[0].resolution).toBe('confirmed_fraud');
+	expect(await count('SELECT 1 FROM daily_person_attendance WHERE pump_id = $1', [b.id])).toBe(0);
+
+	const again = await action(admin, '/admin/fraud-flags?/notFraud', { id: flagId });
+	expect(again.type).toBe('failure');
+	expect(await count('SELECT 1 FROM daily_person_attendance WHERE pump_id = $1', [b.id])).toBe(0);
 });

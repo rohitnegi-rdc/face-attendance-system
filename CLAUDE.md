@@ -27,7 +27,7 @@ Person records never merge across pumps — same human at two pumps = two Person
 - An open morning session expires after the pairing window (default **16h**, same settings precedence; `worker/index.js` reads it the same way), checked both lazily on submit and via periodic sweep — never let "most recent open X" pairing run unbounded. 16h (not 24h) so a missed evening cannot swallow the next morning's photo. State machine: `docs/Architecture.md` §5.
 - Cross-pump fraud check is Area-scoped and symmetric for every vendor, including RDC's Area-split accounts — never narrow the scope per-vendor, it makes fraud detection order-dependent.
 - Same-pump re-match (morning+evening) is expected, never a fraud flag — only a different-pump match is.
-- Match threshold is `FACE_MATCH_THRESHOLD` (default 0.68) via pgvector cosine similarity, gallery-based (~5 most recent embeddings per person) — never hardcode the threshold.
+- Match threshold is `FACE_MATCH_THRESHOLD` (default **0.28**, from the golden small-group evaluation; see `src/lib/server/matching.ts` and the same parsing in `worker/index.js`) via pgvector cosine similarity, gallery-based (~5 most recent embeddings per person) — never hardcode the threshold.
 - All date/time logic is explicit `Asia/Kolkata`, computed in code — never rely on container/DB default TZ.
 - Matching + fraud-check + person upsert for one session run inside one Postgres `SERIALIZABLE`-isolation transaction (optimistic concurrency — no blocking Area lock; conflicting concurrent writes abort with `40001`/`40P01` and are retried) — never remove this without understanding the race it prevents (`docs/Architecture.md` §9).
 - Duplicate photo (same sha256 hash) is rejected, never double-counted.

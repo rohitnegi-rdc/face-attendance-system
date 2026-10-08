@@ -46,3 +46,9 @@ The original 12-row illustrative sample in Prompt A never exposed several real p
 - New accounts default to `must_change_password = TRUE` (migration 016). Test fixtures must insert FALSE explicitly or every request returns "Password change required".
 - A plain POST to a SvelteKit form action renders the page with HTTP 200 even when the action returns `fail()`. Tests call actions with `accept: application/json` and `x-sveltekit-action: true` and check the returned `type`.
 - The duplicate-photo check must run before the "today's morning is still processing" check, or a resubmitted photo gets the wrong message.
+
+## 2026-10-08 — Match threshold and "not fraud" recovery
+
+- The golden small-group evaluation (2026-08-11) showed 0.68 is far too strict for this model: 60.6% attendance accuracy, 10% match recall, 0 of 2 fraud groups caught. 0.26–0.28 is the lowest range with zero false matches and zero cross-pump false duplicates (98.3% accuracy, 2/2 fraud groups). Default is now 0.28 from env (`FACE_MATCH_THRESHOLD`). docker-compose used to hardcode 0.30 and ignore `.env`.
+- `Number(process.env.X ?? d)` turns an empty env var into 0, which would match every face. Parse with a range check and fall back to the default (see `faceMatchThreshold()`).
+- A cross-pump flag skips the face completely, so nothing can be restored later unless the face is kept. Flags now store the face vector and crop (migration 019); flags raised before that can only be confirmed or fixed through manual correction.

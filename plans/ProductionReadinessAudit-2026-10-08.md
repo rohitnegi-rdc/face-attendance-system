@@ -98,3 +98,8 @@ Fix B1 and B2 (small, contained changes), then build Tier 1 of
 | B6 | Committed and pushed. |
 
 Still open from section 2: login rate limit, a "not fraud" recovery for cross-pump flags, the compose-hardcoded `FACE_MATCH_THRESHOLD`, the health check as a rollback trigger, the demo routes, security headers, account lifecycle and lint debt.
+
+Later still on 2026-10-08:
+- Login rate limit: dropped for v1 by decision.
+- "Not fraud, mark present" added on /admin/fraud-flags (migration 019 stores the flagged face). Audited.
+- `FACE_MATCH_THRESHOLD` now comes from env everywhere, default 0.28 based on the golden small-group evaluation.

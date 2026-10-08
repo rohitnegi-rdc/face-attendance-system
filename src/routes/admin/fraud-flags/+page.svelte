@@ -2,12 +2,13 @@
 	import { resolve } from '$app/paths';
 	import Check from '@lucide/svelte/icons/check';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import UserCheck from '@lucide/svelte/icons/user-check';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
-	let { data } = $props();
+	let { data, form } = $props();
 </script>
 
 <svelte:head><title>Fraud review | Face Attendance</title></svelte:head>
@@ -23,6 +24,10 @@
 			>{data.flags.filter((flag: any) => !flag.reviewed).length} pending</StatusBadge
 		>
 	</header>
+
+	{#if form?.message}
+		<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+	{/if}
 
 	{#if data.flags.length}
 		<div class="review-list" data-testid="fraud-flags-table">
@@ -40,10 +45,19 @@
 
 					<div class="fraud-evidence">
 						<div class="face-evidence">
+							{#if flag.face_crop_url}
+								<img
+									src={flag.face_crop_url}
+									alt={`Face found at ${flag.flagged_at_pump}`}
+									title={`Face found at ${flag.flagged_at_pump}`}
+									loading="lazy"
+								/>
+							{/if}
 							{#if flag.source_photo_crop_url}
 								<img
 									src={flag.source_photo_crop_url}
 									alt={`Face crop for ${personDisplayLabel(flag.matched_at_pump, flag.display_seq)}`}
+									title={`Known worker at ${flag.matched_at_pump}`}
 									loading="lazy"
 								/>
 							{:else}
@@ -70,8 +84,10 @@
 									</div>
 								</dl>
 								{#if flag.flagged_photo_available}
-					<a href={resolve(`/api/attendance/photo/${flag.session_id}`)} target="_blank" rel="noopener noreferrer"
-										>View group photo</a
+									<a
+										href={resolve(`/api/attendance/photo/${flag.session_id}`)}
+										target="_blank"
+										rel="noopener noreferrer">View group photo</a
 									>
 								{:else}
 									<small>Group photo unavailable</small>
@@ -92,8 +108,10 @@
 									</div>
 								</dl>
 								{#if flag.matched_photo_available}
-					<a href={resolve(`/api/attendance/photo/${flag.matched_session_id}`)} target="_blank" rel="noopener noreferrer"
-										>View group photo</a
+									<a
+										href={resolve(`/api/attendance/photo/${flag.matched_session_id}`)}
+										target="_blank"
+										rel="noopener noreferrer">View group photo</a
 									>
 								{:else}
 									<small>Group photo unavailable</small>
@@ -104,14 +122,40 @@
 
 					{#if !flag.reviewed}
 						<div class="review-actions">
-							<p>Marking reviewed records that this evidence has been checked.</p>
-							<form method="POST" action="?/review">
-								<input type="hidden" name="id" value={flag.id} />
-								<button class="button button--primary" type="submit"
-									><Check size={17} /> Mark reviewed</button
-								>
-							</form>
+							<p>
+								Compare the two faces and photos. Not fraud marks this worker present at {flag.flagged_at_pump}.
+							</p>
+							<div class="decision-buttons">
+								<form method="POST" action="?/review">
+									<input type="hidden" name="id" value={flag.id} />
+									<button class="button button--primary" type="submit"
+										><Check size={17} /> Confirm fraud</button
+									>
+								</form>
+								<form method="POST" action="?/notFraud">
+									<input type="hidden" name="id" value={flag.id} />
+									<button
+										class="button button--secondary"
+										type="submit"
+										disabled={!flag.can_restore}
+										title={flag.can_restore
+											? undefined
+											: 'Raised before faces were stored on flags. Use Attendance > Correct.'}
+										><UserCheck size={17} /> Not fraud, mark present</button
+									>
+								</form>
+							</div>
 						</div>
+					{:else}
+						<p class="resolution-note">
+							{flag.resolution === 'not_fraud'
+								? `Not fraud: marked present at ${flag.flagged_at_pump}`
+								: flag.resolution === 'confirmed_fraud'
+									? 'Confirmed fraud'
+									: 'Reviewed'}{flag.resolved_by_email
+								? ` by ${flag.resolved_by_email}`
+								: ''}{flag.resolved_at ? ` on ${formatDate(flag.resolved_at)}` : ''}
+						</p>
 					{/if}
 				</article>
 			{/each}
@@ -234,6 +278,16 @@
 		margin-top: var(--space-5);
 		padding-top: var(--space-4);
 		border-top: 1px solid var(--brand-mist);
+	}
+	.decision-buttons {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+	.resolution-note {
+		margin: var(--space-4) 0 0;
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
 	}
 	.review-actions p {
 		margin: 0;

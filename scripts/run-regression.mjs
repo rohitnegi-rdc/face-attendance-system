@@ -144,7 +144,7 @@ const serviceEnv = {
 	HOST: '127.0.0.1',
 	AI_SERVICE_URL: STUB_URL,
 	UPLOAD_DIR: path.join(outDir, 'uploads'),
-	FACE_MATCH_THRESHOLD: '0.30',
+	FACE_MATCH_THRESHOLD: '', // empty on purpose: proves the 0.28 default (MATCH-06)
 	EVENING_MIN_GAP_MINUTES: '',
 	EVENING_PAIRING_WINDOW_HOURS: '',
 	PHOTO_SPOOF_CHECK_ENABLED: 'false',
