@@ -24,7 +24,7 @@ docker compose up --build
 
 This starts PostgreSQL (schema in `db/init.sql`), the AI service, the SvelteKit app, and worker.
 The app is available at `http://localhost:6100`; PostgreSQL is published only on
-`127.0.0.1:6101`. The AI service port is not published to the host. For trusted-LAN
+`127.0.0.1:6101` and the AI service on `127.0.0.1:6102`. For trusted-LAN
 device testing only, set `APP_BIND_ADDRESS=0.0.0.0` in `.env` and restrict access with the host
 firewall; restore `127.0.0.1` afterward.
 

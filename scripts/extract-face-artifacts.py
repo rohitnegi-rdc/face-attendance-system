@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
-AI_URL = "http://localhost:8000/internal/face/extract"
+AI_URL = "http://localhost:6102/internal/face/extract"
 OUTPUT_ROOT = ROOT / "test-output" / "face-extraction"
 INPUTS = [
     ROOT / "Test" / "faces" / "group photo.jpg",

@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "group-e2e"
 OUTPUT_ROOT = ROOT / "test-output" / "attendance-e2e"
-AI_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8000")
+AI_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:6102")
 THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.68"))
 
 

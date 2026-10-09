@@ -34,6 +34,11 @@ services:
 
   ai-service:
     build: ./ai-service
+    # Face detection, embeddings and the anti-spoofing model all live in this one service.
+    # Published on the host loopback only, for the face evaluation scripts. The app and worker
+    # use http://ai-service:8000 inside Docker.
+    ports:
+      - '127.0.0.1:${AI_HOST_PORT:-6102}:8000'
     environment:
       TZ: Asia/Kolkata
       AI_SERVICE_WORKERS: '${AI_SERVICE_WORKERS:-2}'

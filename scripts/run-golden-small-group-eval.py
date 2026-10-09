@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET_DIR = ROOT / "datasets" / "golden-small-groups-v1"
-DEFAULT_AI_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8000")
+DEFAULT_AI_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:6102")
 DEFAULT_OUTPUT_ROOT = ROOT / "test-output" / "evaluations"
 IMAGE_TIMEOUT_SECONDS = 180
 DEFAULT_MATCH_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.68"))

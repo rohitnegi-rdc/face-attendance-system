@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_AI_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8000")
+DEFAULT_AI_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:6102")
 IMAGE_TIMEOUT_SECONDS = 180
 THUMBNAIL_SIZE = (420, 320)
 RESAMPLE_LANCZOS = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
