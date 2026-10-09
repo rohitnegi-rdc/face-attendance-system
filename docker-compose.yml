@@ -108,12 +108,11 @@ services:
       - uploads:/app/uploads
 
   worker:
-    # Same image as app, so it must get the same build args or it would overwrite the tag.
-    build:
-      context: .
-      args:
-        BASE_PATH: '${BASE_PATH:-}'
+    # Runs the image the app service builds. Only app builds it: two services building the same
+    # tag in parallel fail with 'image ... already exists'. pull_policy never stops compose from
+    # trying to pull this local tag from Docker Hub.
     image: '${APP_IMAGE:-face-attendance/app:local}'
+    pull_policy: never
     command: ['node', 'worker/index.js']
     environment:
       TZ: Asia/Kolkata
