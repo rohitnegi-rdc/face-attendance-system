@@ -8,7 +8,7 @@ const { Pool } = pg;
 const apply = process.argv.includes('--apply');
 const csvPath = process.argv.find((arg) => arg.startsWith('--csv='))?.slice(6) ?? 'Plant Managers.csv';
 const credentialsPath = process.argv.find((arg) => arg.startsWith('--credentials='))?.slice(14);
-const databaseUrl = process.env.DATABASE_URL ?? 'postgres://attendance:attendance@localhost:5434/attendance';
+const databaseUrl = process.env.DATABASE_URL ?? 'postgres://attendance:attendance@localhost:6101/attendance';
 const pool = new Pool({ connectionString: databaseUrl });
 
 const normalize = (value: string) => value.toLowerCase().replace(/\./g, '').replace(/[^a-z0-9]+/g, '');

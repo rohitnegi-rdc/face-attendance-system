@@ -19,12 +19,12 @@ when either secret is empty. Keep `.env` and `creds.md` local; neither belongs i
 image.
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.dev.yaml up --build
+docker compose up --build
 ```
 
 This starts PostgreSQL (schema in `db/init.sql`), the AI service, the SvelteKit app, and worker.
-The app is available at `http://localhost:3001`; PostgreSQL is published only on
-`127.0.0.1:5434`. Database and AI service ports are not published to the host. For trusted-LAN
+The app is available at `http://localhost:6100`; PostgreSQL is published only on
+`127.0.0.1:6101`. The AI service port is not published to the host. For trusted-LAN
 device testing only, set `APP_BIND_ADDRESS=0.0.0.0` in `.env` and restrict access with the host
 firewall; restore `127.0.0.1` afterward.
 
@@ -51,7 +51,7 @@ through the same CSV-import code path the admin UI uses:
 
 ```sh
 npm install
-DATABASE_URL=postgres://attendance:<POSTGRES_PASSWORD>@localhost:5434/attendance npm run seed
+DATABASE_URL=postgres://attendance:<POSTGRES_PASSWORD>@localhost:6101/attendance npm run seed
 ```
 
 Replace `<POSTGRES_PASSWORD>` with the URL-safe value in your local `.env`.

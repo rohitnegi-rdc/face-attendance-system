@@ -9,7 +9,7 @@ export default defineConfig({
 	expect: { timeout: 30_000 },
 	retries: 0,
 	use: {
-		baseURL: process.env.ATTENDANCE_E2E_BASE_URL || 'http://localhost:3001',
+		baseURL: process.env.ATTENDANCE_E2E_BASE_URL || 'http://localhost:6100',
 		actionTimeout: 15_000,
 		navigationTimeout: 60_000,
 		trace: 'retain-on-failure',

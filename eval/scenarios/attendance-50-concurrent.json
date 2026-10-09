@@ -13,7 +13,7 @@
 		}
 	},
 	"target": {
-		"app_url": "http://127.0.0.1:3001",
+		"app_url": "http://127.0.0.1:6100",
 		"database_url_env": "DATABASE_URL",
 		"environment": "local-test-only",
 		"use_existing_pumps": true,

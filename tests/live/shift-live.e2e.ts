@@ -13,7 +13,7 @@ const ADMIN_PASSWORD = process.env.LIVE_ADMIN_PASSWORD ?? '';
 const P1 = 'BGLPSHIVA4'; // full shift
 const P2 = 'BGLPRVN4'; // End session button and admin fixes
 const P3 = 'BGLPSS1'; // cross-pump fraud and 24 h auto-close
-const BASE_URL = process.env.LIVE_BASE_URL || 'http://127.0.0.1:3001';
+const BASE_URL = process.env.LIVE_BASE_URL || 'http://127.0.0.1:6100';
 const VENDOR_EMAIL = 'rvnenterprises@vendors.local';
 // A real plant manager assigned to the pumps' plant; kept out of the repo.
 const MANAGER_EMAIL = process.env.LIVE_MANAGER_EMAIL ?? '';

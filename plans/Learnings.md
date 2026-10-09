@@ -35,7 +35,7 @@ The original 12-row illustrative sample in Prompt A never exposed several real p
 - `event.url.pathname` in `hooks.server.ts` includes the prefix, so the role guards strip it first. Without that, every `startsWith('/admin')` guard silently stops matching.
 - Build every app URL with `resolve()` / `asset()` from `$app/paths` (the eslint rule `svelte/no-navigation-without-resolve` enforces it for hrefs). Relative `?query` links are fine as they are.
 - Cookies use `COOKIE_PATH` from `src/lib/server/cookies.ts` so other apps on the same domain never see them. It's kept out of `auth.ts` because `scripts/seed.ts` imports that outside SvelteKit.
-- nginx must pass the prefix through: `location ^~ /pump-attendance { proxy_pass http://127.0.0.1:3001; }` with no trailing slash on proxy_pass, unlike OpsMitra whose backend expects it stripped.
+- nginx must pass the prefix through: `location ^~ /pump-attendance { proxy_pass http://127.0.0.1:6100; }` with no trailing slash on proxy_pass, unlike OpsMitra whose backend expects it stripped.
 - Git Bash on Windows rewrites `BASE_PATH=/x` env vars into `C:/Program Files/Git/x`. Prefix local commands with `MSYS2_ENV_CONV_EXCL=BASE_PATH`. vite.config.ts rejects the mangled value instead of building with it.
 
 ## 2026-10-08 — Pairing window, pump retry and the regression gate
@@ -56,7 +56,7 @@ The original 12-row illustrative sample in Prompt A never exposed several real p
 ## 2026-10-08 — Single-button shift flow and the live visual walk-through
 
 - Postgres timestamps carry microseconds; a JS `Date` keeps milliseconds. Reading `submitted_at` into JS and passing it back as a parameter (`WHERE submitted_at = $1`, or `>= $1` to find "photos after this one") silently misses or includes the boundary row. Compare inside SQL or by id.
-- `adapter-node` with `PROTOCOL_HEADER=x-forwarded-proto` and no `ORIGIN` assumes https when the header is absent. On plain `http://127.0.0.1:3001` every multipart upload then fails the CSRF check with 403 "Cross-site POST form submissions are forbidden". Production behind the HTTPS proxy is fine; local browser tests send `x-forwarded-proto: http` (see `playwright.live.config.ts`).
+- `adapter-node` with `PROTOCOL_HEADER=x-forwarded-proto` and no `ORIGIN` assumes https when the header is absent. On plain local http every multipart upload then fails the CSRF check with 403 "Cross-site POST form submissions are forbidden". Production behind the HTTPS proxy is fine; local browser tests send `x-forwarded-proto: http` (see `playwright.live.config.ts`).
 - Playwright dismisses `confirm()` by default, so a click on a confirm-guarded button (End session, Split, Delete) silently does nothing. Register `page.once('dialog', d => d.accept())` before the click, and also test the dismiss path.
 - "Start only" means the shift is closed. Counting `morning_matched AND NOT evening_matched` on its own also counts a shift still waiting for its end. Use `shiftStillOpen()` from `shiftSessions.ts`, and give the pump screen a separate outcome for a start-only day instead of reusing "Shift complete".
 - A fraud flag's `person_id` is the worker at the **other** pump. Labels built from it already contain that pump's code, so "X was also found at <other pump>" repeats the code. Say what the face matched and where.

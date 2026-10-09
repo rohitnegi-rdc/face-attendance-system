@@ -10,7 +10,7 @@ import { parse } from 'csv-parse/sync';
 const { Pool } = pg;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCENARIO_PATH = argument('--scenario') || 'eval/scenarios/attendance-50-concurrent.json';
-const APP_URL = process.env.APP_URL || 'http://127.0.0.1:3001';
+const APP_URL = process.env.APP_URL || 'http://127.0.0.1:6100';
 const DATABASE_URL =
 	process.env.DATABASE_URL || 'postgres://attendance:attendance@127.0.0.1:5433/attendance';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';

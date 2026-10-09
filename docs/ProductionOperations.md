@@ -12,10 +12,10 @@ the application rejects JWT secrets shorter than 32 characters. Do not put real 
 Copy `.env.example` to `.env`, fill in both secrets, then run:
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.dev.yaml up --build
+docker compose up --build
 ```
 
-The application listens on `http://localhost:3001`; PostgreSQL is bound to `127.0.0.1:5434`.
+The application listens on `http://localhost:6100`; PostgreSQL is bound to `127.0.0.1:6101`.
 The AI service and database are not otherwise published. For temporary trusted-LAN testing only,
 set `APP_BIND_ADDRESS=0.0.0.0` and restrict inbound access with the host firewall.
 

@@ -7,7 +7,7 @@ import pg from 'pg';
 const { Pool } = pg;
 const pool = new Pool({
 	connectionString:
-		process.env.DATABASE_URL || 'postgres://attendance:attendance@127.0.0.1:5434/attendance'
+		process.env.DATABASE_URL || 'postgres://attendance:attendance@127.0.0.1:6101/attendance'
 });
 const baseUrl = process.env.ANTI_SPOOF_E2E_BASE_URL || 'https://127.0.0.1:3443';
 const jwtSecret = process.env.JWT_SECRET || 'dev-secret-change-me';

@@ -14,7 +14,7 @@ const pool = new Pool({
 	connectionString:
 		process.env.DATABASE_URL || 'postgres://attendance:attendance@127.0.0.1:5433/attendance'
 });
-const baseUrl = process.env.ATTENDANCE_E2E_BASE_URL || 'http://localhost:3001';
+const baseUrl = process.env.ATTENDANCE_E2E_BASE_URL || 'http://localhost:6100';
 
 test('pump detail page stays correct and responsive with 200+ roster records', async ({ page }) => {
 	const pumpResult = await pool.query<{ id: string; pump_code: string }>(

@@ -9,7 +9,7 @@ export default defineConfig({
 	retries: 0,
 	expect: { timeout: 30_000 },
 	use: {
-		baseURL: process.env.LIVE_BASE_URL || 'http://127.0.0.1:3001',
+		baseURL: process.env.LIVE_BASE_URL || 'http://127.0.0.1:6100',
 		// The app trusts x-forwarded-proto (set by the HTTPS proxy in production) and assumes
 		// https without it, which makes plain-http uploads fail the CSRF origin check.
 		extraHTTPHeaders: { 'x-forwarded-proto': 'http' },

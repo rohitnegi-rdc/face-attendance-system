@@ -53,7 +53,7 @@ main() {
 	env_value() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- | tr -d "'\"" || true; }
 	local app_port base_path app_image ai_image
 	app_port="$(env_value APP_HOST_PORT)"
-	app_port="${app_port:-3001}"
+	app_port="${app_port:-6100}"
 	base_path="$(env_value BASE_PATH)" # e.g. /pump-attendance, empty when served at the root
 	app_image="$(env_value APP_IMAGE)"
 	app_image="${app_image:-face-attendance/app:local}"

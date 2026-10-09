@@ -8,7 +8,7 @@ export default defineConfig({
 	expect: { timeout: 15_000 },
 	retries: 0,
 	use: {
-		baseURL: process.env.USABILITY_BASE_URL || 'http://127.0.0.1:3001',
+		baseURL: process.env.USABILITY_BASE_URL || 'http://127.0.0.1:6100',
 		actionTimeout: 15_000,
 		navigationTimeout: 45_000,
 		trace: 'retain-on-failure',
