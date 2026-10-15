@@ -161,7 +161,7 @@ export const actions: Actions = {
 		if (![keptId, duplicateId, pumpId].every((value) => UUID_PATTERN.test(value)) || keptId === duplicateId || !isDateKey(day)) {
 			return fail(400, { error: 'Choose a valid duplicate worker' });
 		}
-		if (!['morning', 'evening'].includes(sessionType)) return fail(400, { error: 'Choose morning or evening' });
+		if (!['morning', 'evening'].includes(sessionType)) return fail(400, { error: 'Choose shift start or shift end' });
 		if (reason.length < 5 || reason.length > 500) return fail(400, { error: 'Enter a reason between 5 and 500 characters' });
 
 		const client = await pool.connect();

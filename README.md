@@ -56,7 +56,7 @@ DATABASE_URL=postgres://attendance:<POSTGRES_PASSWORD>@localhost:6101/attendance
 
 Replace `<POSTGRES_PASSWORD>` with the URL-safe value in your local `.env`.
 
-- Admin login: `admin@attendance.local` / `Admin1234!`
+- Admin login: `admin@attendance.rdc` / `Admin1234!`
 - Pump logins: `<slugified pump_code>@pumps.local` / `Test1234!` (e.g. `bglprvn1@pumps.local`)
 - Vendor logins: `<slugified vendor name>@vendors.local` / `Test1234!`
 

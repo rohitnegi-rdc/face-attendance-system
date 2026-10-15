@@ -109,7 +109,7 @@ export const actions: Actions = {
 
 		// Same login-email convention as the CSV importer (csvImport.ts) — kept identical so
 		// pumps created here and pumps created by import never diverge in login domain.
-		const loginEmail = `${slugifyLogin(pumpCode)}@pumps.local`;
+		const loginEmail = `${slugifyLogin(pumpCode)}@pumps.rdc`;
 		const existingEmail = await queryOne<any>('SELECT id FROM pumps WHERE login_email = $1', [
 			loginEmail
 		]);

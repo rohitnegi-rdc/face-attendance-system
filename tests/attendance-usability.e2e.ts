@@ -10,15 +10,15 @@ const outputRoot = path.resolve(
 
 const accounts = {
 	admin: {
-		email: process.env.USABILITY_ADMIN_EMAIL || 'admin@attendance.local',
+		email: process.env.USABILITY_ADMIN_EMAIL || 'admin@attendance.rdc',
 		password: process.env.USABILITY_ADMIN_PASSWORD || 'Admin1234!'
 	},
 	vendor: {
-		email: process.env.USABILITY_VENDOR_EMAIL || 'rvnenterprises@vendors.local',
+		email: process.env.USABILITY_VENDOR_EMAIL || 'rvnenterprises@vendors.rdc',
 		password: process.env.USABILITY_VENDOR_PASSWORD || 'Test1234!'
 	},
 	pump: {
-		email: process.env.USABILITY_PUMP_EMAIL || 'bglprvn1@pumps.local',
+		email: process.env.USABILITY_PUMP_EMAIL || 'bglprvn1@pumps.rdc',
 		password: process.env.USABILITY_PUMP_PASSWORD || 'Test1234!'
 	}
 } as const;

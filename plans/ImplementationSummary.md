@@ -116,7 +116,7 @@ photos at any time.
 
 ## Credentials created by seed
 
-- Admin: `admin@attendance.local` / `Admin1234!`
+- Admin: `admin@attendance.rdc` / `Admin1234!`
 - Pumps / Vendors: `<slugified name>@{pumps,vendors}.local` / `Test1234!` (e.g.
   `bglprvn1@pumps.local`, `rvnenterprises@vendors.local`)
 
@@ -288,7 +288,7 @@ contains `href="/admin/insights"`.
   `postgres://attendance:attendance@localhost:5433/attendance`) applies the `display_seq` migration
   idempotently.
 - `docker compose up -d --build app worker` picks up all Phase 1/2A/2B code changes.
-- Log in as `admin@attendance.local` / `Admin1234!` and visit `/admin/attendance`,
+- Log in as `admin@attendance.rdc` / `Admin1234!` and visit `/admin/attendance`,
   `/admin/pumps/<id>`, `/admin/vendors/<id>`, `/admin/areas/<id>`, `/admin/persons/<id>`, and
   `/admin/insights` to see the full overhaul.
 

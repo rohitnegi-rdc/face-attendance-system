@@ -6,6 +6,7 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { dateKey, formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
+	import { shiftTypeLabel } from '$lib/shiftLabels';
 	let { data } = $props();
 	const days = $derived([...new Set(data.daily.map((row: any) => dateKey(row.session_date)))].sort());
 	const entities = $derived(data.pumps.map((pump: any) => ({ id: pump.id, label: pump.pump_code })));
@@ -23,7 +24,7 @@
 		{#if data.records.length}<div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Person</th><th>Pump</th><th>Plant</th><th>Start</th><th>End</th></tr></thead><tbody>{#each data.records as row}<tr><td>{formatDate(row.session_date)}</td><td>{personDisplayLabel(row.pump_code, row.display_seq)}</td><td>{row.pump_code}</td><td>{row.plant_name}</td><td><StatusBadge tone={row.morning_matched ? 'success' : 'neutral'} label={row.morning_matched ? 'Present' : 'Missing'} /></td><td><StatusBadge tone={row.evening_matched ? 'success' : 'neutral'} label={row.evening_matched ? 'Present' : 'Missing'} /></td></tr>{/each}</tbody></table></div>{:else}<EmptyState title="No person records" description="Attendance records will appear here after sessions are processed." />{/if}
 	</section>
 	<section class="section"><div class="section-header"><div><h2>Session log and photos</h2><p class="supporting-text">{data.sessions.length} sessions shown</p></div></div>
-		{#if data.sessions.length}<div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Plant</th><th>Pump</th><th>Session</th><th>Submitted</th><th>Status</th><th>Photo</th></tr></thead><tbody>{#each data.sessions as row}<tr><td>{formatDate(row.session_date)}</td><td>{row.plant_name}</td><td>{row.pump_code}</td><td>{row.session_type}</td><td>{formatDate(row.submitted_at)}</td><td><StatusBadge tone={row.status === 'completed' ? 'success' : row.status === 'failed' ? 'critical' : 'pending'} label={row.status} /></td><td>{#if row.photo_url}<a href={resolve(`/api/attendance/photo/${row.id}`)} target="_blank" rel="noreferrer">View photo</a>{:else}—{/if}</td></tr>{/each}</tbody></table></div>{:else}<EmptyState title="No sessions" description="Pump submissions will appear here." />{/if}
+		{#if data.sessions.length}<div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Plant</th><th>Pump</th><th>Session</th><th>Submitted</th><th>Status</th><th>Photo</th></tr></thead><tbody>{#each data.sessions as row}<tr><td>{formatDate(row.session_date)}</td><td>{row.plant_name}</td><td>{row.pump_code}</td><td>{shiftTypeLabel(row.session_type)}</td><td>{formatDate(row.submitted_at)}</td><td><StatusBadge tone={row.status === 'completed' ? 'success' : row.status === 'failed' ? 'critical' : 'pending'} label={row.status} /></td><td>{#if row.photo_url}<a href={resolve(`/api/attendance/photo/${row.id}`)} target="_blank" rel="noreferrer">View photo</a>{:else}—{/if}</td></tr>{/each}</tbody></table></div>{:else}<EmptyState title="No sessions" description="Pump submissions will appear here." />{/if}
 	</section>
 </div>
 <style>

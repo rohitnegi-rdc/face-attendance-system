@@ -2,6 +2,7 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDate } from '$lib/date';
+	import { shiftTypeLabel } from '$lib/shiftLabels';
 	let { data } = $props();
 </script>
 
@@ -31,7 +32,7 @@
 								>{pump.latest_submission
 									? formatDate(pump.latest_submission)
 									: 'No submissions'}</td
-							><td>{pump.session_type || 'Not started'}</td><td
+							><td>{pump.session_type ? shiftTypeLabel(pump.session_type) : 'Not started'}</td><td
 								><StatusBadge
 									tone={pump.status === 'completed'
 										? 'success'

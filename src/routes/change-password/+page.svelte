@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 	let { data } = $props();
 	let password = $state('');
 	let confirmation = $state('');
@@ -18,11 +19,13 @@
 			});
 			const result = await response.json().catch(() => ({}));
 			if (!response.ok) {
+				toastIfServerError(response);
 				errorMessage = result.error ?? 'Could not update your password.';
 				return;
 			}
 			window.location.assign(resolve(`/${result.role as 'admin' | 'vendor' | 'plant-manager' | 'pump'}`));
 		} catch {
+			toastConnectionLost();
 			errorMessage = 'The service is unavailable. Please try again.';
 		} finally {
 			submitting = false;

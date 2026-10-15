@@ -170,6 +170,19 @@ test('SHIFT-04 admin Split turns a mistaken end into the next shift start and fi
 		[account.id]
 	);
 	expect(audit.rows[0].details).toMatchObject({ pump_id: pump.id, newStartId: endId });
+
+	// The old date stays finalized by its own start, not by the moved photo; before the fix the
+	// stale reference made every later delete of that photo fail on a foreign key.
+	const { rows: finalized } = await db.query(
+		`SELECT session_id FROM attendance_rollup_finalizations
+		 WHERE pump_id = $1 AND session_date = $2`,
+		[pump.id, await istDate(1)]
+	);
+	expect(finalized).toEqual([{ session_id: startId }]);
+	const deleted = await fix(admin, pump, 'deleteSession', { session_id: endId });
+	expect(deleted.type, JSON.stringify(deleted)).toBe('success');
+	expect(await session(endId)).toBeUndefined();
+	expect(await yearly(startId)).toMatchObject({ days_present: 0, days_morning_only: 1 });
 });
 
 test('SHIFT-05 Split is refused when the photo day already has a shift start', async () => {
@@ -305,4 +318,43 @@ test('SHIFT-10 an open shift is not counted as start only until it closes', asyn
 	const { admin } = await adminContext();
 	expect((await fix(admin, pump, 'endShift', { session_id: startId })).type).toBe('success');
 	expect(await counts()).toEqual([0, 1, 0]);
+});
+
+test('SHIFT-11 a failed photo blocks the flow until the pump retries it, and is reported to the screen', async () => {
+	const { context } = await newPump();
+
+	// A failed start: before the fix /today said "morning" (Start shift) while submit refused.
+	const failedStart = await submit(context, await photo(['SHIFT11'], { fail: true }));
+	expect(failedStart.status).toBe(202);
+	await waitForSession(failedStart.body.session_id, ['failed'], 60_000);
+	let state = await today(context);
+	expect(state).toMatchObject({
+		state: 'failed',
+		can_submit: false,
+		failed_session_id: failedStart.body.session_id,
+		failed_session_type: 'morning'
+	});
+	expect((await submit(context, await photo(['SHIFT11']))).status).toBe(409);
+	const cleared = await context.post(`/api/attendance/retry/${failedStart.body.session_id}`);
+	expect(cleared.status(), await cleared.text()).toBe(200);
+	expect((await today(context)).state).toBe('morning');
+
+	// A failed end: before the fix its start read as a full shift ("locked", "full").
+	const startId = await recordSession(context, ['SHIFT11']);
+	await shiftBack(startId, 600);
+	const failedEnd = await submit(context, await photo(['SHIFT11'], { fail: true }));
+	expect(failedEnd.status).toBe(202);
+	await waitForSession(failedEnd.body.session_id, ['failed'], 60_000);
+	state = await today(context);
+	expect(state).toMatchObject({
+		state: 'failed',
+		failed_session_id: failedEnd.body.session_id,
+		failed_session_type: 'evening',
+		shift_outcome: null
+	});
+	const retried = await context.post(`/api/attendance/retry/${failedEnd.body.session_id}`);
+	expect(retried.status(), await retried.text()).toBe(200);
+	state = await today(context);
+	expect(state).toMatchObject({ state: 'evening', can_submit: true });
+	expect((await session(startId)).pairing_status).toBe('open');
 });

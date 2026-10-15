@@ -4,7 +4,9 @@
 // A test photo carries a marker `STUBPHOTO:<id>`. Before submitting it, the test registers what
 // the photo contains:
 //   POST /__register {"photo_id": "...", "faces": [{"identity": "W1", "similarity": 0.9}], "delay_ms": 0}
-//   POST /__fail     {"photo_id": "..."}   -> extraction returns HTTP 500 for that photo
+//   POST /__fail     {"photo_id": "...", "times": 2}   -> extraction returns HTTP 500 for that
+//                    photo (the first `times` calls only, or every call when times is omitted)
+//   GET  /__calls/<photo_id>                -> {"calls": n} extraction calls made for the photo
 // Each identity maps to a fixed random 512-dim unit vector. `similarity` (default 1) returns a
 // vector with exactly that cosine similarity to the identity's vector. Unregistered photos have
 // no faces. Response shape matches POST /internal/face/extract in ai-service/main.py.
@@ -14,7 +16,8 @@ import crypto from 'node:crypto';
 const PORT = Number(process.env.STUB_AI_PORT ?? 58000);
 const DIM = 512;
 const photos = new Map();
-const failing = new Set();
+const failing = new Map(); // photo id -> failures left (Infinity = always)
+const calls = new Map();
 
 function seededRandom(seed) {
 	let state = crypto.createHash('sha256').update(seed).digest().readUInt32LE(0);
@@ -71,6 +74,10 @@ const server = http.createServer(async (request, response) => {
 				anti_spoof_ready: false
 			});
 		}
+		const callsFor = request.url?.match(/^\/__calls\/([A-Za-z0-9_-]+)$/)?.[1];
+		if (request.method === 'GET' && callsFor) {
+			return send(response, 200, { calls: calls.get(callsFor) ?? 0 });
+		}
 		const body = await readBody(request);
 		if (request.method === 'POST' && request.url === '/__register') {
 			const { photo_id: photoId, faces = [], delay_ms: delayMs = 0 } = JSON.parse(String(body));
@@ -78,12 +85,17 @@ const server = http.createServer(async (request, response) => {
 			return send(response, 200, { ok: true });
 		}
 		if (request.method === 'POST' && request.url === '/__fail') {
-			failing.add(JSON.parse(String(body)).photo_id);
+			const { photo_id: photoId, times } = JSON.parse(String(body));
+			failing.set(photoId, Number.isFinite(times) ? times : Infinity);
 			return send(response, 200, { ok: true });
 		}
 		if (request.method === 'POST' && request.url === '/internal/face/extract') {
 			const photoId = body.toString('latin1').match(/STUBPHOTO:([A-Za-z0-9_-]+)/)?.[1];
-			if (photoId && failing.has(photoId)) return send(response, 500, { detail: 'stub failure' });
+			if (photoId) calls.set(photoId, (calls.get(photoId) ?? 0) + 1);
+			if (photoId && (failing.get(photoId) ?? 0) > 0) {
+				failing.set(photoId, failing.get(photoId) - 1);
+				return send(response, 500, { detail: 'stub failure' });
+			}
 			const registered = (photoId && photos.get(photoId)) || { faces: [], delayMs: 0 };
 			if (registered.delayMs) await new Promise((r) => setTimeout(r, registered.delayMs));
 			return send(response, 200, {

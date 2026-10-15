@@ -71,12 +71,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		// One button for the operator: with no open shift the photo is a shift start (any time of
 		// day); with an open shift it is the shift end, once the evening gap has passed.
+		// FOR UPDATE: the worker's hourly expiry sweep does not take the pump lock above, so
+		// without it a start could be expired (and counted start-only) while this photo pairs it.
 		const openStartResult = await client.query(
 			`SELECT *, session_date::text AS session_date_text,
 			        EXTRACT(EPOCH FROM (now() - submitted_at)) / 60 AS elapsed_minutes
 			 FROM attendance_sessions
 			 WHERE pump_id = $1 AND session_type = 'morning' AND pairing_status = 'open'
-			 ORDER BY submitted_at DESC LIMIT 1`,
+			 ORDER BY submitted_at DESC LIMIT 1
+			 FOR UPDATE`,
 			[pumpId]
 		);
 		const openStart = openStartResult.rows[0];

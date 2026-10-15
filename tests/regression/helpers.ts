@@ -97,7 +97,7 @@ export async function login(email: string, password = PASSWORD): Promise<APIRequ
 // faces: identity names, or { identity, similarity } for a deliberately imperfect match.
 export async function photo(
 	faces: (string | { identity: string; similarity: number })[] = [],
-	options: { delayMs?: number; fail?: boolean } = {}
+	options: { delayMs?: number; fail?: boolean; failTimes?: number } = {}
 ) {
 	const id = randomUUID().replace(/-/g, '');
 	const normalized = faces.map((face) => (typeof face === 'string' ? { identity: face } : face));
@@ -105,8 +105,11 @@ export async function photo(
 		method: 'POST',
 		body: JSON.stringify({ photo_id: id, faces: normalized, delay_ms: options.delayMs ?? 0 })
 	});
-	if (options.fail) {
-		await fetch(`${STUB_URL}/__fail`, { method: 'POST', body: JSON.stringify({ photo_id: id }) });
+	if (options.fail || options.failTimes) {
+		await fetch(`${STUB_URL}/__fail`, {
+			method: 'POST',
+			body: JSON.stringify({ photo_id: id, times: options.failTimes })
+		});
 	}
 	return Buffer.concat([
 		Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
@@ -114,6 +117,13 @@ export async function photo(
 		randomBytes(32),
 		Buffer.from([0xff, 0xd9])
 	]);
+}
+
+// How many times the worker asked the stub AI to read this photo.
+export async function stubCalls(buffer: Buffer) {
+	const id = buffer.toString('latin1').match(/STUBPHOTO:([a-f0-9]+)/)?.[1];
+	const response = await fetch(`${STUB_URL}/__calls/${id}`);
+	return ((await response.json()) as { calls: number }).calls;
 }
 
 export async function submit(context: APIRequestContext, buffer: Buffer, mimeType = 'image/jpeg') {

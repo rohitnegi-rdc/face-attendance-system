@@ -4,7 +4,11 @@ import type { AuthToken } from '$lib/server/auth';
 
 declare global {
 	namespace App {
-		// interface Error {}
+		interface Error {
+			message: string;
+			// Reference shown to the user and logged with the details (hooks.server.ts).
+			errorId?: string;
+		}
 		interface Locals {
 			user: AuthToken | null;
 		}

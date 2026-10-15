@@ -105,7 +105,7 @@
 			<table class="data-table">
 				<thead
 					><tr
-						><th>Date</th><th>Person</th><th>Pump</th><th>Plant</th><th>Morning</th><th>Evening</th
+						><th>Date</th><th>Person</th><th>Pump</th><th>Plant</th><th>Start</th><th>End</th
 						></tr
 					></thead
 				>
@@ -116,12 +116,12 @@
 							><td>{row.pump_code}</td><td>{row.plant_name}</td><td
 								><StatusBadge
 									tone={row.morning_matched ? 'success' : 'neutral'}
-									label={row.morning_matched ? 'Matched' : 'Missing'}
+									label={row.morning_matched ? 'Present' : 'Missing'}
 								/></td
 							><td
 								><StatusBadge
 									tone={row.evening_matched ? 'success' : 'neutral'}
-									label={row.evening_matched ? 'Matched' : 'Missing'}
+									label={row.evening_matched ? 'Present' : 'Missing'}
 								/></td
 							></tr
 						>{/each}</tbody

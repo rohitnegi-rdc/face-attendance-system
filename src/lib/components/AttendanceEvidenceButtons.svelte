@@ -4,6 +4,7 @@
 	import ScanFace from '@lucide/svelte/icons/scan-face';
 	import X from '@lucide/svelte/icons/x';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import { shiftTypeLabel } from '$lib/shiftLabels';
 
 	type PersonEvidence = {
 		personId: string;
@@ -54,7 +55,7 @@
 
 <div
 	class="evidence-actions"
-	aria-label="{session.sessionType} attendance evidence"
+	aria-label="{shiftTypeLabel(session.sessionType)} attendance evidence"
 	data-testid="evidence-actions"
 	data-session-id={session.id}
 >
@@ -66,7 +67,7 @@
 				openEvidence({
 					sessionId: session.id,
 					personId: null,
-					title: `${session.sessionType} group photo`,
+					title: `${shiftTypeLabel(session.sessionType)} group photo`,
 					description: 'Original group attendance submission',
 					url: session.groupPhotoUrl!,
 					flagged: Boolean(session.groupFlagged)
@@ -88,7 +89,7 @@
 						sessionId: session.id,
 						personId: person.personId,
 						title: person.label,
-						description: `${session.sessionType} face detected in this group`,
+						description: `${shiftTypeLabel(session.sessionType)} face detected in this group`,
 						url: person.cropUrl!,
 						flagged: Boolean(person.flagged)
 					})}
@@ -121,7 +122,7 @@
 	{#if selected}
 		<div class="evidence-dialog__header">
 			<div>
-				<p class="eyebrow">{session.sessionType} evidence</p>
+				<p class="eyebrow">{shiftTypeLabel(session.sessionType)} evidence</p>
 				<h2 id="evidence-title">{selected.title}</h2>
 				<p>{selected.description}</p>
 			</div>

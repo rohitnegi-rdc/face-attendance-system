@@ -93,8 +93,8 @@ export const GET: RequestHandler = async ({ url }) => {
 		{ header: 'Vendor', key: 'vendor_name' },
 		{ header: 'Plant', key: 'plant_name' },
 		{ header: 'Area', key: 'area_name' },
-		{ header: 'Morning', key: 'morning_status' },
-		{ header: 'Evening', key: 'evening_status' },
+		{ header: 'Shift start', key: 'morning_status' },
+		{ header: 'Shift end', key: 'evening_status' },
 		{
 			header: session ? `${session[0].toUpperCase()}${session.slice(1)} Status` : 'Daily Status',
 			key: 'status'

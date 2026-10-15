@@ -275,6 +275,18 @@ export async function splitEndIntoStart(
 			);
 			if (start.status === 'completed') await finalizeDay(client, pumpId, oldDate, start.id);
 		}
+		// Approving the end finalized the old date with the end's id. That photo now belongs to
+		// the new date, so the old date's finalization must point at its own start; left alone,
+		// it blocks every later delete of the photo (foreign key) and is skipped by date-based
+		// rollup undo.
+		await client.query(
+			start
+				? `UPDATE attendance_rollup_finalizations SET session_id = $4
+				   WHERE pump_id = $1 AND session_date = $2 AND session_id = $3`
+				: `DELETE FROM attendance_rollup_finalizations
+				   WHERE pump_id = $1 AND session_date = $2 AND session_id = $3`,
+			start ? [pumpId, oldDate, end.id, start.id] : [pumpId, oldDate, end.id]
+		);
 
 		const { rows: people } = await client.query<{ person_id: string; match_confidence: number }>(
 			'SELECT person_id, match_confidence FROM attendance_face_evidence WHERE session_id = $1',

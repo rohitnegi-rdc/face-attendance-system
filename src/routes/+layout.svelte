@@ -1,6 +1,7 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
 	import '$lib/styles/global.css';
+	import Toaster from '$lib/components/Toaster.svelte';
 
 	let { children } = $props();
 </script>
@@ -16,3 +17,4 @@
 
 <a class="skip-link" href="#main-content">Skip to main content</a>
 {@render children()}
+<Toaster />

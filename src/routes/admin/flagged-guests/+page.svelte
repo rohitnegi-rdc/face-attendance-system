@@ -4,6 +4,7 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDate } from '$lib/date';
+	import { shiftTypeLabel } from '$lib/shiftLabels';
 
 	let { data } = $props();
 </script>
@@ -37,7 +38,7 @@
 					</div>
 					<div class="guest-content">
 						<div>
-							<p class="eyebrow">{guest.session_type} session</p>
+							<p class="eyebrow">{shiftTypeLabel(guest.session_type)}</p>
 							<h2>{guest.pump_code}</h2>
 							<p>{guest.plant_name} · {guest.area_name}</p>
 						</div>

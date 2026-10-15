@@ -15,6 +15,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import Settings from '@lucide/svelte/icons/settings';
+	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 
 	let {
 		role,
@@ -28,8 +29,13 @@
 
 	async function signOut(event: SubmitEvent) {
 		event.preventDefault();
-		const response = await fetch(resolve('/api/auth/logout'), { method: 'POST' });
-		if (response.ok) window.location.assign(resolve('/login'));
+		try {
+			const response = await fetch(resolve('/api/auth/logout'), { method: 'POST' });
+			if (response.ok) window.location.assign(resolve('/login'));
+			else toastIfServerError(response);
+		} catch {
+			toastConnectionLost();
+		}
 	}
 
 	let drawerOpen = $state(false);

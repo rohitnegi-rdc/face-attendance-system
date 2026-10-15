@@ -50,7 +50,7 @@ async function pollStatus(cookie: string, sessionId: string) {
 }
 
 async function main() {
-	const email = 'bglprvn1@pumps.local';
+	const email = 'bglprvn1@pumps.rdc';
 	const password = 'Test1234!';
 	console.log(`logging in as ${email}...`);
 	const cookie = await login(email, password);

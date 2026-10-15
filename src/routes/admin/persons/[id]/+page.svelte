@@ -87,12 +87,12 @@
 							><td>{formatDate(history.session_date)}</td><td
 								><StatusBadge
 									tone={history.morning_matched ? 'success' : 'neutral'}
-									label={history.morning_matched ? 'Matched' : 'Missing'}
+									label={history.morning_matched ? 'Present' : 'Missing'}
 								/></td
 							><td
 								><StatusBadge
 									tone={history.evening_matched ? 'success' : 'neutral'}
-									label={history.evening_matched ? 'Matched' : 'Missing'}
+									label={history.evening_matched ? 'Present' : 'Missing'}
 								/></td
 							><td
 								><StatusBadge

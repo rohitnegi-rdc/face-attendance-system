@@ -13,6 +13,7 @@ import { expireStaleStarts } from '$lib/server/shiftSessions';
 //   locked  - today's shift is already recorded; shift_outcome says whether it has an end
 //             photo ('full') or was closed without one ('start_only', with closed_by)
 //   review  - a submitted photo is waiting for the operator's review
+//   failed  - a photo failed processing and blocks the shift until the pump retries it
 export const GET: RequestHandler = async ({ locals }) => {
 	if (!locals.user || locals.user.role !== 'pump') {
 		return json({ error: 'Forbidden' }, { status: 403 });
@@ -55,6 +56,18 @@ export const GET: RequestHandler = async ({ locals }) => {
 		[pumpId]
 	);
 
+	// A failed photo that still blocks the flow: a failed start keeps its shift open (submit
+	// refuses until it is retried) and a failed end leaves its start "paired", which would read
+	// as a full shift. The only way forward is the pump's Retry, so the screen must offer it.
+	const failedSession = await queryOne<any>(
+		`SELECT id, session_type, error_reason
+		 FROM attendance_sessions
+		 WHERE pump_id = $1 AND status = 'failed'
+		   AND (pairing_status = 'open' OR session_type = 'evening')
+		 ORDER BY submitted_at DESC LIMIT 1`,
+		[pumpId]
+	);
+
 	const latestSession = await queryOne<any>(
 		`SELECT id, session_type, status, submitted_at, processed_at
 		 FROM attendance_sessions
@@ -63,8 +76,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 		[pumpId]
 	);
 
-	let state: 'morning' | 'evening' | 'locked' | 'review';
+	let state: 'morning' | 'evening' | 'locked' | 'review' | 'failed';
 	if (reviewSession) state = 'review';
+	else if (failedSession) state = 'failed';
 	else if (openMorning) state = 'evening';
 	else state = shiftToday ? 'locked' : 'morning';
 
@@ -83,6 +97,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 		pairing_expires_at: openMorning?.pairing_expires_at ?? null,
 		latest_session: latestSession,
 		review_session_id: reviewSession?.id ?? null,
+		failed_session_id: failedSession?.id ?? null,
+		failed_session_type: failedSession?.session_type ?? null,
+		failed_reason: failedSession?.error_reason ?? null,
 		shift_outcome:
 			state === 'locked' ? (shiftToday.pairing_status === 'paired' ? 'full' : 'start_only') : null,
 		shift_closed_by: state === 'locked' ? (shiftToday.closed_by ?? null) : null,

@@ -5,7 +5,7 @@
 //   2. throwaway Postgres (tests/regression/docker-compose.yml, tmpfs) + init.sql
 //   3. migrations
 //   4. production build (root base path)
-//   5. stub AI service + app + worker, wait for /api/health
+//   5. stub AI service + app + two workers (so jobs race across workers), wait for /api/health
 //   6. Playwright API scenarios in tests/regression (IDs from plans/RegressionTestPlan.md)
 // Everything is torn down at the end, pass or fail. Logs and the HTML report go to
 // test-output/regression/<timestamp>/.
@@ -151,6 +151,10 @@ const serviceEnv = {
 	GEMINI_API_KEY: '',
 	SMTP_HOST: '',
 	WORKER_HEARTBEAT_INTERVAL_MS: '1000',
+	// Short enough that the timeout and retry scenarios (WRK-10, WRK-11) finish in seconds.
+	AI_REQUEST_TIMEOUT_MS: '3000',
+	JOB_RETRY_BASE_SECONDS: '2',
+	STUCK_JOB_SWEEP_SECONDS: '2',
 	TZ: 'UTC' // proves IST handling does not rely on the machine time zone
 };
 
@@ -171,7 +175,14 @@ const steps = [
 			fs.mkdirSync(serviceEnv.UPLOAD_DIR, { recursive: true });
 			startService('stub-ai', ['tests/regression/stub-ai.mjs'], { STUB_AI_PORT: STUB_PORT });
 			startService('app', ['build'], serviceEnv);
-			startService('worker', ['worker/index.js'], serviceEnv);
+			startService('worker-1', ['worker/index.js'], {
+				...serviceEnv,
+				HOSTNAME: 'regression-worker-1'
+			});
+			startService('worker-2', ['worker/index.js'], {
+				...serviceEnv,
+				HOSTNAME: 'regression-worker-2'
+			});
 			return waitForHealth(60_000);
 		}
 	],
@@ -182,6 +193,7 @@ const steps = [
 				REGRESSION_BASE_URL: BASE_URL,
 				REGRESSION_DATABASE_URL: DATABASE_URL,
 				REGRESSION_STUB_URL: STUB_URL,
+				REGRESSION_UPLOAD_DIR: serviceEnv.UPLOAD_DIR,
 				REGRESSION_OUTPUT_DIR: outDir
 			})
 	]

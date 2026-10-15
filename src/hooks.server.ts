@@ -1,6 +1,27 @@
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
+import { randomUUID } from 'node:crypto';
 import { base, resolve as resolvePath } from '$app/paths';
 import { verifyToken } from '$lib/server/auth';
+import { logger } from '$lib/server/log';
+import { CONTACT_ADMIN } from '$lib/errorMessages';
+
+// Any exception no route handled. The user gets a short reference to quote to the admin; the
+// details (stack, SQL error) stay in the server log under the same reference.
+export const handleError: HandleServerError = ({ error, event, status, message }) => {
+	if (status === 404) return { message: 'Page not found.' };
+	const errorId = randomUUID().slice(0, 8);
+	logger.error(
+		{
+			errorId,
+			status,
+			method: event.request.method,
+			path: event.url.pathname,
+			error: error instanceof Error ? error.stack : String(error)
+		},
+		message
+	);
+	return { message: CONTACT_ADMIN, errorId };
+};
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const isHttps = event.request.headers.get('x-forwarded-proto')?.split(',')[0].trim() === 'https';

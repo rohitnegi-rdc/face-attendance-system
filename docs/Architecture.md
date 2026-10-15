@@ -485,3 +485,7 @@ sequenceDiagram
 - The current `docker-compose.yml` runs a single `worker` replica with no `replicas:` count set, but the claiming logic already supports `docker compose up --scale worker=N` safely today.
 - The AI microservice is a single CPU-bound container shared by every worker — it, not the worker count, is the real throughput ceiling until it is scaled out too.
 - Stale/crashed jobs (`status='claimed'` past `JOB_CLAIM_TIMEOUT_MINUTES`) are automatically re-claimable by any worker, up to `MAX_JOB_ATTEMPTS`.
+- A failed attempt is not retried at once: the job goes back to `queued` with `available_at = now() + JOB_RETRY_BASE_SECONDS * 2^(attempt-1)` (default 20 s, then 40 s), so an AI-service restart does not burn every attempt within a second (migration 023).
+- `claimed_by` records the worker (its hostname, stable across a container restart). On start-up a worker hands back every job still claimed under its own name, since it can only be holding them from before a crash.
+- Every `STUCK_JOB_SWEEP_SECONDS` (30 s) a worker fails jobs that reached `MAX_JOB_ATTEMPTS` without finishing (died during the last attempt). Without this they stayed `claimed` forever: the pump saw "processing" with no Retry, and `/api/health` reported them as stale and answered 503.
+- The session's `error_reason` is shown to the pump, so the worker writes an operator sentence there ("The face service did not answer. Tap Retry...") and keeps the technical error in `attendance_jobs.last_error` and the log.

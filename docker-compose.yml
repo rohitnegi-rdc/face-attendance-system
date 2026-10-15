@@ -83,6 +83,11 @@ services:
       PORT: '3000'
       BODY_SIZE_LIMIT: '20000000'
       PROTOCOL_HEADER: x-forwarded-proto
+      # Unset in production: nginx sends x-forwarded-proto. Set it in .env (e.g.
+      # http://localhost:6100) only for plain-http access without a proxy; otherwise every photo
+      # upload fails the CSRF origin check. Passed through only when set, since an empty ORIGIN
+      # stops the app from starting.
+      ORIGIN:
     ports:
       - '${APP_BIND_ADDRESS:-127.0.0.1}:${APP_HOST_PORT:-6100}:3000'
     healthcheck:

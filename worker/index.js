@@ -30,6 +30,11 @@ const GALLERY_SIZE = 5;
 const CLAIM_TIMEOUT_MINUTES = Number(process.env.JOB_CLAIM_TIMEOUT_MINUTES ?? 10);
 const MAX_JOB_ATTEMPTS = Number(process.env.MAX_JOB_ATTEMPTS ?? 3);
 const AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS ?? 30000);
+// A failed attempt waits base, then 2x base, ... before the next one, so an AI-service restart
+// (model load) does not use up every attempt within seconds. 20s gives 20s + 40s of cover.
+const JOB_RETRY_BASE_SECONDS = Number(process.env.JOB_RETRY_BASE_SECONDS ?? 20);
+// How often jobs that can never run again (attempt limit reached) are marked failed.
+const STUCK_JOB_SWEEP_SECONDS = Number(process.env.STUCK_JOB_SWEEP_SECONDS ?? 30);
 // Jobs claimed per poll and processed concurrently, so their (dominant) AI-extraction calls
 // overlap instead of running one-after-another — this is what actually shortens a same-Area
 // burst, since the Area lock (see processJob) is now only held for the brief DB write phase.
@@ -43,6 +48,20 @@ const SERIALIZATION_RETRY_LIMIT = Number(process.env.SERIALIZATION_RETRY_LIMIT ?
 // Falsified-photo check (whole-photo spoof model + Gemini recapture) that disables the pump.
 // Off by default for v1. The cross-pump Area check below is not affected by this switch.
 const PHOTO_SPOOF_CHECK_ENABLED = process.env.PHOTO_SPOOF_CHECK_ENABLED === 'true';
+
+// The pump screen shows the session's error_reason, so it gets a sentence an operator can act
+// on. The technical error stays in attendance_jobs.last_error and the log.
+class AiServiceError extends Error {}
+
+function userFacingReason(err) {
+	if (err instanceof AiServiceError) {
+		return 'The face service did not answer. Tap Retry, or contact Admin if it keeps happening.';
+	}
+	if (err?.code === 'ENOENT') {
+		return 'The photo file is missing on the server. Tap Retry and take the photo again.';
+	}
+	return 'The photo could not be processed. Tap Retry, or contact Admin if it keeps happening.';
+}
 
 function isSerializationConflict(err) {
 	// 40001 = serialization_failure (SSI conflict under SERIALIZABLE), 40P01 = deadlock_detected.
@@ -73,13 +92,14 @@ async function claimJobBatch(limit) {
 	const requestedLimit = Math.min(limit, MAX_ACTIVE_ATTENDANCE_JOBS);
 	const { rows } = await pool.query(
 		`UPDATE attendance_jobs AS job
-		 SET status = 'claimed', claimed_at = now(), attempts = attempts + 1, last_error = NULL
+		 SET status = 'claimed', claimed_at = now(), claimed_by = $5, attempts = attempts + 1,
+		     last_error = NULL
 		 FROM (
 		   SELECT id
 		   FROM attendance_jobs
 		   WHERE attempts < $2
 		     AND (
-		       status = 'queued'
+		       (status = 'queued' AND available_at <= now())
 		       OR (status = 'claimed' AND claimed_at < now() - ($1 || ' minutes')::interval)
 		     )
 		   ORDER BY created_at ASC
@@ -91,9 +111,56 @@ async function claimJobBatch(limit) {
 		 ) AS candidate
 		 WHERE job.id = candidate.id
 		 RETURNING job.*`,
-		[CLAIM_TIMEOUT_MINUTES, MAX_JOB_ATTEMPTS, requestedLimit, MAX_ACTIVE_ATTENDANCE_JOBS]
+		[CLAIM_TIMEOUT_MINUTES, MAX_JOB_ATTEMPTS, requestedLimit, MAX_ACTIVE_ATTENDANCE_JOBS, WORKER_ID]
 	);
 	return rows;
+}
+
+// A worker that starts with jobs still claimed under its own name crashed while holding them
+// (in Docker the name is the container hostname, which survives a restart). Nothing else is
+// working on them, so hand them back now rather than after CLAIM_TIMEOUT_MINUTES.
+async function releaseOwnClaims() {
+	const { rows } = await pool.query(
+		`WITH released AS (
+		   UPDATE attendance_jobs
+		   SET status = 'queued', claimed_at = NULL, claimed_by = NULL, available_at = now(),
+		       last_error = 'worker restarted while processing'
+		   WHERE status = 'claimed' AND claimed_by = $1
+		   RETURNING session_id
+		 )
+		 UPDATE attendance_sessions s SET status = 'pending'
+		 FROM released WHERE s.id = released.session_id AND s.status = 'processing'
+		 RETURNING s.id`,
+		[WORKER_ID]
+	);
+	return rows.length;
+}
+
+// Jobs that hit the attempt limit without finishing can never be claimed again: a worker that
+// died during the last attempt leaves one 'claimed', a restart hand-back can leave one 'queued'.
+// Fail them so the pump sees Retry instead of an endless "processing", and so /api/health stops
+// counting them as stale (which also failed every deploy health check).
+async function failStuckJobs() {
+	const { rows } = await pool.query(
+		`WITH stuck AS (
+		   UPDATE attendance_jobs
+		   SET status = 'error', claimed_at = NULL,
+		       last_error = COALESCE(last_error, 'worker stopped while processing')
+		   WHERE attempts >= $2
+		     AND (status = 'queued'
+		          OR (status = 'claimed' AND claimed_at < now() - ($1 || ' minutes')::interval))
+		   RETURNING session_id
+		 )
+		 UPDATE attendance_sessions s SET status = 'failed', error_reason = $3
+		 FROM stuck WHERE s.id = stuck.session_id AND s.status IN ('pending', 'processing')
+		 RETURNING s.id`,
+		[
+			CLAIM_TIMEOUT_MINUTES,
+			MAX_JOB_ATTEMPTS,
+			'Processing stopped before it finished. Tap Retry, or contact Admin if it keeps happening.'
+		]
+	);
+	return rows.length;
 }
 
 function toVectorLiteral(embedding) {
@@ -103,14 +170,23 @@ function toVectorLiteral(embedding) {
 async function extractFaces(photoBuffer, requestId) {
 	const form = new FormData();
 	form.append('file', new Blob([photoBuffer]), 'photo.jpg');
-	const res = await fetch(`${AI_SERVICE_URL}/internal/face/extract`, {
-		method: 'POST',
-		headers: { 'x-request-id': requestId },
-		body: form,
-		signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS)
-	});
-	if (!res.ok) throw new Error(`AI service returned ${res.status}`);
-	return res.json();
+	let res;
+	try {
+		res = await fetch(`${AI_SERVICE_URL}/internal/face/extract`, {
+			method: 'POST',
+			headers: { 'x-request-id': requestId },
+			body: form,
+			signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS)
+		});
+	} catch (err) {
+		throw new AiServiceError(`AI service unreachable: ${err?.message || err}`);
+	}
+	if (!res.ok) throw new AiServiceError(`AI service returned ${res.status}`);
+	try {
+		return await res.json();
+	} catch (err) {
+		throw new AiServiceError(`AI service sent an unreadable answer: ${err?.message || err}`);
+	}
 }
 
 // Same precedence as src/lib/server/settings.ts: admin setting > env > default (24h).
@@ -490,7 +566,8 @@ async function processJob(job) {
 				}
 
 				await client.query(
-					`UPDATE attendance_sessions SET status = 'review', processed_at = now() WHERE id = $1`,
+					`UPDATE attendance_sessions SET status = 'review', processed_at = now(), error_reason = NULL
+					 WHERE id = $1`,
 					[session.id]
 				);
 
@@ -527,19 +604,27 @@ async function processJob(job) {
 	} catch (err) {
 		const errorMessage = String(err?.message || err);
 		const retrying = job.attempts < MAX_JOB_ATTEMPTS;
+		const retryInSeconds = JOB_RETRY_BASE_SECONDS * 2 ** (job.attempts - 1);
 		await pool.query(
 			`UPDATE attendance_jobs
-			 SET status = $2, claimed_at = NULL, last_error = $3
+			 SET status = $2, claimed_at = NULL, claimed_by = NULL, last_error = $3,
+			     available_at = now() + make_interval(secs => $4)
 			 WHERE id = $1`,
-			[job.id, retrying ? 'queued' : 'error', errorMessage]
+			[job.id, retrying ? 'queued' : 'error', errorMessage, retryInSeconds]
 		);
 		await pool.query(
 			`UPDATE attendance_sessions SET status = $2, error_reason = $3 WHERE id = $1`,
-			[job.session_id, retrying ? 'pending' : 'failed', errorMessage]
+			[job.session_id, retrying ? 'pending' : 'failed', userFacingReason(err)]
 		);
 		log(
 			retrying ? 'warn' : 'error',
-			{ requestId, sessionId: job.session_id, attempt: job.attempts, error: errorMessage },
+			{
+				requestId,
+				sessionId: job.session_id,
+				attempt: job.attempts,
+				error: errorMessage,
+				...(retrying && { retryInSeconds })
+			},
 			retrying ? 'session processing will retry' : 'session failed'
 		);
 	}
@@ -552,6 +637,19 @@ async function loop() {
 		'worker started, polling attendance_jobs'
 	);
 	await writeHeartbeat();
+	const released = await releaseOwnClaims();
+	if (released > 0) log('warn', { released }, 'released jobs this worker held before it restarted');
+	const sweepStuckJobs = async () => {
+		try {
+			const failed = await failStuckJobs();
+			if (failed > 0)
+				log('warn', { failed }, 'failed jobs that ran out of attempts mid-processing');
+		} catch (err) {
+			log('error', { error: String(err?.message || err) }, 'stuck job sweep failed');
+		}
+	};
+	await sweepStuckJobs();
+	setInterval(sweepStuckJobs, STUCK_JOB_SWEEP_SECONDS * 1000).unref();
 	const heartbeatTimer = setInterval(() => {
 		writeHeartbeat().catch((err) =>
 			log(

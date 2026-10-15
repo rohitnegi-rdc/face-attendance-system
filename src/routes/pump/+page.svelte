@@ -14,6 +14,7 @@
 	import Users from '@lucide/svelte/icons/users';
 	import X from '@lucide/svelte/icons/x';
 	import { personDisplayLabel } from '$lib/personLabel';
+	import { showErrorToast, toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 
 	type FlowStatus = 'idle' | 'submitting' | 'processing' | 'completed' | 'failed' | 'fraud';
 	type WorkerResult = {
@@ -81,11 +82,40 @@
 		stopScreenCapture();
 	});
 
+	// Text for a failed request. API routes answer JSON { error }, but SvelteKit's CSRF check,
+	// the body-size limit and the nginx proxy answer plain text or HTML; reading those as JSON
+	// fell back to a generic message and hid the cause.
+	async function failureMessage(res: Response, fallback: string) {
+		toastIfServerError(res);
+		const text = await res.text().catch(() => '');
+		try {
+			const message = JSON.parse(text)?.error;
+			if (message) return String(message);
+		} catch {
+			// not JSON
+		}
+		console.error(`${res.url} answered ${res.status}: ${text.slice(0, 200)}`);
+		if (res.status === 403 && /cross-site/i.test(text))
+			return 'The server refused this request (security check, 403). Open the app from its usual address and try again.';
+		if (res.status === 401) return 'Your login has expired. Sign in again.';
+		if (res.status === 413) return 'The photo is too large to upload.';
+		if (res.status >= 500)
+			return `${fallback} The server had a problem (${res.status}). Try again in a minute.`;
+		return `${fallback} (error ${res.status})`;
+	}
+
 	async function loadToday() {
 		todayLoading = true;
 		try {
 			const res = await fetch(resolve('/api/attendance/today'));
-			if (!res.ok) return;
+			if (!res.ok) {
+				const message = await failureMessage(res, 'Could not load the shift status.');
+				if (status === 'idle') {
+					errorMsg = message;
+					status = 'failed';
+				}
+				return;
+			}
 			today = await res.json();
 			if (today.review_session_id && status === 'idle') {
 				const review = await fetch(resolve(`/api/attendance/status/${today.review_session_id}`));
@@ -94,6 +124,20 @@
 					currentSessionId = today.review_session_id;
 					status = 'completed';
 				}
+			} else if (today.failed_session_id && status === 'idle') {
+				// Survives a reload: Retry clears this photo so a new one can be taken.
+				const photo = today.failed_session_type === 'evening' ? 'shift end' : 'shift start';
+				currentSessionId = today.failed_session_id;
+				errorMsg = `The ${photo} photo could not be processed${
+					today.failed_reason ? ` (${today.failed_reason})` : ''
+				}. Tap Retry to clear it, then take the photo again.`;
+				status = 'failed';
+			}
+		} catch {
+			toastConnectionLost();
+			if (status === 'idle') {
+				errorMsg = 'Could not load the shift status. Check the connection and try again.';
+				status = 'failed';
 			}
 		} finally {
 			todayLoading = false;
@@ -331,18 +375,19 @@
 
 		try {
 			const res = await fetch(resolve('/api/attendance/submit'), { method: 'POST', body: form });
-			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
 				status = 'failed';
-				errorMsg = body.error || 'The photo could not be submitted.';
+				errorMsg = await failureMessage(res, 'The photo could not be submitted.');
 				return;
 			}
+			const body = await res.json();
 
 			currentSessionId = body.session_id;
 			status = 'processing';
 			processingStep = 0;
 			await poll(body.session_id);
 		} catch {
+			toastConnectionLost();
 			status = 'failed';
 			errorMsg = 'The service is not reachable. Your selected photo is still ready to retry.';
 		}
@@ -357,15 +402,17 @@
 		selectedWorkerPreview = null;
 		try {
 			const res = await fetch(resolve(`/api/attendance/retry/${sessionId}`), { method: 'POST' });
-			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				errorMsg =
-					body.error || 'Could not prepare retry. Please ask admin to review this attendance.';
+				errorMsg = await failureMessage(
+					res,
+					'Could not prepare retry. Please ask admin to review this attendance.'
+				);
 				retryingSession = false;
 				return;
 			}
 			resetCapture();
 		} catch {
+			toastConnectionLost();
 			errorMsg = 'Could not connect to prepare retry. Please try again.';
 			retryingSession = false;
 		}
@@ -379,14 +426,14 @@
 		errorMsg = '';
 		try {
 			const res = await fetch(resolve(`/api/attendance/approve/${sessionId}`), { method: 'POST' });
-			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				errorMsg = body.error || 'Could not complete this attendance review.';
+				errorMsg = await failureMessage(res, 'Could not complete this attendance review.');
 				approvingReview = false;
 				return;
 			}
 			resetCapture();
 		} catch {
+			toastConnectionLost();
 			errorMsg = 'Could not connect to complete this attendance review.';
 			approvingReview = false;
 		}
@@ -395,6 +442,11 @@
 	async function retryFailedCapture() {
 		if (result?.session_id || currentSessionId) {
 			await requestAttendanceRetry();
+			return;
+		}
+		// Nothing to resend (the shift status failed to load): reload it.
+		if (!selectedFile) {
+			resetCapture();
 			return;
 		}
 		await submitPhoto();
@@ -419,6 +471,7 @@
 				if (body.status === 'failed') {
 					status = 'failed';
 					errorMsg = body.error_reason || 'Processing failed. Please try another photo.';
+					showErrorToast(body.error_reason || 'The photo could not be processed.');
 					return;
 				}
 				if (body.status === 'fraud_detected') {
@@ -428,6 +481,7 @@
 			} catch {
 				connectionFailures += 1;
 				if (connectionFailures >= 5) {
+					toastConnectionLost();
 					status = 'failed';
 					errorMsg = 'The connection was interrupted while checking the result.';
 					return;
@@ -436,6 +490,7 @@
 		}
 		status = 'failed';
 		errorMsg = 'Processing is taking longer than expected. Please retry the status check.';
+		showErrorToast('The photo is taking too long to process.');
 	}
 
 	// Faces held by a fraud flag are not counted here until an admin clears them.
@@ -446,6 +501,7 @@
 		if (today?.state === 'locked')
 			return today?.shift_outcome === 'start_only' ? 'Shift ended (start only)' : 'Shift complete';
 		if (today?.state === 'review') return 'Review attendance';
+		if (today?.state === 'failed') return 'Photo needs a retry';
 		if (today?.state === 'evening' && today?.can_submit === false) return 'Shift in progress';
 		if (today?.state === 'evening') return 'End shift';
 		return 'Start shift';
@@ -463,13 +519,13 @@
 		endSessionError = '';
 		try {
 			const res = await fetch(resolve('/api/attendance/end'), { method: 'POST' });
-			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				endSessionError = body.error || 'Could not end the session.';
+				endSessionError = await failureMessage(res, 'Could not end the session.');
 				return;
 			}
 			await loadToday();
 		} catch {
+			toastConnectionLost();
 			endSessionError = 'Could not connect. Please try again.';
 		} finally {
 			endingSession = false;
@@ -919,7 +975,9 @@
 										: 'Shift recorded. The next shift starts tomorrow.'
 									: today?.state === 'review'
 										? 'Finish reviewing the submitted group photo'
-										: today?.state === 'evening' && today?.can_submit === false
+										: today?.state === 'failed'
+											? 'Retry the photo that could not be processed'
+											: today?.state === 'evening' && today?.can_submit === false
 											? `Shift end opens ${formatIST(today?.next_allowed_at)}`
 											: today?.state === 'evening'
 												? 'Submit the group photo to end the shift'

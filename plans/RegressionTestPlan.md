@@ -121,12 +121,50 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 | ID | Scenario | Expected | Tier | Pri | Status |
 |---|---|---|---|---|---|
 | WRK-01 | Job processed: `queued` → `claimed` → `done`; session ends `completed` or `review` | As stated | 1 | P0 | Covered (every regression scenario) |
-| WRK-02 | AI service returns 500 or times out | Retried up to the attempt limit, then session `failed` with a readable reason | 1 (stub returns 500) | P0 | Covered (fraud-review-admin.spec REV-03) |
-| WRK-03 | Worker killed mid-job | Stale claim re-claimed after the timeout; processed once | 1 | P0 | Missing |
-| WRK-04 | Two workers, 20 jobs | Each job processed exactly once | 4 | P0 | Covered (concurrency suite) |
-| WRK-05 | Two pumps in one Area at the same instant with the same face | Exactly one wins; the other gets a fraud flag (`SERIALIZABLE` retry) | 1, 4 | P0 | Partial |
+| WRK-02 | AI service returns 500 or times out | Retried up to the attempt limit, then session `failed` with a readable reason | 1 (stub returns 500) | P0 | Covered (fraud-review-admin.spec REV-03, worker.spec WRK-11) |
+| WRK-03 | Worker killed mid-job | Stale claim re-claimed after the timeout; processed once | 1 | P0 | Covered (worker.spec) |
+| WRK-04 | Two workers, 20 jobs | Each job processed exactly once | 1, 4 | P0 | Covered (the regression gate runs two workers; concurrency.spec checks one AI call per photo) |
+| WRK-05 | Two pumps in one Area at the same instant with the same face | Exactly one wins; the other gets a fraud flag (`SERIALIZABLE` retry) | 1, 4 | P0 | Covered (concurrency.spec CONC-02, five pumps) |
 | WRK-06 | Zero faces in photo | Session completes with no attendance; operator sees "no faces found" | 1 | P0 | Covered (existing e2e) |
 | WRK-07 | Heartbeat stops | `/api/health` reports `worker: unavailable` within the timeout | 1 | P1 | Missing |
+| WRK-08 | Worker dies during the job's last attempt | Job `error`, session `failed` with a Retry message, `/api/health` stops counting it as stale, pump can Retry. Before 2026-10-15 it stayed `processing` forever and kept `/api/health` at 503, which also failed every deploy health check | 1 | P0 | Covered (worker.spec, fixed 2026-10-15) |
+| WRK-09 | Worker restarts (same hostname) holding claimed jobs | It hands them back at start-up, not after the 10-minute claim timeout | 1 | P1 | Covered (worker.spec, fixed 2026-10-15) |
+| WRK-10 | AI service fails twice, then answers | Retries wait (`JOB_RETRY_BASE_SECONDS`, doubling), then the photo is processed and the old error text is cleared. Before: three attempts in about a second, so an AI restart failed every photo in flight | 1 | P0 | Covered (worker.spec, fixed 2026-10-15) |
+| WRK-11 | AI service never answers within `AI_REQUEST_TIMEOUT_MS` | `failed` with "The face service did not answer...", technical error only in `attendance_jobs.last_error` | 1 | P0 | Covered (worker.spec, fixed 2026-10-15) |
+| WRK-12 | Photo file missing on disk | `failed` with a readable reason, no file path shown to the pump | 1 | P1 | Covered (worker.spec, fixed 2026-10-15) |
+| WRK-13 | Two workers running | Both write heartbeats | 1 | P2 | Covered (worker.spec) |
+| WRK-14 | Slow AI service (2 s per photo) | Photo still processed, no retry | 1 | P1 | Covered (worker.spec) |
+
+### CONC: many pumps at once, races (added 2026-10-15)
+
+Two workers process the queue during the regression gate, so these also race across workers. A
+typical run logs about 40 `SERIALIZABLE` conflicts, all retried; the results must still be exact.
+
+| ID | Scenario | Expected | Tier | Pri | Status |
+|---|---|---|---|---|---|
+| CONC-01 | Five pumps in one Area submit at the same instant, 6 workers each | All five reach review, 6 evidence rows each, one AI call per photo, no fraud flags, workers numbered 1 to 6 per pump | 1 | P0 | Covered (concurrency.spec) |
+| CONC-02 | One worker appears in all five photos at once | Counted at exactly one pump, fraud-flagged at the other four, all flags name the same person | 1 | P0 | Covered (concurrency.spec) |
+| CONC-03 | Five full shifts at once: start, approve, end, approve all simultaneous | No duplicate people; yearly `days_present` = 30, no start-only or end-only days | 1 | P0 | Covered (concurrency.spec) |
+| CONC-04 | One pump taps submit five times at once | One 202, four 409, one session | 1 | P0 | Covered (concurrency.spec) |
+| CONC-05 | Approve tapped three times at once on an end photo | One 200, two 409, day counted once | 1 | P0 | Covered (concurrency.spec) |
+| CONC-06 | End session and an end photo at the same instant | Exactly one wins; the start is either closed by the pump or paired, never both | 1 | P0 | Covered (concurrency.spec) |
+| CONC-07 | Same photo bytes from two pumps at the same instant | One 202, one 409 | 1 | P1 | Covered (concurrency.spec) |
+| CONC-08 | Five pumps with a slow AI service (1.5 s per photo) | All finish without a retry, in under 12 s | 1 | P1 | Covered (concurrency.spec) |
+
+### ERR: what the user sees when something breaks (added 2026-10-15)
+
+Any system failure shows the toast "Something went wrong. Please contact Admin." (`src/lib/toast.svelte.ts`,
+`Toaster.svelte` in the root layout). A full-page server error shows `+error.svelte` with a short
+reference that is also in the server log (`handleError` in `hooks.server.ts`). Expected refusals
+(wrong password, duplicate photo, 409) stay inline messages without the toast.
+
+| ID | Scenario | Expected | Tier | Pri | Status |
+|---|---|---|---|---|---|
+| ERR-01 | API call answers 500 on the pump screen | Contact-admin toast, failed state with Retry | 1 (browser) | P0 | Covered (errors.spec) |
+| ERR-02 | Connection lost on the pump screen | Contact-admin toast "could not be reached", not a stuck screen | 1 (browser) | P0 | Covered (errors.spec) |
+| ERR-03 | Unhandled server exception on a page | Error page with the contact-admin message and an 8-character reference, no SQL or stack | 1 (browser) | P0 | Covered (errors.spec) |
+| ERR-04 | Data request behind a failing page | Carries the contact-admin message, no internals | 1 | P1 | Covered (errors.spec) |
+| ERR-05 | Unknown URL | "Page not found", no contact-admin toast | 1 (browser) | P2 | Covered (errors.spec) |
 
 ### MATCH: identity (stub embeddings make these exact)
 
@@ -209,6 +247,7 @@ UI words: Shift start / Shift end / Full shift / Start only / End only. The data
 | SHIFT-08 | No end for 25 h | Lazy check on `/today` closes it with `closed_by = timeout` (same rule as the hourly sweep) | 1 | P0 | Covered |
 | SHIFT-09 | Pump screen after a closed shift | `/today` returns `shift_outcome` `full` or `start_only` (with `shift_closed_by`); the page says "Shift ended (start only)" with a neutral badge, never "Shift complete" | 1 | P1 | Covered (bug found by LIVE-07, fixed 2026-10-08) |
 | SHIFT-10 | Worker counts while a shift is still open | Vendor, plant manager, admin pump and person pages and the admin roll-up rebuild do not count an open shift's day as start only | 1 | P1 | Covered (vendor people page; same `shiftStillOpen` condition on the other pages) |
+| SHIFT-11 | A failed photo blocks the shift | `/today` returns `state: failed` with `failed_session_id` for a failed start (was "Start shift" while submit refused) or a failed end (was a "full" shift); the pump page shows it with Retry after a reload; Retry clears it and an end retry reopens the start | 1 | P1 | Covered (bug found 2026-10-13 during the Mumbai live run, fixed same day) |
 
 ### LIVE: visual walk-through on a local stack (added 2026-10-08)
 

@@ -6,6 +6,7 @@
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Upload from '@lucide/svelte/icons/upload';
 	import X from '@lucide/svelte/icons/x';
+	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 
 	const REQUIRED_HEADERS = ['Area Name', 'Plant Name', 'PUMP Name', 'Vendor Name'];
 	const PM_REQUIRED_HEADERS = ['Plant Code', 'Plant Name', 'Plant Manager Name', 'Email ID'];
@@ -73,11 +74,13 @@
 			const res = await fetch(resolve('/api/admin/import/csv'), { method: 'POST', body: form });
 			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
+				toastIfServerError(res);
 				error = body.error || 'The import could not be completed.';
 				return;
 			}
 			result = body;
 		} catch {
+			toastConnectionLost();
 			error = 'The service is not reachable. Your file is still selected.';
 		} finally {
 			isSubmitting = false;
@@ -134,11 +137,13 @@
 			const res = await fetch(resolve('/api/admin/import/plant-managers'), { method: 'POST', body: form });
 			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
+				toastIfServerError(res);
 				pmError = body.error || 'The import could not be completed.';
 				return;
 			}
 			pmResult = body;
 		} catch {
+			toastConnectionLost();
 			pmError = 'The service is not reachable. Your file is still selected.';
 		} finally {
 			pmIsSubmitting = false;

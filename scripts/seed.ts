@@ -12,7 +12,7 @@ import { importCsv } from '../src/lib/server/csvImport.ts';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function main() {
-	const adminEmail = 'admin@attendance.local';
+	const adminEmail = 'admin@attendance.rdc';
 	const existingAdmin = await queryOne('SELECT id FROM admins WHERE email = $1', [adminEmail]);
 	let adminId: string;
 	if (!existingAdmin) {
@@ -47,7 +47,7 @@ async function main() {
 
 	console.log('seed import summary:', summary);
 	console.log(
-		'\nSample pump logins (password Test1234!): aslpwwi2@pumps.local, bglprvn1@pumps.local, ...'
+		'\nSample pump logins (password Test1234!): aslpwwi2@pumps.rdc, bglprvn1@pumps.rdc, ...'
 	);
 	console.log('Sample vendor logins (password Test1234!): rvnenterprises@vendors.rdc, ...');
 

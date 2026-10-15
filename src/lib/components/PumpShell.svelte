@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import ScanFace from '@lucide/svelte/icons/scan-face';
 	import LogOut from '@lucide/svelte/icons/log-out';
+	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 
 	let { userEmail = '', children } = $props<{
 		userEmail?: string;
@@ -10,8 +11,13 @@
 
 	async function signOut(event: SubmitEvent) {
 		event.preventDefault();
-		const response = await fetch(resolve('/api/auth/logout'), { method: 'POST' });
-		if (response.ok) window.location.assign(resolve('/login'));
+		try {
+			const response = await fetch(resolve('/api/auth/logout'), { method: 'POST' });
+			if (response.ok) window.location.assign(resolve('/login'));
+			else toastIfServerError(response);
+		} catch {
+			toastConnectionLost();
+		}
 	}
 </script>
 

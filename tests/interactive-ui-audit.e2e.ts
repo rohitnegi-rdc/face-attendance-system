@@ -759,7 +759,7 @@ test('guest dismiss/create-person and fraud review buttons update only audit fix
 			`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash)
 			 SELECT plant_id, vendor_id, $2, $3, password_hash FROM pumps WHERE id = $1
 			 RETURNING id`,
-			[auditPumpId, `${auditTag}-P02`, `${auditTag.toLowerCase()}-p02@pumps.local`]
+			[auditPumpId, `${auditTag}-P02`, `${auditTag.toLowerCase()}-p02@pumps.rdc`]
 		)
 	).rows[0];
 	const secondSession = (

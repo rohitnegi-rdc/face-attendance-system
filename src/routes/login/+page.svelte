@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
+	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
@@ -11,6 +13,10 @@
 	let error = $state('');
 	let isSubmitting = $state(false);
 	let showPassword = $state(false);
+	// Until the page is interactive a click on Sign in is a plain form submit, which silently
+	// reloads /login with empty fields (slow phones, and the live E2E run).
+	let ready = $state(false);
+	onMount(() => (ready = true));
 
 	async function submit(e: Event) {
 		e.preventDefault();
@@ -25,11 +31,13 @@
 			});
 			const data = await res.json().catch(() => ({}));
 			if (!res.ok) {
+				toastIfServerError(res);
 				error = data.error || 'We could not sign you in. Check your details and try again.';
 				return;
 			}
 			window.location.href = resolve(data.mustChangePassword ? '/change-password' : `/${data.role as 'admin' | 'vendor' | 'plant-manager' | 'pump'}`);
 		} catch {
+			toastConnectionLost();
 			error = 'The service is not reachable right now. Please try again.';
 		} finally {
 			isSubmitting = false;
@@ -98,7 +106,7 @@
 			<button
 				class="button button--primary submit-button"
 				type="submit"
-				disabled={isSubmitting}
+				disabled={isSubmitting || !ready}
 				data-testid="login-submit"
 			>
 				{#if isSubmitting}<LoaderCircle class="spin" size={18} />{/if}

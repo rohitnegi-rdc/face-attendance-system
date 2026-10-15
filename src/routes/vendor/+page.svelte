@@ -35,7 +35,7 @@
 		<div class="section-header">
 			<div>
 				<h2>Thirty-day attendance</h2>
-				<p class="supporting-text">Complete morning and evening matches.</p>
+				<p class="supporting-text">Workers seen at both shift start and shift end.</p>
 			</div>
 			<strong>{data.trend.at(-1)?.attendance_pct || 0}%</strong>
 		</div>

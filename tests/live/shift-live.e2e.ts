@@ -8,13 +8,14 @@ import path from 'node:path';
 import pg from 'pg';
 
 const PASSWORD = process.env.LIVE_PASSWORD ?? '';
-const ADMIN_EMAIL = process.env.LIVE_ADMIN_EMAIL ?? 'admin@attendance.local';
+const ADMIN_EMAIL = process.env.LIVE_ADMIN_EMAIL ?? 'admin@attendance.rdc';
 const ADMIN_PASSWORD = process.env.LIVE_ADMIN_PASSWORD ?? '';
-const P1 = 'BGLPSHIVA4'; // full shift
-const P2 = 'BGLPRVN4'; // End session button and admin fixes
-const P3 = 'BGLPSS1'; // cross-pump fraud and 24 h auto-close
-const BASE_URL = process.env.LIVE_BASE_URL || 'http://127.0.0.1:6100';
-const VENDOR_EMAIL = 'rvnenterprises@vendors.local';
+// P1 and P3 must be in the same Area (cross-pump check); LIVE_P1..3 pick another Area.
+const P1 = process.env.LIVE_P1 ?? 'BGLPSHIVA4'; // full shift
+const P2 = process.env.LIVE_P2 ?? 'BGLPRVN4'; // End session button and admin fixes
+const P3 = process.env.LIVE_P3 ?? 'BGLPSS1'; // cross-pump fraud and 24 h auto-close
+const BASE_URL = process.env.LIVE_BASE_URL || 'http://localhost:6100';
+const VENDOR_EMAIL = process.env.LIVE_VENDOR_EMAIL ?? 'rvnenterprises@vendors.rdc';
 // A real plant manager assigned to the pumps' plant; kept out of the repo.
 const MANAGER_EMAIL = process.env.LIVE_MANAGER_EMAIL ?? '';
 
@@ -174,6 +175,8 @@ async function open(
 
 async function login(page: Page, email: string, password = PASSWORD) {
 	await page.goto('/login');
+	// Enabled once the page is interactive; filling earlier can be wiped by hydration.
+	await expect(page.getByTestId('login-submit')).toBeEnabled();
 	await page.getByTestId('login-email').fill(email);
 	await page.getByTestId('login-password').fill(password);
 	await page.getByTestId('login-submit').click();
@@ -247,12 +250,14 @@ let pump1 = '';
 let pump2 = '';
 let pump3 = '';
 let startedAt = 0;
+let runStartedAt = '';
 
 test.beforeAll(async () => {
 	expect(PASSWORD, 'LIVE_PASSWORD').not.toBe('');
 	expect(MANAGER_EMAIL, 'LIVE_MANAGER_EMAIL').not.toBe('');
 	expect(ADMIN_PASSWORD, 'LIVE_ADMIN_PASSWORD').not.toBe('');
 	fs.mkdirSync(shotDir, { recursive: true });
+	runStartedAt = (await query<{ t: string }>('SELECT now()::text AS t'))[0].t;
 	[pump1, pump2, pump3] = await Promise.all([pumpId(P1), pumpId(P2), pumpId(P3)]);
 	const busy = await query(
 		`SELECT p.pump_code FROM attendance_sessions s JOIN pumps p ON p.id = s.pump_id
@@ -281,7 +286,7 @@ test('LIVE-01 shift start, then the end is refused before 9 h with the time it o
 	browser
 }) => {
 	const { context, page } = await open(browser, true);
-	await login(page, `${P1.toLowerCase()}@pumps.local`);
+	await login(page, `${P1.toLowerCase()}@pumps.rdc`);
 	await expect.soft(page.getByTestId('session-title')).toHaveText('Start shift');
 	await expect.soft(page.getByText('Start open', { exact: true })).toBeVisible();
 	await expect
@@ -344,7 +349,7 @@ test('LIVE-03 after the gap the end photo completes a full shift; another photo 
 	const wait = startedAt + 65_000 - Date.now();
 	if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
 	const { context, page } = await open(browser, true);
-	await login(page, `${P1.toLowerCase()}@pumps.local`);
+	await login(page, `${P1.toLowerCase()}@pumps.rdc`);
 	await expect.soft(page.getByTestId('session-title')).toHaveText('End shift');
 	await expect.soft(page.getByText('End open', { exact: true })).toBeVisible();
 	await expect
@@ -396,7 +401,7 @@ test('LIVE-04 pump End session closes a forgotten shift; the next photo starts a
 	browser
 }) => {
 	const { context, page } = await open(browser, true);
-	await login(page, `${P2.toLowerCase()}@pumps.local`);
+	await login(page, `${P2.toLowerCase()}@pumps.rdc`);
 	await expect.soft(page.getByTestId('session-title')).toHaveText('Start shift');
 	await takePhoto(page, 'c-baseline.jpg');
 	await submitPhoto(page);
@@ -453,7 +458,7 @@ test('LIVE-06 admin Split turns a mistaken end photo into the next shift start',
 	browser
 }) => {
 	const { context, page } = await open(browser, true);
-	await login(page, `${P2.toLowerCase()}@pumps.local`);
+	await login(page, `${P2.toLowerCase()}@pumps.rdc`);
 	await takePhoto(page, 'c-lowlight.jpg');
 	await submitPhoto(page);
 	await doneReviewing(page);
@@ -533,13 +538,15 @@ test('LIVE-07 admin End session, refused Move, and cancelled Delete', async ({ b
 	await shot(page, '07c-admin-pump2-final-log');
 
 	const audit = await query<{ action: string }>(
-		`SELECT action FROM admin_audit_log WHERE created_at > now() - interval '1 hour'
-		 AND action IN ('move_shift', 'split_shift', 'end_shift') ORDER BY created_at`
+		// Only this run: an earlier run within the hour would add its own rows.
+		`SELECT action FROM admin_audit_log WHERE created_at > $1
+		 AND action IN ('move_shift', 'split_shift', 'end_shift') ORDER BY created_at`,
+		[runStartedAt]
 	);
 	expect.soft(audit.map((a) => a.action)).toEqual(['move_shift', 'split_shift', 'end_shift']);
 
 	const pumpView = await open(browser, true);
-	await login(pumpView.page, `${P2.toLowerCase()}@pumps.local`);
+	await login(pumpView.page, `${P2.toLowerCase()}@pumps.rdc`);
 	await shot(pumpView.page, '07d-pump2-after-admin-end');
 	expect.soft(await todayState(pumpView.page)).toMatchObject({
 		state: 'locked',
@@ -557,7 +564,7 @@ test('LIVE-08 the same faces at another pump in the Area are flagged; admin reso
 	browser
 }) => {
 	const { context, page } = await open(browser, true);
-	await login(page, `${P3.toLowerCase()}@pumps.local`);
+	await login(page, `${P3.toLowerCase()}@pumps.rdc`);
 	await takePhoto(page, 'a-compressed.jpg');
 	await page.getByRole('button', { name: 'Submit group photo' }).click();
 	await expect
@@ -569,7 +576,7 @@ test('LIVE-08 the same faces at another pump in the Area are flagged; admin reso
 	await expect.soft(page.getByTestId('result-held')).toContainText('held for admin review');
 	await expect
 		.soft(page.getByTestId('fraud-flag-line').first())
-		.toContainText(new RegExp(`matches ${P1} Worker [0-9]+, already marked at ${P1}`));
+		.toContainText(new RegExp(`matches ${P1} Worker [0-9]+, already marked at\\s+${P1}`));
 	const start = await latestSession(P3);
 	const flags = await query('SELECT id FROM fraud_flags WHERE session_id = $1', [start.id]);
 	findings.push(`LIVE-08 fraud flags raised: ${flags.length}`);
@@ -609,7 +616,7 @@ test('LIVE-09 a start with no end auto-closes after 24 h as start only', async (
 	const start = await latestSession(P3);
 	await backdate(start.id, 25 * 60, await istDate(1));
 	const { context, page } = await open(browser, true);
-	await login(page, `${P3.toLowerCase()}@pumps.local`);
+	await login(page, `${P3.toLowerCase()}@pumps.rdc`);
 	findings.push(`LIVE-09 pump3 state after 25 h: ${(await todayState(page)).state}`);
 	await shot(page, '09a-pump3-after-auto-close');
 	const closed = await session(start.id);

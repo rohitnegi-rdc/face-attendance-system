@@ -129,7 +129,7 @@ export async function importCsv(csvText: string): Promise<ImportSummary> {
 				pumpCode
 			]);
 			if (existingPump) {
-				const loginEmail = `${slugifyLogin(pumpCode)}@pumps.local`;
+				const loginEmail = `${slugifyLogin(pumpCode)}@pumps.rdc`;
 				await query(
 					`UPDATE pumps
 					 SET plant_id = $1,
@@ -145,7 +145,7 @@ export async function importCsv(csvText: string): Promise<ImportSummary> {
 				);
 				summary.pumps_updated++;
 			} else {
-				const loginEmail = `${slugifyLogin(pumpCode)}@pumps.local`;
+				const loginEmail = `${slugifyLogin(pumpCode)}@pumps.rdc`;
 				const passwordHash = await hashPassword('Test1234!');
 				await query(
 					`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash)

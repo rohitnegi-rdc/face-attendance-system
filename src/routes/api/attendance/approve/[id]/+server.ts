@@ -14,7 +14,8 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 	try {
 		await client.query('BEGIN');
 		const { rows } = await client.query(
-			`SELECT id, pump_id, session_date, session_type, status
+			`SELECT id, pump_id, session_date, session_type, status,
+			        EXTRACT(YEAR FROM session_date)::int AS session_year
 			 FROM attendance_sessions
 			 WHERE id = $1
 			 FOR UPDATE`,
@@ -59,7 +60,9 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 					 WHERE pump_id = $1 AND session_date = $2`,
 					[session.pump_id, session.session_date]
 				);
-				const year = new Date(session.session_date).getFullYear();
+				// From SQL: a JS Date of a DATE column depends on the process time zone, which can
+				// shift a 1 January shift into the previous year.
+				const year: number = session.session_year;
 				for (const row of attendance) {
 					const column: RollupColumn = row.morning_matched && row.evening_matched
 						? 'days_present'

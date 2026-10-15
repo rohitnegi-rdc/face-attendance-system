@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { shiftTypeLabel } from '$lib/shiftLabels';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Save from '@lucide/svelte/icons/save';
 	import UserMinus from '@lucide/svelte/icons/user-minus';
@@ -8,11 +9,13 @@
 	import type { SubmitFunction } from './$types';
 	import { formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
+	import { showErrorToast } from '$lib/toast.svelte';
 
 	let { data, form } = $props();
 	let availableSessions = $derived(new Set(data.sessions.map((session: any) => session.session_type)));
 	const activeDuplicate = (personId: string, sessionType: string) => data.duplicateResolutions.find((item: any) => !item.reversed_at && item.duplicate_person_id === personId && item.session_type === sessionType);
-	const enhanceInPlace: SubmitFunction = () => async ({ update }) => {
+	const enhanceInPlace: SubmitFunction = () => async ({ result, update }) => {
+		if (result.type === 'error') showErrorToast();
 		await update({ reset: false, invalidateAll: true });
 	};
 </script>
@@ -52,7 +55,7 @@
 					</figcaption>
 					{#if session?.has_photo}
 						<a href={resolve(`/api/attendance/photo/${session.id}`)} target="_blank" rel="noreferrer">
-							<img src={resolve(`/api/attendance/photo/${session.id}`)} alt={`${sessionType} group attendance evidence`} />
+							<img src={resolve(`/api/attendance/photo/${session.id}`)} alt={`${shiftTypeLabel(sessionType)} group attendance evidence`} />
 						</a>
 					{:else}
 						<div class="evidence-empty">No photo available</div>
@@ -88,11 +91,11 @@
 					<div class="correction-workspace">
 						<div class="attendance-fields">
 							{#if morningDuplicate}
-								<div class="duplicate-state"><span><strong>Morning:</strong> duplicate of {personDisplayLabel(data.pump.pump_code, morningDuplicate.kept_display_seq)}</span><button class="text-button" type="submit" formnovalidate name="resolution_id" value={morningDuplicate.id} formaction={`?/undoDuplicate&pump=${data.pump.id}&day=${data.day}`}><Undo2 size={15} /> Unmark</button></div>
-							{:else}<label class="check-field"><input type="checkbox" name="morning_present" checked={person.morning_matched} disabled={!availableSessions.has('morning')} /><span>Morning present</span></label>{/if}
+								<div class="duplicate-state"><span><strong>Shift start:</strong> duplicate of {personDisplayLabel(data.pump.pump_code, morningDuplicate.kept_display_seq)}</span><button class="text-button" type="submit" formnovalidate name="resolution_id" value={morningDuplicate.id} formaction={`?/undoDuplicate&pump=${data.pump.id}&day=${data.day}`}><Undo2 size={15} /> Unmark</button></div>
+							{:else}<label class="check-field"><input type="checkbox" name="morning_present" checked={person.morning_matched} disabled={!availableSessions.has('morning')} /><span>Start present</span></label>{/if}
 							{#if eveningDuplicate}
-								<div class="duplicate-state"><span><strong>Evening:</strong> duplicate of {personDisplayLabel(data.pump.pump_code, eveningDuplicate.kept_display_seq)}</span><button class="text-button" type="submit" formnovalidate name="resolution_id" value={eveningDuplicate.id} formaction={`?/undoDuplicate&pump=${data.pump.id}&day=${data.day}`}><Undo2 size={15} /> Unmark</button></div>
-							{:else}<label class="check-field"><input type="checkbox" name="evening_present" checked={person.evening_matched} disabled={!availableSessions.has('evening')} /><span>Evening present</span></label>{/if}
+								<div class="duplicate-state"><span><strong>Shift end:</strong> duplicate of {personDisplayLabel(data.pump.pump_code, eveningDuplicate.kept_display_seq)}</span><button class="text-button" type="submit" formnovalidate name="resolution_id" value={eveningDuplicate.id} formaction={`?/undoDuplicate&pump=${data.pump.id}&day=${data.day}`}><Undo2 size={15} /> Unmark</button></div>
+							{:else}<label class="check-field"><input type="checkbox" name="evening_present" checked={person.evening_matched} disabled={!availableSessions.has('evening')} /><span>End present</span></label>{/if}
 						</div>
 						<div class="correction-action">
 							<label class="reason-field">
@@ -157,7 +160,7 @@
 				{#each data.duplicateResolutions as resolution}
 					<article class="history-entry" data-testid="duplicate-history-entry">
 						<div><strong>{personDisplayLabel(data.pump.pump_code, resolution.duplicate_display_seq)}</strong> marked duplicate of <strong>{personDisplayLabel(data.pump.pump_code, resolution.kept_display_seq)}</strong></div>
-						<span class="status-chip" class:status-chip--reversed={resolution.reversed_at}>{resolution.reversed_at ? 'Undone' : `${resolution.session_type} duplicate`}</span>
+						<span class="status-chip" class:status-chip--reversed={resolution.reversed_at}>{resolution.reversed_at ? 'Undone' : `${shiftTypeLabel(resolution.session_type)} duplicate`}</span>
 						<p>{resolution.reason}</p>
 						<small>{resolution.resolved_by} / {new Date(resolution.resolved_at).toLocaleString()}</small>
 						{#if !resolution.reversed_at}

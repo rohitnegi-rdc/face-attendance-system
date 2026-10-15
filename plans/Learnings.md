@@ -61,3 +61,22 @@ The original 12-row illustrative sample in Prompt A never exposed several real p
 - "Start only" means the shift is closed. Counting `morning_matched AND NOT evening_matched` on its own also counts a shift still waiting for its end. Use `shiftStillOpen()` from `shiftSessions.ts`, and give the pump screen a separate outcome for a start-only day instead of reusing "Shift complete".
 - A fraud flag's `person_id` is the worker at the **other** pump. Labels built from it already contain that pump's code, so "X was also found at <other pump>" repeats the code. Say what the face matched and where.
 - A long-running live test that hard-fails halfway leaves real data behind (open starts). Use `expect.soft` inside steps and keep only helpers and setup hard, so one wrong assertion does not burn another pump.
+
+## 2026-10-13 — Mumbai live run: plain-http uploads, stuck failed photos, Split finalizations
+
+- Local plain-http access (no proxy) must set `ORIGIN` in `.env` (e.g. `http://localhost:6100`). With `PROTOCOL_HEADER=x-forwarded-proto` and no header, adapter-node assumes https and every photo upload fails CSRF with a plain-text 403. compose passes `ORIGIN` only when it is set, because an empty `ORIGIN` stops the app from starting. Open the app at exactly that URL (localhost, not 127.0.0.1).
+- The live Playwright config used to fake `x-forwarded-proto: http`, which hid that bug. Tests should send requests exactly as a browser does.
+- Never read an error response with `res.json().catch(() => ({}))` and a generic fallback: the CSRF check, body-size limit and nginx answer text/HTML, and the cause vanished. The pump page now uses `failureMessage()`.
+- A failed photo blocks the shift (failed start: submit refuses; failed end: its start reads as a full shift), and the pump screen never showed it after a reload. `/today` now returns `state: 'failed'` with `failed_session_id`, and the page offers Retry (SHIFT-11).
+- Approving an end photo finalizes the day with the end's id. Admin Split moved that photo to another date but left the old date's finalization pointing at it, so every later delete of the photo failed on a foreign key. Split now repoints it to the old start; migration 022 repaired existing rows (SHIFT-04).
+- A Sign in click before hydration is a plain form submit that reloads /login with empty fields. The button stays disabled until the page is interactive; tests wait for it to be enabled before filling.
+- Live runs in one Area contaminate each other on the same day: the cross-pump check correctly flags the same test faces at a second pump. Use another Area, or clear the earlier run's shifts with `clearPumpAttendance`/`deleteSession`.
+
+## 2026-10-15 — Worker failure paths, five-pump races, error toasts
+
+- A claim query filtered on `attempts < MAX` re-claims crashed jobs, but a worker that dies during the **last** attempt leaves a job no query ever touches again: `processing` forever, and `/api/health` counts it as stale and answers 503, which also fails every deploy health check. Anything filtered out of the retry path needs its own sweep to a terminal state.
+- Retrying a failed AI call at once wastes the attempts: an AI-service restart (model load) failed every photo in flight within a second. Retries now wait (`available_at`, doubling from `JOB_RETRY_BASE_SECONDS`).
+- The success path must clear the error text a failed attempt wrote; otherwise a photo that worked on the second try still carries "failed" wording.
+- `session.error_reason` reaches the pump screen. Raw errors there ("The operation was aborted due to timeout", file paths) mean nothing to an operator and leak internals. Keep the raw error in `attendance_jobs.last_error`.
+- Running two workers in the regression gate is cheap and is what actually exercises cross-worker races: one run logs about 40 `SERIALIZABLE` conflicts, all retried, with exact results (CONC-01..08).
+- Tests can reach "a worker crashed here" without killing a process: write the photo into `UPLOAD_DIR` and insert the session and job rows in the state a crash leaves (WRK-03/08/09).

@@ -44,7 +44,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 		if (session.session_type === 'morning' && session.paired_session_id) {
 			await client.query('ROLLBACK');
 			return json(
-				{ error: 'Retry the paired evening attendance before retrying this morning attendance' },
+				{ error: 'Retry the shift end photo before retrying this shift start' },
 				{ status: 409 }
 			);
 		}
