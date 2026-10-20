@@ -297,7 +297,22 @@ screenshots in `test-output/shift-live/<run>/`. Needs `LIVE_DATABASE_URL`, `LIVE
 | RPT-02 | Export (xlsx) rows equal the on-screen filtered list | Equal | 1, 2 | P0 | Covered |
 | RPT-03 | Yearly rollup equals a recount from `daily_person_attendance` after a full scripted week (missed sessions, retries, merges, corrections) | Equal | 1 | P0 | Missing |
 | RPT-04 | Date filters across month and year boundaries in IST | Correct days only | 1 | P1 | Partial |
-| RPT-05 | Vendor and plant manager export | Scoped file | 1 | P1 | **RED** (feature missing, P3) |
+| RPT-05 | Plant manager and admin attendance report (Read me, People, Daily, Shifts, Changes sheets) | Only the manager's plants; per-person full shift, start only and absent days match the scripted two days; admin report for the same pump agrees; other roles get 403 | 1 | P1 | Covered (reports.spec, added 2026-10-15). Vendor export still missing |
+
+### LOC: shift start location check (location.spec)
+
+Areas with `location_check_enabled` (Mumbai first) compare the operator's phone with the pump's latest GPS reading (`pump_locations`, copied every 5 min from the optimizer database by `worker/gpsFeed.js`). Logic: `src/lib/server/locationCheck.ts`.
+
+| ID | Scenario | Expected | Tier | Pri | Status |
+|---|---|---|---|---|---|
+| LOC-01 | Area without the check | `location_status` NULL, no hold message | 1 | P0 | Covered (added 2026-10-19) |
+| LOC-02 | Phone within 100 m of a fresh pump GPS reading | `ok`, distance stored, shift starts normally | 1 | P0 | Covered |
+| LOC-03 | Too far / phone location not shared / no pump GPS / pump GPS older than 30 min | Each `pending` with its own `location_issue` and a hold message naming it; the shift still starts (open) | 1 | P0 | Covered |
+| LOC-04 | Plant manager approves | Day missing from the report while pending, present after approval; second decision 409 | 1 | P0 | Covered |
+| LOC-05 | Plant manager rejects | Note required (400 without); the day stays out of the report | 1 | P0 | Covered |
+| LOC-06 | Another plant's manager, anonymous email link | 404 for the other manager (page and action); anonymous gets 302 to login with `next=` | 1 | P0 | Covered |
+| LOC-07 | Approval email for a held shift (`MAIL_LOG_ONLY`, nothing sent) | Logged to the plant's manager with the pump code and an absolute link `<origin>/plant-manager/approvals/<id>` (bug: was `<origin>../../plant-manager/...`) | 2 | P1 | Covered (added 2026-10-20) |
+| LOC-08 | Worker copies pump GPS from the optimizer feed (`dump.pump_events`, stand-in table in the test DB) | Matched by pump code (any case) or `gps_device_id`; blank coordinates and rows older than 2 h skipped; unknown ids logged; the copied reading lets a nearby shift start `ok` | 2 | P1 | Covered (added 2026-10-20) |
 
 ### PATH: sub-path hosting (BASE_PATH)
 

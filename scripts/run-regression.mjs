@@ -5,6 +5,7 @@
 //   2. throwaway Postgres (tests/regression/docker-compose.yml, tmpfs) + init.sql
 //   3. migrations
 //   4. production build (root base path)
+//      + a stand-in dump.pump_events table for the pump GPS feed
 //   5. stub AI service + app + two workers (so jobs race across workers), wait for /api/health
 //   6. Playwright API scenarios in tests/regression (IDs from plans/RegressionTestPlan.md)
 // Everything is torn down at the end, pass or fail. Logs and the HTML report go to
@@ -13,6 +14,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import pg from 'pg';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
@@ -150,6 +152,15 @@ const serviceEnv = {
 	PHOTO_SPOOF_CHECK_ENABLED: 'false',
 	GEMINI_API_KEY: '',
 	SMTP_HOST: '',
+	// Approval emails are logged, never sent; LOC-07 reads the log line (link and recipients).
+	MAIL_LOG_ONLY: 'true',
+	// The pump GPS feed reads a stand-in dump.pump_events in the test database (LOC-08).
+	PUMP_GPS_DB_HOST: '127.0.0.1',
+	PUMP_GPS_DB_PORT: DB_PORT,
+	PUMP_GPS_DB_USER: 'attendance',
+	PUMP_GPS_DB_PASSWORD: 'regression',
+	PUMP_GPS_DB_NAME: 'attendance',
+	PUMP_GPS_POLL_MINUTES: '0.05',
 	WORKER_HEARTBEAT_INTERVAL_MS: '1000',
 	// Short enough that the timeout and retry scenarios (WRK-10, WRK-11) finish in seconds.
 	AI_REQUEST_TIMEOUT_MS: '3000',
@@ -168,6 +179,29 @@ const steps = [
 		}
 	],
 	['Apply migrations', () => run('npx', ['tsx', 'scripts/migrate.ts'], { DATABASE_URL })],
+	[
+		// Same columns as the optimizer database's table that worker/gpsFeed.js reads.
+		'Create stand-in pump GPS feed table',
+		async () => {
+			const client = new pg.Client({ connectionString: DATABASE_URL });
+			try {
+				await client.connect();
+				await client.query(`CREATE SCHEMA IF NOT EXISTS dump;
+					CREATE TABLE IF NOT EXISTS dump.pump_events (
+						id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+						pump_id VARCHAR(50) NOT NULL,
+						event_timestamp TIMESTAMPTZ NOT NULL,
+						latitude VARCHAR(30),
+						longitude VARCHAR(30),
+						raw_payload JSONB)`);
+				return { code: 0, tail: '' };
+			} catch (error) {
+				return { code: 1, tail: String(error) };
+			} finally {
+				await client.end().catch(() => {});
+			}
+		}
+	],
 	['Build app', () => run('npm', ['run', 'build'], { BASE_PATH: '' })],
 	[
 		'Start stub AI, app and worker',

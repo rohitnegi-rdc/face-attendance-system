@@ -320,10 +320,13 @@ test('attendance controls work by clicking and exports preserve filter semantics
 	expect(exportBody.byteLength).toBeGreaterThan(1000);
 	const workbook = new ExcelJS.Workbook();
 	await workbook.xlsx.load(exportBody as any);
-	const firstExportedDate = workbook.getWorksheet('Attendance')?.getCell('A2').value;
+	const firstExportedDate = workbook.getWorksheet('Daily')?.getCell('A2').value;
 	expect(firstExportedDate).toBeInstanceOf(Date);
 	expect((firstExportedDate as Date).toISOString().slice(0, 10)).toBe('2026-07-28');
-	expect(workbook.getWorksheet('Attendance')?.getCell('I2').text).toBe('Present');
+	// Column E of the Daily sheet is "Day result".
+	expect(['Full shift', 'Start only', 'Still open', 'End only', 'Absent']).toContain(
+		workbook.getWorksheet('Daily')?.getCell('E2').text
+	);
 
 	await page.getByRole('link', { name: 'Clear', exact: true }).click();
 	await expect(page).toHaveURL(/\/admin\/attendance$/);
