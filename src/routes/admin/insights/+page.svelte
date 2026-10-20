@@ -71,7 +71,7 @@
 			<StatusBadge tone="attention" label={`${data.pumpsNeedingAttention.length} flagged`} />
 		</div>
 		{#if data.pumpsNeedingAttention.length}
-			<div class="attention-list">
+			<div class="attention-list scroll-box">
 				{#each data.pumpsNeedingAttention as pump, index}
 					<a href={resolve(`/admin/pumps/${pump.id}`)}>
 						<span class="rank">{index + 1}</span>
@@ -143,7 +143,8 @@
 				>
 				<tbody
 					>{#each data.areaRollup as area}{@const DeltaIcon = deltaIcon(area.delta)}<tr
-							><td><a href={resolve(`/admin/areas/${area.id}`)}>{area.name}</a></td><td>{area.pumpCount}</td
+							><td><a href={resolve(`/admin/areas/${area.id}`)}>{area.name}</a></td><td
+								>{area.pumpCount}</td
 							><td>{area.distinctPersons}</td><td>{area.todayPct}%</td><td>{area.baselinePct}%</td
 							><td><span class="delta"><DeltaIcon size={14} /> {fmtDelta(area.delta)}pp</span></td
 							><td

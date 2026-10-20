@@ -15,11 +15,14 @@ export function isDateKey(value: string): boolean {
 	return parsed.isValid() && parsed.format('YYYY-MM-DD') === value;
 }
 
+// Non-breaking spaces keep a date on one line in narrow table cells; a wrapped date is hard to
+// scan. Text matchers that normalise whitespace still see "Thu, 15 Oct 2026".
+const NBSP = '\u00a0';
+
 export function formatDate(value: string | Date): string {
-	if (typeof value === 'string' && isDateKey(value)) {
-		return dayjs.tz(value, IST).format('ddd, DD MMM YYYY');
-	}
-	return dayjs(value).tz(IST).format('ddd, DD MMM YYYY');
+	const day =
+		typeof value === 'string' && isDateKey(value) ? dayjs.tz(value, IST) : dayjs(value).tz(IST);
+	return day.format('ddd, DD MMM YYYY').replaceAll(' ', NBSP);
 }
 
 export function dateKey(value: string | Date): string {
@@ -44,6 +47,14 @@ export function startOfMonthStr(dateStr: string): string {
 export function formatDayLabel(value: string): { weekday: string; date: string } {
 	const d = dayjs.tz(value, IST);
 	return { weekday: d.format('ddd'), date: d.format('D MMM') };
+}
+
+// Every day of a calendar grid: the whole range, and never less than the week ending on `to`,
+// so a grid always opens on at least seven days. Days with no attendance stay as empty columns
+// instead of disappearing, so the dates read continuously.
+export function calendarDays(from: string, to: string, minDays = 7): string[] {
+	const weekStart = addDaysStr(to, 1 - minDays);
+	return daysBetween(from < weekStart ? from : weekStart, to);
 }
 
 export function daysBetween(from: string, to: string): string[] {

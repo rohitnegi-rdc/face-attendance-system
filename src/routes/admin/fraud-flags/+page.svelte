@@ -9,6 +9,10 @@
 	import { personDisplayLabel } from '$lib/personLabel';
 
 	let { data, form } = $props();
+
+	// Review queues open on the first few cards; the rest are one tap away.
+	const PAGE = 6;
+	let shown = $state(PAGE);
 </script>
 
 <svelte:head><title>Fraud review | Face Attendance</title></svelte:head>
@@ -31,7 +35,7 @@
 
 	{#if data.flags.length}
 		<div class="review-list" data-testid="fraud-flags-table">
-			{#each data.flags as flag}
+			{#each data.flags.slice(0, shown) as flag (flag.id)}
 				<article class="review-item">
 					<div class="review-item__header">
 						<div>
@@ -160,6 +164,15 @@
 				</article>
 			{/each}
 		</div>
+		{#if data.flags.length > shown}
+			<button
+				type="button"
+				class="button button--secondary show-more"
+				onclick={() => (shown += PAGE)}
+			>
+				Show {Math.min(PAGE, data.flags.length - shown)} more ({data.flags.length - shown} flags left)
+			</button>
+		{/if}
 	{:else}
 		<EmptyState
 			title="No fraud flags"

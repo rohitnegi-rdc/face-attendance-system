@@ -31,11 +31,19 @@
 	};
 
 	// collapsePeople folds long worker lists behind a disclosure so table rows stay short.
+	// allowFlag shows the "Flag error" form, which posts to the page's ?/flagEvidence action;
+	// turn it off on pages without that action (view-only roles).
 	let {
 		session,
 		showUnavailable = true,
-		collapsePeople = false
-	}: { session: SessionEvidence; showUnavailable?: boolean; collapsePeople?: boolean } = $props();
+		collapsePeople = false,
+		allowFlag = true
+	}: {
+		session: SessionEvidence;
+		showUnavailable?: boolean;
+		collapsePeople?: boolean;
+		allowFlag?: boolean;
+	} = $props();
 
 	const folded = $derived(collapsePeople && session.people.length > 3);
 
@@ -137,7 +145,7 @@
 
 		{#if selected.flagged}
 			<StatusBadge tone="attention" label="Error flagged for admin review" />
-		{:else}
+		{:else if allowFlag}
 			<form class="flag-form" method="POST" action="?/flagEvidence">
 				<input type="hidden" name="session_id" value={selected.sessionId} />
 				<input type="hidden" name="person_id" value={selected.personId || ''} />

@@ -484,12 +484,28 @@ textarea::placeholder {
 	border-color: var(--ink-strong);
 }
 
+/* Long tables scroll inside a fixed-height box with the header pinned, instead of making the
+   whole page endless. A short table is unaffected. */
 .table-wrap {
 	position: relative;
 	isolation: isolate;
 	width: 100%;
-	overflow-x: auto;
-	background: var(--surface-raised);
+	max-height: min(36rem, 70vh);
+	overflow: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--brand-mist) var(--surface-muted);
+	/* Edge shadows appear only on a side that has more columns to scroll to: the "local" covers
+	   move with the content and hide the fixed shadows once that edge is reached. */
+	background:
+		linear-gradient(to right, var(--surface-raised) 40%, transparent) left / 2.5rem 100% no-repeat
+			local,
+		linear-gradient(to left, var(--surface-raised) 40%, transparent) right / 2.5rem 100% no-repeat
+			local,
+		radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 0.16), transparent) left / 0.9rem 100%
+			no-repeat scroll,
+		radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 0.16), transparent) right / 0.9rem 100%
+			no-repeat scroll,
+		var(--surface-raised);
 	border: 1px solid var(--brand-mist);
 	border-radius: var(--radius-lg);
 }
@@ -510,10 +526,21 @@ textarea::placeholder {
 	border-bottom: 1px solid var(--brand-mist);
 }
 
-.data-table th {
+.data-table thead th {
 	position: sticky;
 	top: 0;
 	z-index: 2;
+}
+
+.data-table tfoot th,
+.data-table tfoot td {
+	position: sticky;
+	bottom: 0;
+	z-index: 2;
+	background: var(--surface-muted);
+}
+
+.data-table th {
 	color: var(--ink-muted);
 	background: var(--surface-muted);
 	background-clip: padding-box;
@@ -559,6 +586,20 @@ textarea::placeholder {
 .review-list {
 	display: grid;
 	gap: var(--space-4);
+}
+
+/* A long list of short rows scrolls inside its own box, like .table-wrap. */
+.scroll-box {
+	max-height: min(36rem, 70vh);
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--brand-mist) var(--surface-muted);
+}
+
+/* "Show more" under a queue of large cards that opens on the first few. */
+.show-more {
+	justify-self: center;
+	margin-top: var(--space-3);
 }
 
 .review-item {
@@ -692,6 +733,9 @@ textarea::placeholder {
 	.mobile-records {
 		display: grid;
 		gap: var(--space-3);
+		max-height: 70vh;
+		overflow-y: auto;
+		padding-right: var(--space-1);
 	}
 }
 
@@ -704,4 +748,12 @@ textarea::placeholder {
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
 	}
+}
+
+/* Month picker + download button for the pump headcount report. */
+.headcount-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: var(--space-2);
 }

@@ -7,6 +7,10 @@
 	import { personDisplayLabel } from '$lib/personLabel';
 
 	let { data, form } = $props();
+
+	// Review queues open on the first few cards; the rest are one tap away.
+	const PAGE = 6;
+	let shown = $state(PAGE);
 </script>
 
 <svelte:head><title>Merge review | Face Attendance</title></svelte:head>
@@ -27,7 +31,7 @@
 
 	{#if data.candidates.length}
 		<div class="review-list" data-testid="merge-candidates-list">
-			{#each data.candidates as candidate}
+			{#each data.candidates.slice(0, shown) as candidate (`${candidate.person_a}:${candidate.person_b}`)}
 				<article class="review-item">
 					<div class="merge-heading">
 						<div>
@@ -86,6 +90,16 @@
 				</article>
 			{/each}
 		</div>
+		{#if data.candidates.length > shown}
+			<button
+				type="button"
+				class="button button--secondary show-more"
+				onclick={() => (shown += PAGE)}
+			>
+				Show {Math.min(PAGE, data.candidates.length - shown)} more ({data.candidates.length - shown} suggestions
+				left)
+			</button>
+		{/if}
 	{:else}
 		<EmptyState
 			title="No merge suggestions"

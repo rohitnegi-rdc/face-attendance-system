@@ -78,8 +78,20 @@
 <div class="calendar-toolbar" aria-label="Date navigation">
 	<span>Newest dates first</span>
 	<div>
-		<button class="icon-button" type="button" aria-label="Show newer dates" title="Newer dates" onclick={() => scrollDates(-1)}><ChevronLeft size={18} /></button>
-		<button class="icon-button" type="button" aria-label="Show older dates" title="Older dates" onclick={() => scrollDates(1)}><ChevronRight size={18} /></button>
+		<button
+			class="icon-button"
+			type="button"
+			aria-label="Show newer dates"
+			title="Newer dates"
+			onclick={() => scrollDates(-1)}><ChevronLeft size={18} /></button
+		>
+		<button
+			class="icon-button"
+			type="button"
+			aria-label="Show older dates"
+			title="Older dates"
+			onclick={() => scrollDates(1)}><ChevronRight size={18} /></button
+		>
 	</div>
 </div>
 <div class="grid-wrap" bind:this={scroller} role="region" aria-label="Scrollable attendance dates">
@@ -136,7 +148,10 @@
 		color: var(--ink-muted);
 		font-size: var(--text-xs);
 	}
-	.calendar-toolbar > div { display: flex; gap: var(--space-1); }
+	.calendar-toolbar > div {
+		display: flex;
+		gap: var(--space-1);
+	}
 	.calendar-toolbar .icon-button {
 		width: 2.25rem;
 		height: 2.25rem;
@@ -146,9 +161,11 @@
 	.grid-wrap {
 		position: relative;
 		isolation: isolate;
-		overflow-x: auto;
-		overflow-y: visible;
+		overflow: auto;
 		max-width: 100%;
+		max-height: min(36rem, 70vh);
+		/* Lets the day columns size themselves to a week of the visible width (see .day-head). */
+		container-type: inline-size;
 		background: var(--brand-white);
 		border: 1px solid var(--brand-mist);
 		border-radius: var(--radius-lg);
@@ -191,12 +208,15 @@
 		border-bottom: 1px solid var(--brand-mist);
 	}
 
-	.day-head {
-		min-width: 4.5rem;
-		scroll-snap-align: start;
-	}
+	/* Seven day columns fill the visible width next to the name column; older days scroll in from
+	   the right. On a narrow screen a column never shrinks below 4.5rem, so fewer days show. */
+	.day-head,
 	.calendar-grid td {
-		min-width: 4.5rem;
+		width: max(4.5rem, calc((100cqi - clamp(10rem, 22vw, 15rem)) / 7));
+		min-width: max(4.5rem, calc((100cqi - clamp(10rem, 22vw, 15rem)) / 7));
+	}
+	.day-head {
+		scroll-snap-align: start;
 	}
 
 	.day-head__weekday {
@@ -301,7 +321,14 @@
 		border-radius: var(--radius-sm);
 	}
 	@media (max-width: 47.99rem) {
-		.entity-col { width: 9rem; min-width: 9rem; max-width: 9rem; }
-		.day-head, .calendar-grid td { min-width: 4.25rem; }
+		.entity-col {
+			width: 9rem;
+			min-width: 9rem;
+			max-width: 9rem;
+		}
+		.day-head,
+		.calendar-grid td {
+			min-width: 4.25rem;
+		}
 	}
 </style>
