@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { sendFraudAlertEmail } from './mailer.js';
 import { checkRecapture } from './recaptureCheck.js';
+import { pollPumpGps } from './gpsFeed.js';
 
 const { Pool } = pg;
 const WORKER_ID = process.env.HOSTNAME || `worker-${process.pid}`;
@@ -673,6 +674,15 @@ async function loop() {
 		},
 		60 * 60 * 1000
 	);
+
+	// Pump GPS positions for the shift start location check (worker/gpsFeed.js).
+	const pollGps = () =>
+		pollPumpGps(pool, log).catch((err) =>
+			log('error', { error: String(err?.message || err) }, 'pump GPS poll failed')
+		);
+	// Not awaited: an unreachable GPS database must not delay attendance jobs.
+	pollGps();
+	setInterval(pollGps, Number(process.env.PUMP_GPS_POLL_MINUTES || 5) * 60 * 1000).unref();
 
 	while (true) {
 		try {

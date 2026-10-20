@@ -83,6 +83,14 @@ services:
       PORT: '3000'
       BODY_SIZE_LIMIT: '20000000'
       PROTOCOL_HEADER: x-forwarded-proto
+      # Location approval emails to plant managers (src/lib/server/locationCheck.ts).
+      SMTP_HOST: '${SMTP_HOST:-}'
+      SMTP_PORT: '${SMTP_PORT:-587}'
+      SMTP_SECURE: '${SMTP_SECURE:-false}'
+      SMTP_USER: '${SMTP_USER:-}'
+      SMTP_PASS: '${SMTP_PASS:-}'
+      SMTP_FROM: '${SMTP_FROM:-}'
+      FRAUD_ALERT_CC_EMAIL: '${FRAUD_ALERT_CC_EMAIL:-}'
       # Unset in production: nginx sends x-forwarded-proto. Set it in .env (e.g.
       # http://localhost:6100) only for plain-http access without a proxy; otherwise every photo
       # upload fails the CSRF origin check. Passed through only when set, since an empty ORIGIN
@@ -142,6 +150,17 @@ services:
       SMTP_PASS: '${SMTP_PASS:-}'
       SMTP_FROM: '${SMTP_FROM:-}'
       FRAUD_ALERT_CC_EMAIL: '${FRAUD_ALERT_CC_EMAIL:-}'
+      # Pump GPS for the shift start location check (worker/gpsFeed.js), read only from the
+      # optimizer database (dump.pump_events) through its published host port. Off when the
+      # *_PUMPDB credentials are not in .env.
+      PUMP_GPS_DB_HOST: '${PUMP_GPS_DB_HOST:-host.docker.internal}'
+      PUMP_GPS_DB_PORT: '${PUMP_GPS_DB_PORT:-7432}'
+      PUMP_GPS_DB_USER: '${POSTGRES_USER_PUMPDB:-}'
+      PUMP_GPS_DB_PASSWORD: '${POSTGRES_PASSWORD_PUMPDB:-}'
+      PUMP_GPS_DB_NAME: '${POSTGRES_DB_PUMPDB:-}'
+      PUMP_GPS_POLL_MINUTES: '${PUMP_GPS_POLL_MINUTES:-5}'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     depends_on:
       postgres:
         condition: service_healthy
