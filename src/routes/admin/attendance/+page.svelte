@@ -5,7 +5,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { dateKey, formatDate } from '$lib/date';
+	import { dateKey, formatDate, todayStr } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
 	let { data } = $props();
@@ -84,9 +84,36 @@
 			<h1>Attendance records</h1>
 			<p>Filter daily outcomes, inspect grouped attendance, and export the same result set.</p>
 		</div>
-		<a class="button button--secondary" href={resolve(`/api/admin/attendance/export?${exportQuery}`)}>
+		<a
+			class="button button--secondary"
+			href={resolve(`/api/admin/attendance/export?${exportQuery}`)}
+		>
 			<Download size={17} /> Export XLSX
 		</a>
+		<form
+			class="headcount-form"
+			method="GET"
+			action={resolve('/api/admin/attendance/export')}
+			data-sveltekit-reload
+		>
+			<input type="hidden" name="report" value="headcount" />
+			{#each ['area', 'vendor', 'plant', 'pump'] as key (key)}{#if baseParams()[key]}<input
+						type="hidden"
+						name={key}
+						value={baseParams()[key]}
+					/>{/if}{/each}
+			<label class="field"
+				><span>Headcount month</span><input
+					type="month"
+					name="month"
+					value={todayStr().slice(0, 7)}
+					max={todayStr().slice(0, 7)}
+				/></label
+			>
+			<button class="button button--secondary" type="submit"
+				><Download size={17} /> Headcount report</button
+			>
+		</form>
 	</header>
 
 	<form class="filter-bar" method="GET">
@@ -206,7 +233,7 @@
 										><tr
 											><th><span class="sr-only">Expand</span></th><th>Pump</th><th>Present</th><th
 												>Absent</th
-							><th>Total</th><th>Action</th></tr
+											><th>Total</th><th>Action</th></tr
 										></thead
 									>
 									<tbody>
@@ -222,13 +249,23 @@
 														><ChevronDown size={18} /></button
 													></td
 												>
-												<td><a href={resolve(`/admin/pumps/${pump.pump_id}`)}>{pump.pump_code}</a></td>
-								<td>{pump.present}</td><td>{pump.absent}</td><td>{pump.total}</td>
-								<td><a class="button button--secondary correction-link" href={resolve(`/admin/attendance/correct?pump=${pump.pump_id}&day=${data.filters.day}`)}>Correct attendance</a></td>
+												<td
+													><a href={resolve(`/admin/pumps/${pump.pump_id}`)}>{pump.pump_code}</a
+													></td
+												>
+												<td>{pump.present}</td><td>{pump.absent}</td><td>{pump.total}</td>
+												<td
+													><a
+														class="button button--secondary correction-link"
+														href={resolve(
+															`/admin/attendance/correct?pump=${pump.pump_id}&day=${data.filters.day}`
+														)}>Correct attendance</a
+													></td
+												>
 											</tr>
 											{#if expandedPumps.has(pump.pump_id)}
 												<tr class="detail-row"
-									><td colspan="6"
+													><td colspan="6"
 														><div class="person-records">
 															{#each pumpRows(pump.pump_id) as row}<a
 																	href={resolve(`/admin/persons/${row.person_id}`)}
@@ -283,8 +320,15 @@
 								><td
 									><StatusBadge
 										tone={isPresent(row) ? 'success' : 'neutral'}
-									label={isPresent(row) ? 'Present' : 'Absent'}
-								/></td><td><a class="button button--secondary correction-link" href={resolve(`/admin/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`)}>Correct attendance</a></td
+										label={isPresent(row) ? 'Present' : 'Absent'}
+									/></td
+								><td
+									><a
+										class="button button--secondary correction-link"
+										href={resolve(
+											`/admin/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`
+										)}>Correct attendance</a
+									></td
 								></tr
 							>{/each}</tbody
 					>
@@ -319,7 +363,12 @@
 								<dd>{row.plant_name}, {row.area_name}</dd>
 							</div>
 						</dl>
-						<a class="button button--secondary correction-link" href={resolve(`/admin/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`)}>Correct attendance</a>
+						<a
+							class="button button--secondary correction-link"
+							href={resolve(
+								`/admin/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`
+							)}>Correct attendance</a
+						>
 					</article>
 				{/each}
 			</div>

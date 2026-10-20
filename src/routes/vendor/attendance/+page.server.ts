@@ -6,7 +6,7 @@ import { isDateKey } from '$lib/date';
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const vendorId = locals.user!.id;
 	const fallbackTo = nowIST().format('YYYY-MM-DD');
-	const fallbackFrom = nowIST().subtract(13, 'day').format('YYYY-MM-DD');
+	const fallbackFrom = nowIST().subtract(29, 'day').format('YYYY-MM-DD');
 	const requestedFrom = url.searchParams.get('from') || '';
 	const requestedTo = url.searchParams.get('to') || '';
 	const from = isDateKey(requestedFrom) ? requestedFrom : fallbackFrom;

@@ -3,13 +3,11 @@
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { dateKey, formatDate } from '$lib/date';
+	import { calendarDays, dateKey, formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
 	let { data } = $props();
-	const days = $derived(
-		[...new Set(data.daily.map((row: any) => dateKey(row.session_date)))].sort()
-	);
+	const days = $derived(calendarDays(data.filters.from, data.filters.to));
 	const entities = $derived(
 		data.pumps
 			.filter((pump: any) => !data.filters.pump || pump.id === data.filters.pump)
@@ -79,7 +77,7 @@
 				<p class="supporting-text">Attendance percentage by assigned pump.</p>
 			</div>
 		</div>
-		{#if days.length}
+		{#if data.daily.length}
 			<AttendanceCalendarGrid
 				{days}
 				{entities}
@@ -104,9 +102,7 @@
 		<div class="table-wrap">
 			<table class="data-table">
 				<thead
-					><tr
-						><th>Date</th><th>Person</th><th>Pump</th><th>Plant</th><th>Start</th><th>End</th
-						></tr
+					><tr><th>Date</th><th>Person</th><th>Pump</th><th>Plant</th><th>Start</th><th>End</th></tr
 					></thead
 				>
 				<tbody
