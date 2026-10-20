@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { resolve } from '$app/paths';
+	import { base, resolve } from '$app/paths';
 	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
@@ -35,7 +35,20 @@
 				error = data.error || 'We could not sign you in. Check your details and try again.';
 				return;
 			}
-			window.location.href = resolve(data.mustChangePassword ? '/change-password' : `/${data.role as 'admin' | 'vendor' | 'plant-manager' | 'pump'}`);
+			// Back to the page that sent them here (e.g. an approval email link), when it belongs
+			// to this role; anything else (other origins, other roles) goes to the role home.
+			const next = new URL(window.location.href).searchParams.get('next') ?? '';
+			const safeNext =
+				!data.mustChangePassword && next.startsWith(`/${data.role}/`) && !next.startsWith('//')
+					? next
+					: '';
+			window.location.href = safeNext
+				? `${base}${safeNext}`
+				: resolve(
+						data.mustChangePassword
+							? '/change-password'
+							: `/${data.role as 'admin' | 'vendor' | 'plant-manager' | 'pump'}`
+					);
 		} catch {
 			toastConnectionLost();
 			error = 'The service is not reachable right now. Please try again.';

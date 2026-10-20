@@ -14,6 +14,7 @@ import {
 } from '$lib/server/sessionCleanup';
 import { getAttendanceSettings } from '$lib/server/settings';
 import { todayIST } from '$lib/server/time';
+import { validCoordinate } from '$lib/server/locationCheck';
 import {
 	ShiftError,
 	adminEndShift,
@@ -34,7 +35,12 @@ function readPaging(url: URL, pagePrefix: string) {
 
 export const load: PageServerLoad = async ({ params, url }) => {
 	const pump = await queryOne<any>(
-		`SELECT pu.id, pu.pump_code, pu.status, pu.disabled_at, pu.disabled_reason,
+		`SELECT pu.id, pu.pump_code, pu.status, pu.disabled_at, pu.disabled_reason, pu.gps_device_id,
+		        a.location_check_enabled,
+		        (SELECT json_build_object('lat', l.lat, 'lng', l.lng, 'source', l.source,
+		                'at', to_char(l.recorded_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI am'))
+		           FROM pump_locations l WHERE l.pump_id = pu.id
+		           ORDER BY l.recorded_at DESC LIMIT 1) AS latest_gps,
 		        pl.name AS plant_name, a.name AS area_name, v.name AS vendor_name, v.id AS vendor_id, a.id AS area_id
 		 FROM pumps pu
 		 JOIN plants pl ON pl.id = pu.plant_id
@@ -107,7 +113,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const sessionLog = await query<any>(
 		`SELECT id, session_date, session_type, status, pairing_status, paired_session_id,
 		        closed_by, submitted_at, processed_at, error_reason, photo_url,
-		        fraud_resolution, fraud_resolved_at,
+		        fraud_resolution, fraud_resolved_at, location_status,
 		        EXISTS (
 		          SELECT 1 FROM attendance_review_flags arf
 		          WHERE arf.session_id = attendance_sessions.id
@@ -242,6 +248,46 @@ export const load: PageServerLoad = async ({ params, url }) => {
 };
 
 export const actions: Actions = {
+	// Pump GPS by hand (testing, or a pump whose tracker is down). Accepts "lat, lng" as copied
+	// from Google Maps. Stored like a feed reading, so the location check uses it for 30 minutes.
+	setPumpGps: async ({ params, request, locals }) => {
+		const form = await request.formData();
+		const [lat, lng] = String(form.get('coords') ?? '')
+			.split(',')
+			.map((part) => Number(part.trim()));
+		if (!validCoordinate(lat, lng)) {
+			return fail(400, {
+				success: false,
+				message: 'Enter the position as "lat, lng", e.g. 19.0596, 72.9165.'
+			});
+		}
+		await queryOne(
+			`INSERT INTO pump_locations (pump_id, lat, lng, recorded_at, source)
+			 VALUES ($1, $2, $3, now(), 'admin')`,
+			[params.id, lat, lng]
+		);
+		logger.info({ pumpId: params.id, adminId: locals.user!.id, lat, lng }, 'pump GPS set by admin');
+		return { success: true, message: `Pump GPS set to ${lat}, ${lng}. Valid for 30 minutes.` };
+	},
+	setGpsDeviceId: async ({ params, request }) => {
+		const form = await request.formData();
+		const deviceId = String(form.get('gps_device_id') ?? '').trim();
+		try {
+			await queryOne(`UPDATE pumps SET gps_device_id = NULLIF($2, '') WHERE id = $1`, [
+				params.id,
+				deviceId
+			]);
+		} catch (err: any) {
+			if (err?.code === '23505') {
+				return fail(409, { success: false, message: 'Another pump already uses that GPS id.' });
+			}
+			throw err;
+		}
+		return {
+			success: true,
+			message: deviceId ? `GPS id set to ${deviceId}.` : 'GPS id cleared; the pump code is used.'
+		};
+	},
 	reactivatePump: async ({ params }) => {
 		await queryOne(
 			`UPDATE pumps SET status = 'active', disabled_at = NULL, disabled_reason = NULL WHERE id = $1`,

@@ -4,6 +4,11 @@ services:
   postgres:
     ports: !reset []
 
+  # Local testing never sends real email: approval mails are written to the app log instead.
+  app:
+    environment:
+      MAIL_LOG_ONLY: 'true'
+
   lan-https:
     build: .
     command: ['node', 'scripts/lan-https-proxy.mjs']

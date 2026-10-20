@@ -62,7 +62,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (guardedPrefix) {
 		const requiredRole = guardedPrefix.slice(1) as 'admin' | 'vendor' | 'plant-manager' | 'pump';
 		if (!auth) {
-			return new Response(null, { status: 302, headers: { location: resolvePath('/login') } });
+			// Remember the page (e.g. an approval link from an email) to return to after login.
+			const next =
+				event.request.method === 'GET'
+					? `?next=${encodeURIComponent(path + event.url.search)}`
+					: '';
+			return new Response(null, {
+				status: 302,
+				headers: { location: resolvePath('/login') + next }
+			});
 		}
 		if (auth.role !== requiredRole) {
 			return new Response('Forbidden', { status: 403 });

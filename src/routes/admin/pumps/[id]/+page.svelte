@@ -6,7 +6,8 @@
 	import AttendanceEvidenceButtons from '$lib/components/AttendanceEvidenceButtons.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { formatDate } from '$lib/date';
+	import LocationBadge from '$lib/components/LocationBadge.svelte';
+	import { formatDate, formatDayLabel } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 	import { shiftOutcomeLabel, shiftTypeLabel } from '$lib/shiftLabels';
 
@@ -32,6 +33,12 @@
 			}),
 			{ present: 0, morningOnly: 0, eveningOnly: 0 }
 		)
+	);
+	let showEmptyDays = $state(false);
+	const hasAttendance = (d: any) => d.present + d.morningOnly + d.eveningOnly > 0;
+	const emptyDayCount = $derived(data.dailyBreakdown.filter((d: any) => !hasAttendance(d)).length);
+	const summaryDays = $derived(
+		[...data.dailyBreakdown].reverse().filter((d: any) => showEmptyDays || hasAttendance(d))
 	);
 	const rangeLabel = $derived(`${formatDate(data.range.from)} – ${formatDate(data.range.to)}`);
 	const trendData = $derived(data.dailyBreakdown.slice(-5));
@@ -100,45 +107,57 @@
 			<div class="section-header">
 				<div>
 					<h2>Daily attendance summary</h2>
-					<p class="supporting-text">Totals for {rangeLabel}.</p>
+					<p class="supporting-text">People counted per day, {rangeLabel}.</p>
 				</div>
 			</div>
-			<div class="table-wrap daily-summary-frame">
-				<table class="data-table daily-summary-table">
-					<thead>
-						<tr>
-							<th>Day</th>
-							<th>Full shift</th>
-							<th>Start only</th>
-							<th>End only</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each [...data.dailyBreakdown].reverse() as d}
+			{#if summaryDays.length === 0}
+				<p class="supporting-text">No attendance in this range.</p>
+			{:else}
+				<div class="table-wrap daily-summary-frame">
+					<table class="data-table daily-summary-table">
+						<thead>
 							<tr>
-								<td>{formatDate(d.day)}</td>
-								<td>{d.present}</td>
-								<td>{d.morningOnly}</td>
-								<td>{d.eveningOnly}</td>
+								<th>Day</th>
+								<th>Full</th>
+								<th>Start only</th>
+								<th>End only</th>
 							</tr>
-						{/each}
-					</tbody>
-					<tfoot>
-						<tr>
-							<th>Range total</th>
-							<th>{dailyBreakdownTotals.present}</th>
-							<th>{dailyBreakdownTotals.morningOnly}</th>
-							<th>{dailyBreakdownTotals.eveningOnly}</th>
-						</tr>
-					</tfoot>
-				</table>
-			</div>
-			<p class="footnote">
-				{data.rejectionCounts.morningOnly} start-only shift{data.rejectionCounts.morningOnly === 1
-					? ''
-					: 's'} this range &middot; {data.rejectionCounts.morningAwaiting} waiting for end &middot;
-				{data.rejectionCounts.morningExpired} closed without end
-			</p>
+						</thead>
+						<tbody>
+							{#each summaryDays as d (d.day)}
+								{@const label = formatDayLabel(d.day)}
+								<tr>
+									<td class="day-cell">{label.weekday} {label.date}</td>
+									<td class:zero={!d.present}>{d.present}</td>
+									<td class:zero={!d.morningOnly}>{d.morningOnly}</td>
+									<td class:zero={!d.eveningOnly}>{d.eveningOnly}</td>
+								</tr>
+							{/each}
+						</tbody>
+						<tfoot>
+							<tr>
+								<th>Total</th>
+								<th>{dailyBreakdownTotals.present}</th>
+								<th>{dailyBreakdownTotals.morningOnly}</th>
+								<th>{dailyBreakdownTotals.eveningOnly}</th>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			{/if}
+			{#if emptyDayCount > 0}
+				<button type="button" class="link-button" onclick={() => (showEmptyDays = !showEmptyDays)}>
+					{showEmptyDays
+						? 'Hide days with no attendance'
+						: `Show ${emptyDayCount} day${emptyDayCount === 1 ? '' : 's'} with no attendance`}
+				</button>
+			{/if}
+			{#if data.rejectionCounts.morningOnly > 0}
+				<p class="footnote">
+					Shifts with no end photo: {data.rejectionCounts.morningExpired} closed &middot;
+					{data.rejectionCounts.morningAwaiting} still open
+				</p>
+			{/if}
 		</section>
 	</div>
 
@@ -207,7 +226,7 @@
 											? 'critical'
 											: 'pending'}
 									label={session.status}
-								/></td
+								/><LocationBadge status={session.location_status} /></td
 							><td>{shiftOutcomeLabel(session)}</td><td
 								><AttendanceEvidenceButtons session={session.evidence} collapsePeople /></td
 							><td
@@ -363,6 +382,51 @@
 		<p class="footnote">Same page as the calendar above — use its pager to see more people.</p>
 	</section>
 
+	<section class="surface surface--padded section" aria-labelledby="gps-heading">
+		<h2 id="gps-heading">Pump GPS</h2>
+		<p class="supporting-text">
+			{#if data.pump.location_check_enabled}
+				Shift starts at {data.pump.area_name} are checked against this position (100 m).
+			{:else}
+				{data.pump.area_name} does not use the location check yet.
+			{/if}
+			Latest position:
+			{#if data.pump.latest_gps}
+				<a
+					href={`https://www.google.com/maps?q=${data.pump.latest_gps.lat},${data.pump.latest_gps.lng}`}
+					target="_blank"
+					rel="noopener">{data.pump.latest_gps.lat}, {data.pump.latest_gps.lng}</a
+				>
+				({data.pump.latest_gps.source === 'admin' ? 'entered by admin' : 'GPS feed'},
+				{data.pump.latest_gps.at}).
+			{:else}
+				none received yet.
+			{/if}
+		</p>
+		<div class="gps-forms">
+			<form method="POST" action="?/setPumpGps" class="gps-form">
+				<label class="field"
+					><span>Set position now (lat, lng)</span><input
+						name="coords"
+						placeholder="19.0596, 72.9165"
+						required
+					/></label
+				>
+				<button class="button button--secondary" type="submit">Save position</button>
+			</form>
+			<form method="POST" action="?/setGpsDeviceId" class="gps-form">
+				<label class="field"
+					><span>GPS provider id (if not the pump code)</span><input
+						name="gps_device_id"
+						value={data.pump.gps_device_id ?? ''}
+						placeholder={data.pump.pump_code}
+					/></label
+				>
+				<button class="button button--secondary" type="submit">Save id</button>
+			</form>
+		</div>
+	</section>
+
 	<section class="surface surface--padded section danger-zone" aria-labelledby="danger-heading">
 		<h2 id="danger-heading">Clear test records</h2>
 		<p class="supporting-text">
@@ -484,6 +548,23 @@
 	.daily-summary-table td:first-child {
 		text-align: left;
 	}
+	.daily-summary-table .day-cell {
+		white-space: nowrap;
+	}
+	.daily-summary-table td.zero {
+		color: var(--ink-muted);
+	}
+	.link-button {
+		margin-top: var(--space-2);
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--brand-teal);
+		font: inherit;
+		font-size: var(--text-sm);
+		text-decoration: underline;
+		cursor: pointer;
+	}
 	.daily-summary-frame {
 		max-height: 25rem;
 		overflow-x: hidden;
@@ -536,5 +617,17 @@
 		.pump-summary {
 			grid-template-columns: 1fr;
 		}
+	}
+	.gps-forms {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-4);
+		margin-top: var(--space-3);
+	}
+	.gps-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: var(--space-2);
 	}
 </style>

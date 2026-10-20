@@ -11,6 +11,7 @@
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import FileUp from '@lucide/svelte/icons/file-up';
 	import Fuel from '@lucide/svelte/icons/fuel';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import LogOut from '@lucide/svelte/icons/log-out';
@@ -65,11 +66,14 @@
 	const plantManagerItems = [
 		{ href: resolve('/plant-manager'), label: 'Overview', icon: LayoutDashboard, exact: true },
 		{ href: resolve('/plant-manager/attendance'), label: 'Attendance', icon: CalendarCheck },
+		{ href: resolve('/plant-manager/approvals'), label: 'Approvals', icon: MapPin },
 		{ href: resolve('/plant-manager/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/plant-manager/people'), label: 'People', icon: UsersRound }
 	];
 
-	let items = $derived(role === 'admin' ? adminItems : role === 'vendor' ? vendorItems : plantManagerItems);
+	let items = $derived(
+		role === 'admin' ? adminItems : role === 'vendor' ? vendorItems : plantManagerItems
+	);
 
 	function isActive(item: { href: string; exact?: boolean }) {
 		return item.exact ? page.url.pathname === item.href : page.url.pathname.startsWith(item.href);
@@ -135,7 +139,13 @@
 		</a>
 		<div class="account">
 			<div class="account__copy">
-				<strong>{role === 'admin' ? 'Administrator' : role === 'vendor' ? 'Vendor' : 'Plant Manager'}</strong>
+				<strong
+					>{role === 'admin'
+						? 'Administrator'
+						: role === 'vendor'
+							? 'Vendor'
+							: 'Plant Manager'}</strong
+				>
 				<span>{userEmail}</span>
 			</div>
 			<form onsubmit={signOut}>

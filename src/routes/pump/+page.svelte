@@ -5,6 +5,8 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Eye from '@lucide/svelte/icons/eye';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import Maximize from '@lucide/svelte/icons/maximize';
+	import Minimize from '@lucide/svelte/icons/minimize';
 	import MonitorUp from '@lucide/svelte/icons/monitor-up';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
@@ -45,6 +47,21 @@
 
 	let status = $state<FlowStatus>('idle');
 	let errorMsg = $state('');
+	// Set when the shift start is on hold for the plant manager (location not verified).
+	let locationHold = $state('');
+
+	// The phone's position for the shift start location check. Never blocks the photo: if the
+	// operator denies access or it times out, the server sends it for plant manager approval.
+	function currentPosition(): Promise<GeolocationPosition | null> {
+		if (!navigator.geolocation) return Promise.resolve(null);
+		return new Promise((done) =>
+			navigator.geolocation.getCurrentPosition(done, () => done(null), {
+				enableHighAccuracy: true,
+				timeout: 12000,
+				maximumAge: 60000
+			})
+		);
+	}
 	let selectedFile = $state<File | null>(null);
 	let previewUrl = $state('');
 	let result = $state<any>(null);
@@ -67,6 +84,28 @@
 	let cameraCaptureError = $state('');
 	let cameraFacingMode = $state<'environment' | 'user'>('environment');
 	let canSwitchCamera = $state(false);
+	let cameraPanel = $state<HTMLDivElement>();
+	let cameraFullscreen = $state(false);
+	const canFullscreen =
+		typeof document !== 'undefined' && Boolean(document.documentElement.requestFullscreen);
+
+	// Full screen for the camera panel; on phones also tries to turn the screen to landscape.
+	async function toggleCameraFullscreen() {
+		if (document.fullscreenElement) {
+			await document.exitFullscreen().catch(() => {});
+			return;
+		}
+		await cameraPanel?.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+		const orientation = screen.orientation as ScreenOrientation & {
+			lock?: (value: string) => Promise<void>;
+		};
+		await orientation.lock?.('landscape').catch(() => {});
+	}
+
+	function syncCameraFullscreen() {
+		cameraFullscreen = Boolean(document.fullscreenElement);
+		if (!cameraFullscreen) screen.orientation?.unlock?.();
+	}
 	let screenStream = $state<MediaStream | null>(null);
 	let screenPreview = $state<HTMLVideoElement>();
 	let screenCaptureActive = $state(false);
@@ -159,6 +198,9 @@
 	}
 
 	function stopCameraCapture() {
+		if (typeof document !== 'undefined' && document.fullscreenElement) {
+			document.exitFullscreen().catch(() => {});
+		}
 		if (cameraStream) {
 			for (const track of cameraStream.getTracks()) track.stop();
 		}
@@ -372,6 +414,13 @@
 
 		const form = new FormData();
 		form.append('photo', selectedFile);
+		locationHold = '';
+		const position = await currentPosition();
+		if (position) {
+			form.append('lat', String(position.coords.latitude));
+			form.append('lng', String(position.coords.longitude));
+			form.append('accuracy', String(Math.round(position.coords.accuracy)));
+		}
 
 		try {
 			const res = await fetch(resolve('/api/attendance/submit'), { method: 'POST', body: form });
@@ -383,6 +432,7 @@
 			const body = await res.json();
 
 			currentSessionId = body.session_id;
+			locationHold = body.location_hold ?? '';
 			status = 'processing';
 			processingStep = 0;
 			await poll(body.session_id);
@@ -598,6 +648,7 @@
 </svelte:head>
 
 <svelte:window onkeydown={handleWorkerPreviewKeydown} />
+<svelte:document onfullscreenchange={syncCameraFullscreen} />
 
 <div class="capture-page">
 	<header class="capture-heading">
@@ -651,7 +702,11 @@
 						<span>{selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB` : ''}</span>
 					</div>
 				{:else if cameraCaptureActive}
-					<div class="screen-capture-panel camera-capture-panel" aria-label="Camera capture">
+					<div
+						class="screen-capture-panel camera-capture-panel"
+						aria-label="Camera capture"
+						bind:this={cameraPanel}
+					>
 						<div class="screen-preview">
 							<video
 								bind:this={cameraPreview}
@@ -676,6 +731,17 @@
 							<button class="button button--secondary" type="button" onclick={stopCameraCapture}>
 								Stop camera
 							</button>
+							{#if canFullscreen}
+								<button
+									class="button button--secondary"
+									type="button"
+									onclick={toggleCameraFullscreen}
+								>
+									{#if cameraFullscreen}<Minimize size={18} /> Exit full screen{:else}<Maximize
+											size={18}
+										/> Full screen{/if}
+								</button>
+							{/if}
 							{#if canSwitchCamera}
 								<button
 									class="button button--secondary"
@@ -811,6 +877,15 @@
 							{/if}
 						</div>
 					</div>
+					{#if locationHold}
+						<div class="alert location-hold" data-testid="location-hold" role="status">
+							<ShieldAlert size={18} aria-hidden="true" />
+							<p>
+								<strong>Waiting for plant manager approval.</strong>
+								{locationHold} The shift has started; the plant manager has been emailed to verify it.
+							</p>
+						</div>
+					{/if}
 					{#if result.liveness_summary?.suspicious || result.liveness_summary?.unverified}
 						<div class="liveness-notice" data-testid="liveness-review-notice">
 							<ShieldAlert size={18} aria-hidden="true" />
@@ -978,10 +1053,10 @@
 										: today?.state === 'failed'
 											? 'Retry the photo that could not be processed'
 											: today?.state === 'evening' && today?.can_submit === false
-											? `Shift end opens ${formatIST(today?.next_allowed_at)}`
-											: today?.state === 'evening'
-												? 'Submit the group photo to end the shift'
-												: 'Submit the group photo to start the shift'}
+												? `Shift end opens ${formatIST(today?.next_allowed_at)}`
+												: today?.state === 'evening'
+													? 'Submit the group photo to end the shift'
+													: 'Submit the group photo to start the shift'}
 							</dd>
 						</div>
 					</dl>
@@ -1251,6 +1326,26 @@
 	}
 	.camera-capture-guidance {
 		display: none;
+	}
+	.location-hold {
+		margin-bottom: var(--space-3);
+		background: #fff6dd;
+		border-color: #f0d48a;
+	}
+	.location-hold p {
+		margin: 0;
+	}
+	.camera-capture-panel:where(:fullscreen) {
+		display: flex;
+		flex-direction: column;
+		padding: var(--space-3);
+		background: var(--ink-strong);
+	}
+	.camera-capture-panel:where(:fullscreen) .screen-preview {
+		flex: 1;
+		min-height: 0;
+		aspect-ratio: auto;
+		border: 0;
 	}
 	.capture-note,
 	.capture-error {
@@ -1643,6 +1738,21 @@
 		.capture-workspace {
 			padding: var(--space-4);
 		}
+		.capture-empty {
+			min-height: 21rem;
+			padding: var(--space-5);
+		}
+		.session-panel {
+			min-height: auto;
+			padding: var(--space-3);
+		}
+		.session-details dl {
+			margin-top: var(--space-4);
+		}
+	}
+
+	/* Full-screen camera on phones, portrait or landscape (a landscape phone is wider than 48rem). */
+	@media (max-width: 48rem), (pointer: coarse) and (max-height: 32rem) {
 		.camera-capture-panel {
 			position: fixed;
 			inset: 0;
@@ -1686,16 +1796,32 @@
 		.camera-capture-panel .capture-note {
 			display: none;
 		}
-		.capture-empty {
-			min-height: 21rem;
-			padding: var(--space-5);
+	}
+
+	/* Landscape phone: video fills the left, buttons stack on the right. */
+	@media (pointer: coarse) and (max-height: 32rem) and (orientation: landscape) {
+		.camera-capture-panel {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) 14rem;
+			grid-template-rows: minmax(0, 1fr) auto;
+			gap: var(--space-2) var(--space-3);
+			padding: var(--space-2) max(var(--space-3), env(safe-area-inset-right)) var(--space-2)
+				max(var(--space-3), env(safe-area-inset-left));
 		}
-		.session-panel {
-			min-height: auto;
-			padding: var(--space-3);
+		.camera-capture-panel .screen-preview {
+			grid-row: 1 / -1;
+			height: 100%;
 		}
-		.session-details dl {
-			margin-top: var(--space-4);
+		.camera-capture-panel .screen-actions {
+			grid-template-columns: 1fr;
+			align-content: center;
+		}
+		.camera-capture-panel .screen-actions .button {
+			min-height: 2.75rem;
+		}
+		.camera-capture-guidance {
+			grid-column: 2;
+			grid-row: 2;
 		}
 	}
 

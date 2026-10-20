@@ -8,6 +8,13 @@ import { todayIST } from '$lib/server/time';
 import { logger } from '$lib/server/log';
 import { getAttendanceSettings } from '$lib/server/settings';
 import { expireStaleStarts, shiftEndOpensMessage } from '$lib/server/shiftSessions';
+import {
+	checkShiftStartLocation,
+	locationIssueText,
+	sendLocationApprovalEmail,
+	type LocationCheck
+} from '$lib/server/locationCheck';
+import { resolve } from '$app/paths';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
 const MAX_UPLOAD_BYTES = 18 * 1024 * 1024;
@@ -21,7 +28,7 @@ class SubmissionError extends Error {
 	}
 }
 
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST: RequestHandler = async ({ request, locals, url }) => {
 	if (!locals.user || locals.user.role !== 'pump') {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
@@ -37,8 +44,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	const form = await request.formData();
 	const file = form.get('photo') as File | null;
-	const lat = form.get('lat') ? Number(form.get('lat')) : null;
-	const lng = form.get('lng') ? Number(form.get('lng')) : null;
+	const coordinate = (name: string) => {
+		const value = Number(form.get(name));
+		return form.get(name) && Number.isFinite(value) ? value : null;
+	};
+	const lat = coordinate('lat');
+	const lng = coordinate('lng');
 	if (!file) return json({ error: 'photo is required' }, { status: 400 });
 	if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
 		return json({ error: 'Photo must be smaller than 18 MB.' }, { status: 413 });
@@ -101,9 +112,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 			const elapsed = Number(openStart.elapsed_minutes);
 			if (elapsed < settings.evening_min_gap_minutes) {
-				throw new SubmissionError(
-					shiftEndOpensMessage(settings.evening_min_gap_minutes - elapsed)
-				);
+				throw new SubmissionError(shiftEndOpensMessage(settings.evening_min_gap_minutes - elapsed));
 			}
 			sessionType = 'evening';
 			sessionDate = openStart.session_date_text;
@@ -128,6 +137,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			sessionDate = today;
 		}
 
+		// Shift starts in areas with the location check: compare the phone with the pump's GPS.
+		const location: LocationCheck | null =
+			sessionType === 'morning' ? await checkShiftStartLocation(client, pumpId, lat, lng) : null;
+
 		await fs.mkdir(UPLOAD_DIR, { recursive: true });
 		photoPath = path.join(UPLOAD_DIR, `${randomUUID()}.jpg`);
 		await fs.writeFile(photoPath, buffer);
@@ -135,8 +148,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const sessionResult = await client.query(
 			`INSERT INTO attendance_sessions
 			   (pump_id, session_date, session_type, status, pairing_status,
-			    photo_url, photo_hash, gps_lat, gps_lng, paired_session_id)
-			 VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9)
+			    photo_url, photo_hash, gps_lat, gps_lng, paired_session_id,
+			    location_status, location_issue, location_distance_m,
+			    pump_gps_lat, pump_gps_lng, pump_gps_at)
+			 VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 			 RETURNING id`,
 			[
 				pumpId,
@@ -147,7 +162,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				photoHash,
 				lat,
 				lng,
-				pairedMorningId
+				pairedMorningId,
+				location?.status ?? null,
+				location?.issue ?? null,
+				location?.distanceM ?? null,
+				location?.pumpLat ?? null,
+				location?.pumpLng ?? null,
+				location?.pumpAt ?? null
 			]
 		);
 		const session = sessionResult.rows[0];
@@ -167,11 +188,33 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		await client.query('COMMIT');
 
 		logger.info(
-			{ pumpId, sessionId: session.id, sessionType, sessionDate, requestId },
+			{
+				pumpId,
+				sessionId: session.id,
+				sessionType,
+				sessionDate,
+				requestId,
+				location: location?.issue
+			},
 			'attendance session queued'
 		);
+		if (location?.status === 'pending') {
+			void sendLocationApprovalEmail(
+				session.id,
+				// resolve() is relative on the server ("../../plant-manager/..."); anchor it to this URL.
+				new URL(resolve('/plant-manager/approvals/[id]', { id: session.id }), url).href
+			);
+		}
 		return json(
-			{ session_id: session.id, status: 'pending', request_id: requestId },
+			{
+				session_id: session.id,
+				status: 'pending',
+				request_id: requestId,
+				location_hold:
+					location?.status === 'pending'
+						? locationIssueText(location.issue, location.distanceM, location.pumpAt)
+						: null
+			},
 			{ status: 202 }
 		);
 	} catch (error: any) {
