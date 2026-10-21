@@ -21,6 +21,6 @@ export default defineConfig({
 		['html', { outputFolder: path.join(outputDir, 'report'), open: 'never' }]
 	],
 	use: {
-		baseURL: process.env.REGRESSION_BASE_URL || 'http://127.0.0.1:53000'
+		baseURL: process.env.REGRESSION_BASE_URL || 'http://127.0.0.1:6105'
 	}
 });

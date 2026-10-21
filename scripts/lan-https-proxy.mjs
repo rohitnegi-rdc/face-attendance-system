@@ -2,7 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { readFileSync } from 'node:fs';
 
-const port = Number(process.env.LAN_HTTPS_PORT || 3443);
+const port = Number(process.env.LAN_HTTPS_PORT || 6103);
 const upstreamHost = process.env.UPSTREAM_HOST || 'app';
 const upstreamPort = Number(process.env.UPSTREAM_PORT || 3000);
 

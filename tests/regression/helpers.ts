@@ -6,12 +6,12 @@ import bcrypt from 'bcryptjs';
 import pg from 'pg';
 import { randomBytes, randomUUID } from 'node:crypto';
 
-export const BASE_URL = process.env.REGRESSION_BASE_URL ?? 'http://127.0.0.1:53000';
-const STUB_URL = process.env.REGRESSION_STUB_URL ?? 'http://127.0.0.1:58000';
+export const BASE_URL = process.env.REGRESSION_BASE_URL ?? 'http://127.0.0.1:6105';
+const STUB_URL = process.env.REGRESSION_STUB_URL ?? 'http://127.0.0.1:6106';
 export const db = new pg.Pool({
 	connectionString:
 		process.env.REGRESSION_DATABASE_URL ??
-		'postgres://attendance:regression@127.0.0.1:55432/attendance'
+		'postgres://attendance:regression@127.0.0.1:6104/attendance'
 });
 export const PASSWORD = 'Regression-Pass-123';
 let passwordHash: string | undefined;

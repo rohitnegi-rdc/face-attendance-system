@@ -24,9 +24,9 @@ const outDir = path.join(root, 'test-output', 'regression', stamp);
 fs.mkdirSync(outDir, { recursive: true });
 const runLog = fs.createWriteStream(path.join(outDir, 'run.log'));
 
-const DB_PORT = process.env.REGRESSION_DB_PORT ?? '55432';
-const APP_PORT = process.env.REGRESSION_APP_PORT ?? '53000';
-const STUB_PORT = process.env.REGRESSION_STUB_PORT ?? '58000';
+const DB_PORT = process.env.REGRESSION_DB_PORT ?? '6104';
+const APP_PORT = process.env.REGRESSION_APP_PORT ?? '6105';
+const STUB_PORT = process.env.REGRESSION_STUB_PORT ?? '6106';
 const DATABASE_URL = `postgres://attendance:regression@127.0.0.1:${DB_PORT}/attendance`;
 const BASE_URL = `http://127.0.0.1:${APP_PORT}`;
 const STUB_URL = `http://127.0.0.1:${STUB_PORT}`;

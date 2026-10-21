@@ -7,7 +7,7 @@ export default defineConfig({
 	timeout: 60_000,
 	expect: { timeout: 10_000 },
 	use: {
-		baseURL: process.env.CORRECTION_BASE_URL || 'https://127.0.0.1:3443',
+		baseURL: process.env.CORRECTION_BASE_URL || 'https://127.0.0.1:6103',
 		ignoreHTTPSErrors: true,
 		trace: 'retain-on-failure',
 		screenshot: 'only-on-failure',

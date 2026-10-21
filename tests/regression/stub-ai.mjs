@@ -13,7 +13,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 
-const PORT = Number(process.env.STUB_AI_PORT ?? 58000);
+const PORT = Number(process.env.STUB_AI_PORT ?? 6106);
 const DIM = 512;
 const photos = new Map();
 const failing = new Map(); // photo id -> failures left (Infinity = always)

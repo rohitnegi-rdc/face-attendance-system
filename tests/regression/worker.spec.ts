@@ -149,7 +149,7 @@ test('WRK-09 a restarted worker releases its own unfinished jobs at once, not af
 			...process.env,
 			HOSTNAME: workerName,
 			DATABASE_URL: process.env.REGRESSION_DATABASE_URL,
-			AI_SERVICE_URL: process.env.REGRESSION_STUB_URL ?? 'http://127.0.0.1:58000',
+			AI_SERVICE_URL: process.env.REGRESSION_STUB_URL ?? 'http://127.0.0.1:6106',
 			WORKER_HEARTBEAT_INTERVAL_MS: '1000'
 		},
 		stdio: 'ignore'

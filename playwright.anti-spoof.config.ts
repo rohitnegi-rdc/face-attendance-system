@@ -8,7 +8,7 @@ export default defineConfig({
 	expect: { timeout: 30_000 },
 	retries: 0,
 	use: {
-		baseURL: process.env.ANTI_SPOOF_E2E_BASE_URL || 'https://127.0.0.1:3443',
+		baseURL: process.env.ANTI_SPOOF_E2E_BASE_URL || 'https://127.0.0.1:6103',
 		ignoreHTTPSErrors: true,
 		trace: 'retain-on-failure',
 		screenshot: 'only-on-failure',
