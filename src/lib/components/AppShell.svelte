@@ -12,6 +12,7 @@
 	import FileUp from '@lucide/svelte/icons/file-up';
 	import Fuel from '@lucide/svelte/icons/fuel';
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import ImageOff from '@lucide/svelte/icons/image-off';
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import LogOut from '@lucide/svelte/icons/log-out';
@@ -51,6 +52,7 @@
 		{ href: resolve('/admin/fraud-flags'), label: 'Fraud flags', icon: TriangleAlert },
 		{ href: resolve('/admin/flagged-guests'), label: 'Guest review', icon: ScanFace },
 		{ href: resolve('/admin/merge-candidates'), label: 'Merge review', icon: UsersRound },
+		{ href: resolve('/admin/photo-backups'), label: 'Kept photos', icon: ImageOff },
 		{ href: resolve('/admin/vendors'), label: 'Vendors', icon: Building2 },
 		{ href: resolve('/admin/plant-managers'), label: 'Plant managers', icon: Building2 },
 		{ href: resolve('/admin/import'), label: 'Imports', icon: FileUp },
@@ -67,6 +69,7 @@
 		{ href: resolve('/plant-manager'), label: 'Overview', icon: LayoutDashboard, exact: true },
 		{ href: resolve('/plant-manager/attendance'), label: 'Attendance', icon: CalendarCheck },
 		{ href: resolve('/plant-manager/approvals'), label: 'Approvals', icon: MapPin },
+		{ href: resolve('/plant-manager/photo-backups'), label: 'Kept photos', icon: ImageOff },
 		{ href: resolve('/plant-manager/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/plant-manager/people'), label: 'People', icon: UsersRound }
 	];

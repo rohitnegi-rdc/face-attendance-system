@@ -17,6 +17,7 @@ import {
 import { resolve } from '$app/paths';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
+const BACKUP_DIR = path.join(UPLOAD_DIR, 'reference');
 const MAX_UPLOAD_BYTES = 18 * 1024 * 1024;
 
 class SubmissionError extends Error {
@@ -62,6 +63,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 	const photoHash = crypto.createHash('sha256').update(buffer).digest('hex');
 	const client = await pool.connect();
 	let photoPath: string | null = null;
+	let backupPath: string | null = null;
 
 	try {
 		await client.query('BEGIN');
@@ -144,6 +146,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		await fs.mkdir(UPLOAD_DIR, { recursive: true });
 		photoPath = path.join(UPLOAD_DIR, `${randomUUID()}.jpg`);
 		await fs.writeFile(photoPath, buffer);
+		// Untouched copy for when processing fails (db/migrations/025_photo_backups.sql).
+		await fs.mkdir(BACKUP_DIR, { recursive: true });
+		backupPath = path.join(BACKUP_DIR, path.basename(photoPath));
+		await fs.writeFile(backupPath, buffer);
 
 		const sessionResult = await client.query(
 			`INSERT INTO attendance_sessions
@@ -181,6 +187,12 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				[session.id, pairedMorningId]
 			);
 		}
+		await client.query(
+			`INSERT INTO attendance_photo_backups
+			   (session_id, pump_id, session_date, session_type, file_path, photo_hash)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			[session.id, pumpId, sessionDate, sessionType, backupPath, photoHash]
+		);
 		await client.query(`INSERT INTO attendance_jobs (session_id, request_id) VALUES ($1, $2)`, [
 			session.id,
 			requestId
@@ -220,6 +232,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 	} catch (error: any) {
 		await client.query('ROLLBACK').catch(() => {});
 		if (photoPath) await fs.unlink(photoPath).catch(() => {});
+		if (backupPath) await fs.unlink(backupPath).catch(() => {});
 
 		if (error instanceof SubmissionError) {
 			logger.warn({ pumpId, requestId, reason: error.message }, 'attendance submission rejected');

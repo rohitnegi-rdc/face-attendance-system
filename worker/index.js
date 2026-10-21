@@ -151,6 +151,11 @@ async function failStuckJobs() {
 		     AND (status = 'queued'
 		          OR (status = 'claimed' AND claimed_at < now() - ($1 || ' minutes')::interval))
 		   RETURNING session_id
+		 ),
+		 kept AS (
+		   UPDATE attendance_photo_backups b
+		   SET status = 'failed', reason = $3, error_detail = 'attempt limit reached', kept_at = now()
+		   FROM stuck WHERE b.session_id = stuck.session_id AND b.status = 'waiting'
 		 )
 		 UPDATE attendance_sessions s SET status = 'failed', error_reason = $3
 		 FROM stuck WHERE s.id = stuck.session_id AND s.status IN ('pending', 'processing')
@@ -162,6 +167,36 @@ async function failStuckJobs() {
 		]
 	);
 	return rows.length;
+}
+
+// The untouched upload copy (db/migrations/025_photo_backups.sql). A photo that fails or is
+// flagged as fraud keeps it forever; one processed cleanly has its own photo, so the copy goes.
+// Only a 'waiting' copy changes: once kept, a later reprocess (admin "mark normal") leaves it.
+// Both only log on error: the session outcome is already saved and must not turn into a failure.
+async function keepBackup(sessionId, status, reason, detail = null) {
+	try {
+		await pool.query(
+			`UPDATE attendance_photo_backups
+			 SET status = $2, reason = $3, error_detail = $4, kept_at = now()
+			 WHERE session_id = $1 AND status = 'waiting'`,
+			[sessionId, status, reason, detail]
+		);
+	} catch (err) {
+		log('error', { sessionId, error: String(err?.message || err) }, 'could not keep photo backup');
+	}
+}
+
+async function dropBackup(sessionId) {
+	try {
+		const { rows } = await pool.query(
+			`DELETE FROM attendance_photo_backups WHERE session_id = $1 AND status = 'waiting'
+			 RETURNING file_path`,
+			[sessionId]
+		);
+		await Promise.all(rows.map((row) => fs.unlink(row.file_path).catch(() => {})));
+	} catch (err) {
+		log('error', { sessionId, error: String(err?.message || err) }, 'could not drop photo backup');
+	}
 }
 
 function toVectorLiteral(embedding) {
@@ -368,6 +403,7 @@ async function processJob(job) {
 				[session.id]
 			);
 			await pool.query(`UPDATE attendance_jobs SET status = 'done' WHERE id = $1`, [job.id]);
+			await keepBackup(session.id, 'fraud', 'Photo of a screen or a printed photo');
 			await pool.query(
 				`UPDATE pumps SET status = 'disabled', disabled_at = now(), disabled_reason = $2
 				 WHERE id = $1 AND status = 'active'`,
@@ -591,6 +627,12 @@ async function processJob(job) {
 			}
 		}
 
+		if (fraudFlags.length) {
+			await keepBackup(session.id, 'fraud', 'Same face found at another pump today');
+		} else {
+			await dropBackup(session.id);
+		}
+
 		log(
 			'info',
 			{
@@ -617,6 +659,7 @@ async function processJob(job) {
 			`UPDATE attendance_sessions SET status = $2, error_reason = $3 WHERE id = $1`,
 			[job.session_id, retrying ? 'pending' : 'failed', userFacingReason(err)]
 		);
+		if (!retrying) await keepBackup(job.session_id, 'failed', userFacingReason(err), errorMessage);
 		log(
 			retrying ? 'warn' : 'error',
 			{

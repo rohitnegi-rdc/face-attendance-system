@@ -314,6 +314,15 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | LOC-07 | Approval email for a held shift (`MAIL_LOG_ONLY`, nothing sent) | Logged to the plant's manager with the pump code and an absolute link `<origin>/plant-manager/approvals/<id>` (bug: was `<origin>../../plant-manager/...`) | 2 | P1 | Covered (added 2026-10-20) |
 | LOC-08 | Worker copies pump GPS from the optimizer feed (`dump.pump_events`, stand-in table in the test DB) | Matched by pump code (any case) or `gps_device_id`; blank coordinates and rows older than 2 h skipped; unknown ids logged; the copied reading lets a nearby shift start `ok` | 2 | P1 | Covered (added 2026-10-20) |
 
+### BAK: kept copy of failed and fraud photos (photo-backup.spec)
+
+| ID | Scenario | Expected | Tier | Priority | Status |
+|---|---|---|---|---|---|
+| BAK-01 | Photo processed cleanly | Copy saved on upload, row and file removed once processed | 1 | P0 | Covered (added 2026-10-21) |
+| BAK-02 | AI fails every attempt, then the pump taps Retry | Copy kept as `failed` with the pump's reason and the technical error, byte for byte the upload; survives Retry (`session_id` NULL); admin and the plant's manager get 200, another plant's manager 404, the pump 403; listed only on the right pages | 1 | P0 | Covered |
+| BAK-03 | Same face already at another pump in the Area | Copy kept as `fraud` | 1 | P0 | Covered |
+| BAK-04 | Rejected upload (duplicate photo) | No copy saved | 1 | P1 | Covered |
+
 ### PATH: sub-path hosting (BASE_PATH)
 
 | ID | Scenario | Expected | Tier | Pri | Status |

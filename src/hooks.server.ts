@@ -92,7 +92,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const managerReadOnlyAttendance =
 		auth?.role === 'plant-manager' &&
 		event.request.method === 'GET' &&
-		/^\/api\/attendance\/(photo|status)\//.test(path);
+		/^\/api\/attendance\/(photo|status|backup)\//.test(path);
 	if (
 		path.startsWith('/api/attendance') &&
 		path !== '/api/auth/login' &&
