@@ -918,7 +918,7 @@ test-output/evaluations/
 
 ## Latest full threshold run
 
-- Run folder: `test-output/evaluations/20260811-151623__golden-small-group__golden-small-groups-v1`.
+- Run folder: `test-output/evaluations/20260811-151623__THRESHOLD-0.28-SOURCE__golden-small-group__50-cases`.
 - Evaluated 50 cases and 100 morning/evening images.
 - `threshold-sweep.csv` contains 34 threshold rows.
 - `threshold-case-metrics.csv` contains 1700 rows.
@@ -965,8 +965,8 @@ test-output/evaluations/
 
 ## Generated report output
 
-- Report folder: `test-output/evaluations/20260811-151623__golden-small-group__golden-small-groups-v1/review/decision-review`.
-- Main HTML report: `test-output/evaluations/20260811-151623__golden-small-group__golden-small-groups-v1/review/decision-review/index.html`.
+- Report folder: `test-output/evaluations/20260811-151623__THRESHOLD-0.28-SOURCE__golden-small-group__50-cases/review/decision-review`.
+- Main HTML report: `test-output/evaluations/20260811-151623__THRESHOLD-0.28-SOURCE__golden-small-group__50-cases/review/decision-review/index.html`.
 - The main existing review page now links to the deterministic decision review.
 - Generated 543 reusable face crop thumbnails for visual worker-level review.
 - Generated deterministic machine/report artifacts:
@@ -1103,7 +1103,7 @@ test-output/evaluations/
 ## Browser verification
 
 - Playwright browser check passed against:
-  - `test-output/evaluations/20260811-151623__golden-small-group__golden-small-groups-v1/review/decision-review/index.html`
+  - `test-output/evaluations/20260811-151623__THRESHOLD-0.28-SOURCE__golden-small-group__50-cases/review/decision-review/index.html`
 - Initial dashboard load to usable threshold UI: `200 ms`.
 - Switching threshold from `0.68` to `0.24`: `29 ms`.
 - Threshold options found: `34`.
@@ -1138,7 +1138,7 @@ test-output/evaluations/
 
 ## Measured output on the local 5500 URL
 
-- Verified against `http://127.0.0.1:5500/test-output/evaluations/20260811-151623__golden-small-group__golden-small-groups-v1/review/decision-review/index.html`.
+- Verified against `http://127.0.0.1:5500/test-output/evaluations/20260811-151623__THRESHOLD-0.28-SOURCE__golden-small-group__50-cases/review/decision-review/index.html`.
 - Initial dashboard load: `160 ms`.
 - Threshold switch from `0.68` to `0.24`: `29 ms`.
 - Opening one evidence case: `86 ms`.
@@ -1186,7 +1186,7 @@ test-output/evaluations/
 
 ## Browser verification
 
-- Verified against `http://127.0.0.1:5500/test-output/evaluations/20260811-151623__golden-small-group__golden-small-groups-v1/review/decision-review/index.html`.
+- Verified against `http://127.0.0.1:5500/test-output/evaluations/20260811-151623__THRESHOLD-0.28-SOURCE__golden-small-group__50-cases/review/decision-review/index.html`.
 - Initial dashboard load: `140 ms`.
 - Images in DOM at initial load: `0`.
 - Image requests at initial load: `0`.
