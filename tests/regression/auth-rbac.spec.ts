@@ -52,6 +52,20 @@ test('AUTH-03 email is case-insensitive', async () => {
 	await login(admin.email.toUpperCase());
 });
 
+test('AUTH-15 a fresh database gets the default admin, forced to change its password', async () => {
+	const { rows } = await db.query(
+		"SELECT must_change_password FROM admins WHERE email = 'admin@attendance.rdc'"
+	);
+	expect(rows).toHaveLength(1);
+	expect(rows[0].must_change_password).toBe(true);
+	const context = await anonymous();
+	const response = await context.post('/api/auth/login', {
+		data: { email: 'admin@attendance.rdc', password: 'Admin1234!' }
+	});
+	expect(response.status()).toBe(200);
+	expect(await response.json()).toMatchObject({ role: 'admin', mustChangePassword: true });
+});
+
 test('AUTH-04/05 a disabled pump cannot log in, and an existing token cannot submit', async () => {
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);

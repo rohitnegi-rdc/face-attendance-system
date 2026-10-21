@@ -71,6 +71,7 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 | AUTH-12 | Google OAuth: unknown email, disabled pump, valid account | Rejected, rejected, logged in | 1 (stub Google) | P2 | Missing |
 | AUTH-13 | Brute force: 20 wrong passwords for one email in 1 min | Throttled (429) | 1 | P1 | Won't do (decided 2026-10-08, no rate limit for v1) |
 | AUTH-14 | Admin resets a vendor or pump password | Old password fails; new one forces a password change | 1 | P1 | Missing |
+| AUTH-15 | Fresh database (migration 026) | `admin@attendance.rdc` / `Admin1234!` exists, logs in with `mustChangePassword: true`. A database that already has an admin gets none | 1 | P0 | Covered (auth-rbac.spec) |
 
 ### RBAC: who can see what
 
