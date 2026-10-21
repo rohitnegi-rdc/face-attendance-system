@@ -5,6 +5,7 @@ import {
 	clearSettings,
 	createAdmin,
 	createArea,
+	createPlantManager,
 	createPump,
 	db,
 	login,
@@ -46,6 +47,35 @@ test('PATH-06 the status photo_url is an absolute path that serves the photo', a
 	const image = await context.get(status.photo_url);
 	expect(image.status()).toBe(200);
 	expect(image.headers()['content-type']).toBe('image/jpeg');
+});
+
+test('PATH-07 photo URLs built in server loads are absolute on every page that shows them', async () => {
+	const { plantId } = await createArea();
+	const pump = await createPump(plantId);
+	const manager = await login((await createPlantManager(plantId)).email);
+	const admin = await login((await createAdmin()).email);
+	const sessionId = await recordSession(await login(pump.email), ['PATH07']);
+	await db.query(
+		`UPDATE attendance_sessions SET location_status = 'pending', location_issue = 'no_pump_gps'
+		 WHERE id = $1`,
+		[sessionId]
+	);
+	const photoPath = `/api/attendance/photo/${sessionId}`;
+	const pages = [
+		[manager, `/plant-manager/approvals/${sessionId}`],
+		[manager, '/plant-manager/attendance'],
+		[admin, `/admin/pumps/${pump.id}`]
+	] as const;
+	for (const [context, page] of pages) {
+		// __data.json is what a client-side navigation loads. A relative "../../api/..." computed for
+		// it lands one level too deep and drops BASE_PATH (bug 2026-10-21, location approval photo).
+		const data = await context.get(`${page}/__data.json`);
+		expect(data.status(), page).toBe(200);
+		const body = await data.text();
+		expect(body, page).toContain(`"${photoPath}"`);
+		expect(body, page).not.toContain('../');
+	}
+	expect((await manager.get(photoPath)).status()).toBe(200);
 });
 
 test('SUB-02 the same photo bytes are rejected the second time', async () => {

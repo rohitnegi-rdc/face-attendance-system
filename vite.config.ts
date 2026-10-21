@@ -35,7 +35,10 @@ export default defineConfig(({ command }) => {
 				// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
 				// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 				adapter: adapter(),
-				paths: { base: basePath as '' | `/${string}` }
+				// relative: false makes resolve() return "/pump-attendance/..." everywhere. The default
+				// (relative) gives "../../..." on the server, which breaks whenever a server-built URL is
+				// used from a different path: client-side __data.json loads, API responses, emails.
+				paths: { base: basePath as '' | `/${string}`, relative: false }
 			})
 		],
 		server: {

@@ -16,6 +16,7 @@
 			: ''
 	);
 	let busy = $state(false);
+	let photoFailed = $state(false);
 </script>
 
 <svelte:head><title>Approve {s.pump_code} | Face Attendance</title></svelte:head>
@@ -55,8 +56,20 @@
 
 	<div class="grid">
 		<figure class="photo">
-			<img src={s.photoUrl} alt="Shift start group" />
-			<figcaption>{s.faces} {s.faces === 1 ? 'face' : 'faces'} in the photo</figcaption>
+			{#if photoFailed}
+				<p class="photo-missing">The photo could not be loaded.</p>
+			{:else}
+				<img src={s.photoUrl} alt="Shift start group" onerror={() => (photoFailed = true)} />
+			{/if}
+			<figcaption>
+				{#if s.status === 'pending' || s.status === 'processing'}
+					Faces are still being counted. Reload in a minute.
+				{:else if s.status === 'failed'}
+					Faces could not be read from this photo.
+				{:else}
+					{s.faces} {s.faces === 1 ? 'face' : 'faces'} in the photo
+				{/if}
+			</figcaption>
 		</figure>
 
 		<dl class="facts">
@@ -162,6 +175,14 @@
 		width: 100%;
 		max-height: 26rem;
 		object-fit: contain;
+		background: var(--surface-muted);
+		border-radius: var(--radius-md);
+	}
+	.photo-missing {
+		margin: 0;
+		padding: var(--space-5) var(--space-4);
+		color: var(--ink-muted);
+		text-align: center;
 		background: var(--surface-muted);
 		border-radius: var(--radius-md);
 	}
