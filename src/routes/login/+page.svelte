@@ -144,9 +144,7 @@
 		min-height: 100vh;
 		place-items: center;
 		padding: var(--space-6) var(--space-4);
-		background:
-			linear-gradient(90deg, transparent 49.8%, var(--brand-mist) 50%, transparent 50.2%),
-			var(--surface-subtle);
+		background: var(--surface-subtle);
 	}
 
 	.login-panel {
