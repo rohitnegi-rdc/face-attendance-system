@@ -1,9 +1,4 @@
 services:
-  # PostgreSQL is only needed by the app and worker on Docker's internal network.
-  # Not published locally: nothing on the host needs it.
-  postgres:
-    ports: !reset []
-
   # Local testing never sends real email: approval mails are written to the app log instead.
   app:
     environment:
