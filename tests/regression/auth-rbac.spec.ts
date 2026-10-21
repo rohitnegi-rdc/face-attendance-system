@@ -66,6 +66,19 @@ test('AUTH-15 a fresh database gets the default admin, forced to change its pass
 	expect(await response.json()).toMatchObject({ role: 'admin', mustChangePassword: true });
 });
 
+test('AUTH-16 a fresh database gets the pumps from the CSV migration, forced to change password', async () => {
+	const { rows } = await db.query(
+		`SELECT count(*)::int AS imports FROM csv_imports WHERE filename = '027_pump_vendors.csv (migration)'`
+	);
+	expect(rows[0].imports).toBe(1);
+	const context = await anonymous();
+	const response = await context.post('/api/auth/login', {
+		data: { email: 'aslpwwi2@pumps.rdc', password: 'Test1234!' }
+	});
+	expect(response.status()).toBe(200);
+	expect(await response.json()).toMatchObject({ role: 'pump', mustChangePassword: true });
+});
+
 test('AUTH-04/05 a disabled pump cannot log in, and an existing token cannot submit', async () => {
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);
