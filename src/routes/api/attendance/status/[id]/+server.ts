@@ -67,7 +67,9 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 		        source_pump.pump_code AS pump_code, p.display_seq,
 		        concat(source_pump.pump_code, ' Worker ', p.display_seq) AS person_label,
 		        matched_session.submitted_at AS matched_submitted_at,
-		        pfv.source_photo_crop_url
+		        -- The face from this photo (stored on the flag); older flags fall back to the
+		        -- person's latest crop.
+		        COALESCE(ff.face_crop_url, pfv.source_photo_crop_url) AS source_photo_crop_url
 		 FROM fraud_flags ff
 		 JOIN persons p ON p.id = ff.person_id
 		 JOIN pumps source_pump ON source_pump.id = p.pump_id

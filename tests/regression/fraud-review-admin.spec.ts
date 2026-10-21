@@ -323,3 +323,17 @@ test('FRD-11 confirm fraud keeps the worker absent, and a resolved flag cannot b
 	expect(again.type).toBe('failure');
 	expect(await count('SELECT 1 FROM daily_person_attendance WHERE pump_id = $1', [b.id])).toBe(0);
 });
+
+test('FRD-12 the pump sees the held face from its own photo, not the other pump’s crop', async () => {
+	const { b, sessionB, flagId } = await flaggedAtB('FRD12');
+	const ownFace = 'data:image/jpeg;base64,RlJEMTJvd24=';
+	await db.query(`UPDATE fraud_flags SET face_crop_url = $2 WHERE id = $1`, [flagId, ownFace]);
+	await db.query(
+		`UPDATE person_face_vectors SET source_photo_crop_url = 'data:image/jpeg;base64,b3RoZXI='
+		 WHERE person_id = (SELECT person_id FROM fraud_flags WHERE id = $1)`,
+		[flagId]
+	);
+	const status = await (await b.context.get(`/api/attendance/status/${sessionB}`)).json();
+	expect(status.fraud_flags).toHaveLength(1);
+	expect(status.fraud_flags[0].source_photo_crop_url).toBe(ownFace);
+});

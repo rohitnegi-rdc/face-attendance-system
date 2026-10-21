@@ -40,7 +40,7 @@
 		return 'Could not verify';
 	}
 	type WorkerPreview = WorkerResult & {
-		group: 'matched' | 'new';
+		group: 'matched' | 'new' | 'held' | 'guest';
 		label: string;
 		statusLabel: string;
 	};
@@ -613,6 +613,17 @@
 		workerPreviewCloseButton?.focus();
 	}
 
+	// Faces that are not counted yet: matched at another pump (held) or not matched at all (guest).
+	async function openHeldPreview(
+		preview: Pick<WorkerPreview, 'group' | 'label' | 'statusLabel' | 'source_photo_crop_url'>,
+		trigger: HTMLButtonElement
+	) {
+		workerPreviewTrigger = trigger;
+		selectedWorkerPreview = { person_id: '', display_seq: 0, pump_code: '', ...preview };
+		await tick();
+		workerPreviewCloseButton?.focus();
+	}
+
 	function closeWorkerPreview() {
 		selectedWorkerPreview = null;
 		workerPreviewTrigger?.focus();
@@ -826,7 +837,7 @@
 					<p class="eyebrow">{status === 'submitting' ? 'Uploading' : 'Processing'}</p>
 					<h2>{status === 'submitting' ? 'Sending the photo' : 'Reading attendance'}</h2>
 					<ol class="processing-list">
-						{#each processingLabels as label, index}
+						{#each processingLabels as label, index (label)}
 							<li class:active={index === processingStep} class:complete={index < processingStep}>
 								<span>{index < processingStep ? 'Done' : index + 1}</span>{label}
 							</li>
@@ -909,7 +920,7 @@
 						<div class="result-group">
 							<h3>Matched <span>{result.matched.length}</span></h3>
 							<ul class="face-list">
-								{#each result.matched as person}
+								{#each result.matched as person (person.person_id)}
 									<li>
 										<button
 											class="face-row"
@@ -949,7 +960,7 @@
 						<div class="result-group">
 							<h3>New people <span>{result.new_persons.length}</span></h3>
 							<ul class="face-list">
-								{#each result.new_persons as person}
+								{#each result.new_persons as person (person.person_id)}
 									<li>
 										<button
 											class="face-row"
@@ -985,14 +996,43 @@
 					{#if result.fraud_flags?.length}
 						<div class="result-group attention-group">
 							<h3>Needs review <span>{result.fraud_flags.length}</span></h3>
-							{#each result.fraud_flags as flag}
-								<p data-testid="fraud-flag-line">
-									A face in this photo matches {flag.person_label || 'a worker'}, already marked at
-									{flag.other_pump_code || 'another pump'}{flag.other_plant_name
-										? ` (${flag.other_plant_name})`
-										: ''}. Not counted here until an admin checks it.
-								</p>
-							{/each}
+							<ul class="face-list">
+								{#each result.fraud_flags as flag (flag.id)}
+									{@const where = `${flag.other_pump_code || 'another pump'}${flag.other_plant_name ? ` (${flag.other_plant_name})` : ''}`}
+									<li>
+										<button
+											class="face-row"
+											type="button"
+											onclick={(event) =>
+												openHeldPreview(
+													{
+														group: 'held',
+														label: flag.person_label || 'Worker',
+														statusLabel: `Already marked at ${where}`,
+														source_photo_crop_url: flag.source_photo_crop_url
+													},
+													event.currentTarget
+												)}
+											aria-label={`Preview ${flag.person_label || 'held face'}`}
+											data-testid="held-preview-trigger"
+										>
+											{#if flag.source_photo_crop_url}
+												<img src={flag.source_photo_crop_url} alt="" loading="lazy" />
+											{:else}
+												<span class="face-thumb-placeholder" aria-hidden="true"
+													><UserRound size={16} /></span
+												>
+											{/if}
+											<span class="face-label">{flag.person_label || 'Worker'}</span>
+											<span class="face-row-icons"><Eye size={15} aria-hidden="true" /></span>
+										</button>
+										<p data-testid="fraud-flag-line">
+											A face in this photo matches {flag.person_label || 'a worker'}, already marked
+											at {where}. Not counted here until an admin checks it.
+										</p>
+									</li>
+								{/each}
+							</ul>
 						</div>
 					{/if}
 
@@ -1000,6 +1040,38 @@
 						<div class="result-group attention-group">
 							<h3>Awaiting guest review <span>{result.unknown_faces.length}</span></h3>
 							<p>These faces were saved for an administrator to review.</p>
+							<ul class="face-list">
+								{#each result.unknown_faces as face, index (face.id)}
+									<li>
+										<button
+											class="face-row"
+											type="button"
+											onclick={(event) =>
+												openHeldPreview(
+													{
+														group: 'guest',
+														label: `Guest ${index + 1}`,
+														statusLabel: 'Waiting for admin review',
+														source_photo_crop_url: face.face_crop_url
+													},
+													event.currentTarget
+												)}
+											aria-label={`Preview guest ${index + 1}`}
+											data-testid="guest-preview-trigger"
+										>
+											{#if face.face_crop_url}
+												<img src={face.face_crop_url} alt="" loading="lazy" />
+											{:else}
+												<span class="face-thumb-placeholder" aria-hidden="true"
+													><UserRound size={16} /></span
+												>
+											{/if}
+											<span class="face-label">Guest {index + 1}</span>
+											<span class="face-row-icons"><Eye size={15} aria-hidden="true" /></span>
+										</button>
+									</li>
+								{/each}
+							</ul>
 						</div>
 					{/if}
 
@@ -1148,14 +1220,18 @@
 				<div>
 					<dt>Daily match</dt>
 					<dd>
-						{selectedWorkerPreview.morning_matched ? 'Start' : ''}
-						{selectedWorkerPreview.morning_matched && selectedWorkerPreview.evening_matched
-							? ' and '
-							: ''}
-						{selectedWorkerPreview.evening_matched ? 'End' : ''}
-						{!selectedWorkerPreview.morning_matched && !selectedWorkerPreview.evening_matched
-							? 'New attendance'
-							: ''}
+						{#if selectedWorkerPreview.group === 'held' || selectedWorkerPreview.group === 'guest'}
+							Not counted until an admin checks it
+						{:else}
+							{selectedWorkerPreview.morning_matched ? 'Start' : ''}
+							{selectedWorkerPreview.morning_matched && selectedWorkerPreview.evening_matched
+								? ' and '
+								: ''}
+							{selectedWorkerPreview.evening_matched ? 'End' : ''}
+							{!selectedWorkerPreview.morning_matched && !selectedWorkerPreview.evening_matched
+								? 'New attendance'
+								: ''}
+						{/if}
 					</dd>
 				</div>
 			</dl>

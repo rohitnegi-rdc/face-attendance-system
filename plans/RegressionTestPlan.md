@@ -197,6 +197,7 @@ reference that is also in the server log (`handleError` in `hooks.server.ts`). E
 | FRD-09 | `PHOTO_SPOOF_CHECK_ENABLED=false` | A screen-capture photo is processed normally; pump not disabled | 1 | P0 | Covered (`attendance-anti-spoof`, needs re-run) |
 | FRD-10 | `fraud_detected` session marked normal by admin | Reprocessed once; pump re-enabled; never re-flagged | 1 | P1 | Partial |
 | FRD-11 | Admin confirms fraud; a resolved flag cannot be resolved again | Worker stays absent; second decision refused | 1 | P1 | Covered (fraud-review-admin.spec) |
+| FRD-12 | Pump review of a photo with a face already marked at another pump (bug 2026-10-21: "Needs review" row had no face) | Status API gives the held face crop from this photo (`fraud_flags.face_crop_url`), the pump page shows it as a face row with preview; guest faces get rows too | 1 | P1 | Covered (fraud-review-admin.spec) |
 
 ### REV: pump review, approve, retry
 
