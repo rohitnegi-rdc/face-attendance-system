@@ -6,6 +6,7 @@
 	const actionLabel: Record<string, string> = {
 		update_settings: 'Changed settings',
 		reset_settings: 'Reset settings',
+		set_fraud_check: 'Switched fraud check',
 		delete_session: 'Deleted a session',
 		clear_pump_attendance: 'Cleared pump data'
 	};
@@ -25,7 +26,8 @@
 			<p class="eyebrow">Administration</p>
 			<h1>Attendance settings</h1>
 			<p>
-				Timing rules for pairing shift start and shift end photos. Changes apply to the next submission.
+				Timing rules for pairing shift start and shift end photos. Changes apply to the next
+				submission.
 			</p>
 		</div>
 	</header>
@@ -70,7 +72,8 @@
 				<small>
 					Now {data.settings.evening_pairing_window_hours.value} h ({sourceLabel[
 						data.settings.evening_pairing_window_hours.source
-					]}). After this, a shift with no end closes as start only and the next photo starts a new shift. The pump can also press End session once the gap has passed. Default: {data
+					]}). After this, a shift with no end closes as start only and the next photo starts a new
+					shift. The pump can also press End session once the gap has passed. Default: {data
 						.defaults.evening_pairing_window_hours} h.
 				</small>
 			</label>
@@ -83,10 +86,35 @@
 		</form>
 		{#if data.settings.evening_min_gap_minutes.value < data.defaults.evening_min_gap_minutes}
 			<p class="alert alert--error" role="status">
-				The shift end gap is below the 9-hour production rule. Reset it before real attendance starts.
+				The shift end gap is below the 9-hour production rule. Reset it before real attendance
+				starts.
 			</p>
 		{/if}
 	</section>
+
+	{#if data.testMode}
+		<section class="surface surface--padded section" aria-labelledby="test-mode-heading">
+			<h2 id="test-mode-heading">Test mode</h2>
+			<p class="supporting-text">
+				The server runs in test mode (TEST_MODE=true), so the cross-pump fraud check can be switched
+				off to test with the same people at several pumps. Turn it back on, and set TEST_MODE=false
+				on the server, before real attendance starts.
+			</p>
+			<form method="POST" action="?/fraudCheck" class="test-mode-form">
+				<p>
+					Cross-pump fraud check:
+					<strong data-testid="fraud-check-state">{data.fraudCheckDisabled ? 'Off' : 'On'}</strong>
+				</p>
+				<input type="hidden" name="enabled" value={data.fraudCheckDisabled ? 'true' : 'false'} />
+				<button
+					type="submit"
+					class={data.fraudCheckDisabled ? 'button button--primary' : 'button button--secondary'}
+				>
+					{data.fraudCheckDisabled ? 'Turn fraud check on' : 'Turn fraud check off'}
+				</button>
+			</form>
+		</section>
+	{/if}
 
 	<section class="surface surface--padded section" aria-labelledby="audit-heading">
 		<h2 id="audit-heading">Admin audit log</h2>
@@ -125,6 +153,15 @@
 	}
 	.field small {
 		color: var(--ink-muted);
+	}
+	.test-mode-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-3);
+	}
+	.test-mode-form p {
+		margin: 0;
 	}
 	.reset-form {
 		margin-top: var(--space-3);

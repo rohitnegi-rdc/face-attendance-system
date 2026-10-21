@@ -150,6 +150,8 @@ const serviceEnv = {
 	EVENING_MIN_GAP_MINUTES: '',
 	EVENING_PAIRING_WINDOW_HOURS: '',
 	PHOTO_SPOOF_CHECK_ENABLED: 'false',
+	// Test mode on, so FRD-13 can switch the fraud check off. It stays on unless a test does that.
+	TEST_MODE: 'true',
 	GEMINI_API_KEY: '',
 	SMTP_HOST: '',
 	// Approval emails are logged, never sent; LOC-07 reads the log line (link and recipients).

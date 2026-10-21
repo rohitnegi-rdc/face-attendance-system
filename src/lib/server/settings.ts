@@ -83,3 +83,22 @@ export function validateAttendanceSettings(settings: AttendanceSettings): string
 	}
 	return null;
 }
+
+// Test mode (server env TEST_MODE=true) lets an admin switch off the cross-pump fraud check at
+// /admin/settings, to test with the same people at several pumps. Outside test mode the switch is
+// hidden and a stored value is ignored, so production always runs the check (§2).
+// worker/index.js applies the same rule (fraudCheckDisabled); keep the key name in sync.
+export const FRAUD_CHECK_DISABLED_KEY = 'fraud_check_disabled';
+
+export function isTestMode(): boolean {
+	return process.env.TEST_MODE?.trim() === 'true';
+}
+
+export async function isFraudCheckDisabled(db: Pool | PoolClient = pool): Promise<boolean> {
+	if (!isTestMode()) return false;
+	const { rows } = await db.query<{ value: string }>(
+		'SELECT value FROM app_settings WHERE key = $1',
+		[FRAUD_CHECK_DISABLED_KEY]
+	);
+	return rows[0]?.value === 'true';
+}

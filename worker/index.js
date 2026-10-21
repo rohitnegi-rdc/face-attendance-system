@@ -236,6 +236,17 @@ async function pairingWindowHours(db) {
 	return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 24;
 }
 
+// Same rule as isFraudCheckDisabled in src/lib/server/settings.ts: an admin can switch the
+// cross-pump check off only while TEST_MODE=true; otherwise a stored value is ignored.
+const TEST_MODE = process.env.TEST_MODE?.trim() === 'true';
+async function fraudCheckDisabled(db) {
+	if (!TEST_MODE) return false;
+	const { rows } = await db.query(
+		`SELECT value FROM app_settings WHERE key = 'fraud_check_disabled'`
+	);
+	return rows[0]?.value === 'true';
+}
+
 async function expireStaleMornings(db) {
 	const windowHours = await pairingWindowHours(db);
 	const { rows } = await db.query(
@@ -447,6 +458,11 @@ async function processJob(job) {
 			return;
 		}
 
+		const skipFraudCheck = await fraudCheckDisabled(pool);
+		if (skipFraudCheck) {
+			log('warn', { requestId, sessionId: session.id }, 'cross-pump fraud check off (test mode)');
+		}
+
 		let matchedPersons, newPersons, fraudFlags;
 		for (let attempt = 0; ; attempt++) {
 			const client = await pool.connect();
@@ -465,8 +481,11 @@ async function processJob(job) {
 					// too. Comparing only against active people in completed sessions let the same new
 					// worker attend two pumps on day one, and made detection depend on which pump
 					// finished its review first (order-dependent, which §2 forbids).
-					const { rows: crossMatches } = await client.query(
-						`SELECT pfv.person_id, p.pump_id, 1 - (pfv.embedding <=> $1::vector) AS similarity,
+					// Skipped only when an admin switched it off in test mode (fraudCheckDisabled).
+					const { rows: crossMatches } = skipFraudCheck
+						? { rows: [] }
+						: await client.query(
+								`SELECT pfv.person_id, p.pump_id, 1 - (pfv.embedding <=> $1::vector) AS similarity,
 				        dpa.session_date, ats.id AS matched_session_id
 					 FROM person_face_vectors pfv
 					 JOIN persons p ON p.id = pfv.person_id
@@ -478,8 +497,8 @@ async function processJob(job) {
 					   AND p.status IN ('active', 'pending_review')
 					   AND ats.status IN ('completed', 'review')
 				 ORDER BY similarity DESC LIMIT 1`,
-						[vec, session.session_date, areaId, session.pump_id]
-					);
+								[vec, session.session_date, areaId, session.pump_id]
+							);
 					const crossMatch = crossMatches[0];
 
 					if (crossMatch && crossMatch.similarity >= FACE_MATCH_THRESHOLD) {
