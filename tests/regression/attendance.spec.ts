@@ -33,6 +33,21 @@ test('SUB-01 first photo of the day is a queued morning that the worker processe
 	expect(session.pairing_status).toBe('open');
 });
 
+test('PATH-06 the status photo_url is an absolute path that serves the photo', async () => {
+	const { context } = await newPump();
+	const submitted = await submit(context, await photo(['PATH06']));
+	expect(submitted.status).toBe(202);
+	await waitForSession(submitted.body.session_id, ['review']);
+	const status = await (
+		await context.get(`/api/attendance/status/${submitted.body.session_id}`)
+	).json();
+	// A relative "../../../api/..." drops BASE_PATH when the pump page (/pump) uses it.
+	expect(status.photo_url).toBe(`/api/attendance/photo/${submitted.body.session_id}`);
+	const image = await context.get(status.photo_url);
+	expect(image.status()).toBe(200);
+	expect(image.headers()['content-type']).toBe('image/jpeg');
+});
+
 test('SUB-02 the same photo bytes are rejected the second time', async () => {
 	const { context } = await newPump();
 	const buffer = await photo(['SUB02']);

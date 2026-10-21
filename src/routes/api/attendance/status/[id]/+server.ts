@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { resolve } from '$app/paths';
 import { query, queryOne } from '$lib/server/db';
 
-export const GET: RequestHandler = async ({ params, locals }) => {
+export const GET: RequestHandler = async ({ params, locals, url }) => {
 	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
 	const session = await queryOne<any>('SELECT * FROM attendance_sessions WHERE id = $1', [
@@ -107,7 +107,11 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		session_date: session.session_date,
 		submitted_at: session.submitted_at,
 		processed_at: session.processed_at,
-		photo_url: session.photo_url ? resolve(`/api/attendance/photo/${session.id}`) : null,
+		// resolve() is relative to this endpoint's URL on the server ("../../../api/..."), but the pump
+		// page uses it from /pump, so it would drop BASE_PATH. Anchor it to an absolute path.
+		photo_url: session.photo_url
+			? new URL(resolve(`/api/attendance/photo/${session.id}`), url).pathname
+			: null,
 		error_reason: session.error_reason,
 		matched,
 		new_persons: newPersons,

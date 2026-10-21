@@ -334,6 +334,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | PATH-03 | Cookies scoped to the prefix | `Path=/pump-attendance` | 1 | P1 | Partial (manual) |
 | PATH-04 | Root build (empty `BASE_PATH`) unchanged | As before | 1 | P0 | Partial (manual) |
 | PATH-05 | Invalid `BASE_PATH` (`pump`, `/pump/`) | Build fails with a clear message | 0 | P2 | Missing |
+| PATH-06 | Pump review shows the submitted group photo (bug 2026-10-21: under `/pump-attendance` the image hit `/api/...` and nginx 404) | `photo_url` from the status API is an absolute path, not `resolve()`'s endpoint-relative `../../../api/...`, and serves the JPEG | 1 | P0 | Covered (attendance.spec) |
 
 ### OPS: deploy, health, data safety
 
