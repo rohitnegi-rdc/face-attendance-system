@@ -79,6 +79,29 @@ test('AUTH-16 a fresh database gets the pumps from the CSV migration, forced to 
 	expect(await response.json()).toMatchObject({ role: 'pump', mustChangePassword: true });
 });
 
+test('AUTH-17 a fresh database gets Google-only plant managers and the Mumbai location check', async () => {
+	const { rows } = await db.query(
+		`SELECT pm.password_hash, pm.must_change_password, p.manager_email
+		 FROM plants p JOIN plant_manager_assignments pma ON pma.plant_id = p.id
+		 JOIN plant_managers pm ON pm.id = pma.manager_id WHERE p.name = 'MUM-Deonar'`
+	);
+	expect(rows).toHaveLength(1);
+	expect(rows[0]).toMatchObject({ password_hash: null, must_change_password: false });
+	expect(rows[0].manager_email).toMatch(/@rdc\.in$/);
+	const assigned = await db.query(
+		`SELECT count(*)::int AS plants FROM plant_manager_assignments pma
+		 JOIN plants p ON p.id = pma.plant_id JOIN pumps pu ON pu.plant_id = p.id
+		 WHERE pu.login_email LIKE '%@pumps.rdc'`
+	);
+	expect(assigned.rows[0].plants).toBeGreaterThan(0);
+	const area = await db.query(`SELECT location_check_enabled FROM areas WHERE name = 'Mumbai'`);
+	expect(area.rows[0].location_check_enabled).toBe(true);
+	const password = await (
+		await anonymous()
+	).post('/api/auth/login', { data: { email: rows[0].manager_email, password: 'Test1234!' } });
+	expect(password.status()).toBe(401);
+});
+
 test('AUTH-04/05 a disabled pump cannot log in, and an existing token cannot submit', async () => {
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);
