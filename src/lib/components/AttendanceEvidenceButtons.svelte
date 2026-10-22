@@ -155,13 +155,10 @@
 					{:else}
 						<span class="face-tile__empty"><TriangleAlert size={18} /></span>
 					{/if}
+					<!-- The other pump is on the row's "Same person at" badge and in the popup. -->
 					<span class="face-tile__label"
 						><strong>{fraudStateLabel(item)}</strong>
-						{#if item.side === 'flagged'}{item.otherPump}
-							<b class="face-tile__who">{item.worker}</b>{:else}<b class="face-tile__who"
-								>{item.worker}</b
-							>
-							also {item.otherPump}{/if}</span
+						<b class="face-tile__who">{item.worker}</b></span
 					>
 				</button>
 			{/each}
@@ -281,7 +278,9 @@
 	/* Fixed height: a big group scrolls inside the cell instead of stretching the row. */
 	.evidence-people {
 		display: grid;
-		grid-template-columns: repeat(5, 3.75rem);
+		grid-template-columns: repeat(5, minmax(3.75rem, 1fr));
+		width: 100%;
+		max-width: 30rem;
 		align-items: start;
 		gap: 0.3rem;
 		max-height: 14rem;

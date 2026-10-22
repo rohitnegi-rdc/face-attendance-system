@@ -85,7 +85,7 @@ test('NAV-02 cross-pump fraud lights the badges and highlights both sessions', a
 	expect(log).toContain(`Same person at ${a.code}`);
 	expect(log).toContain(`Same person at ${b.code}`);
 	expect(log).toContain('data-testid="fraud-face"');
-	expect(log).toMatch(/<tr class="[^"]*row-fraud/);
+	expect(log).toMatch(/class="shift[^"]*shift--fraud/);
 
 	// Admin: Fraud flags badge, and the same highlight on both pump pages.
 	const admin = await login((await createAdmin()).email);

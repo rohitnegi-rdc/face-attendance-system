@@ -14,7 +14,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 	const managerId = locals.user!.id;
 	const pumpId = url.searchParams.get('pump') || '';
 	const day = url.searchParams.get('day') || '';
-	if (!UUID_PATTERN.test(pumpId) || !isDateKey(day)) redirect(303, resolve('/plant-manager/attendance'));
+	if (!UUID_PATTERN.test(pumpId) || !isDateKey(day))
+		redirect(303, resolve('/plant-manager/attendance'));
 
 	const pump = await queryOne<any>(
 		`SELECT pu.id, pu.pump_code, pl.name AS plant_name, v.name AS vendor_name
@@ -68,10 +69,14 @@ export const actions: Actions = {
 				{ role: 'plant-manager', id: locals.user!.id },
 				await request.formData()
 			);
-			if (result.error) return fail(result.status, { error: result.error, personId: result.personId });
+			if (result.error)
+				return fail(result.status, { error: result.error, personId: result.personId });
 			return { success: true, personId: result.personId, message: 'Attendance saved' };
 		} catch (err) {
-			logger.error({ error: String((err as any)?.message || err) }, 'plant manager correction failed');
+			logger.error(
+				{ error: String((err as any)?.message || err) },
+				'plant manager correction failed'
+			);
 			return fail(500, { error: 'Could not save the attendance correction' });
 		}
 	}

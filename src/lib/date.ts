@@ -25,6 +25,11 @@ export function formatDate(value: string | Date): string {
 	return day.format('ddd, DD MMM YYYY').replaceAll(' ', NBSP);
 }
 
+// "11:16 am", India time.
+export function formatTime(value: string | Date): string {
+	return dayjs(value).tz(IST).format('h:mm a').replace(' ', NBSP);
+}
+
 export function dateKey(value: string | Date): string {
 	if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
 		return value.slice(0, 10);

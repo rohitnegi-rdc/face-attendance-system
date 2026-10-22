@@ -2,10 +2,11 @@ import type { PageServerLoad } from './$types';
 import { attachSessionEvidence } from '$lib/server/sessionEvidence';
 import { query } from '$lib/server/db';
 import { nowIST } from '$lib/server/time';
-import { isDateKey } from '$lib/date';
+import { dateKey, isDateKey } from '$lib/date';
 
-// The session log is paged to keep the page small (worker faces load on click).
-const SESSION_PAGE_SIZE = 25;
+// The session log shows one row per shift (pump + date) with its start and end photos side by
+// side, paged by shift to keep the page small (worker faces load on click).
+const SESSION_PAGE_SIZE = 15;
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const managerId = locals.user!.id;
@@ -46,12 +47,21 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			        ) AS group_flagged
 			 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
 			 JOIN plants pl ON pl.id = pu.plant_id JOIN plant_manager_assignments pma ON pma.plant_id = pl.id
-			 WHERE pma.manager_id = $1 AND s.session_date BETWEEN $2 AND $3
-			 ORDER BY s.submitted_at DESC LIMIT $4 OFFSET $5`,
+			 JOIN (
+			   SELECT s2.pump_id, s2.session_date, max(s2.submitted_at) AS last_at
+			   FROM attendance_sessions s2 JOIN pumps pu2 ON pu2.id = s2.pump_id
+			   JOIN plant_manager_assignments pma2 ON pma2.plant_id = pu2.plant_id
+			   WHERE pma2.manager_id = $1 AND s2.session_date BETWEEN $2 AND $3
+			   GROUP BY s2.pump_id, s2.session_date
+			   ORDER BY s2.session_date DESC, last_at DESC LIMIT $4 OFFSET $5
+			 ) shift ON shift.pump_id = s.pump_id AND shift.session_date = s.session_date
+			 WHERE pma.manager_id = $1
+			 ORDER BY shift.session_date DESC, shift.last_at DESC, s.submitted_at`,
 			[managerId, from, to, SESSION_PAGE_SIZE, (sessionPage - 1) * SESSION_PAGE_SIZE]
 		),
 		query<any>(
-			`SELECT count(*)::int AS n FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
+			`SELECT count(DISTINCT (s.pump_id, s.session_date))::int AS n
+			 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
 			 JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id
 			 WHERE pma.manager_id = $1 AND s.session_date BETWEEN $2 AND $3`,
 			[managerId, from, to]
@@ -61,14 +71,42 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	// Same per-worker and fraud evidence the admin pump page shows. Sessions are already limited to
 	// this manager's plants, so the evidence is too.
 	const sessions = await attachSessionEvidence(sessionRows);
+	type Shift = {
+		key: string;
+		session_date: string;
+		pump_id: string;
+		pump_code: string;
+		plant_name: string;
+		start: typeof sessions;
+		end: typeof sessions;
+		fraudPumps: string[];
+	};
+	const shifts = new Map<string, Shift>();
+	for (const session of sessions) {
+		const key = `${session.pump_id}|${dateKey(session.session_date)}`;
+		const shift: Shift = shifts.get(key) ?? {
+			key,
+			session_date: session.session_date,
+			pump_id: session.pump_id,
+			pump_code: session.pump_code,
+			plant_name: session.plant_name,
+			start: [],
+			end: [],
+			fraudPumps: []
+		};
+		shift[session.session_type === 'evening' ? 'end' : 'start'].push(session);
+		shift.fraudPumps = [...new Set([...shift.fraudPumps, ...session.fraudPumps])];
+		shifts.set(key, shift);
+	}
 	const sessionTotal = sessionCount[0]?.n ?? 0;
 	return {
 		pumps,
 		plants,
 		daily,
-		sessions,
+		shifts: [...shifts.values()],
 		sessionPagination: {
 			page: sessionPage,
+			pageSize: SESSION_PAGE_SIZE,
 			total: sessionTotal,
 			totalPages: Math.max(1, Math.ceil(sessionTotal / SESSION_PAGE_SIZE))
 		},

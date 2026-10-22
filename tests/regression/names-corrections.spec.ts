@@ -341,3 +341,23 @@ test('UI-10 session logs show fraud faces inline and load other faces on click',
 	expect((await outsider.get(faceUrl)).status()).toBe(404);
 	expect((await outsider.get(`/api/persons/${person}/face`)).status()).toBe(404);
 });
+
+test('UI-11 the session log shows one numbered row per shift, start and end together', async () => {
+	const { plantId } = await createArea();
+	const pump = await createPump(plantId);
+	const manager = await login((await createPlantManager(plantId)).email);
+	const context = await login(pump.email);
+	const start = await recordSession(context, ['UI11A']);
+	await shiftBack(start, 600);
+	await recordSession(context, ['UI11A']);
+
+	const log = await (await manager.get('/plant-manager/attendance')).text();
+	const rows = log.split('data-testid="shift-row"').slice(1);
+	// Two photos, one shift: a single row holding both halves, numbered 1, under one date heading.
+	expect(rows).toHaveLength(1);
+	expect(rows[0]).toContain('Shift start');
+	expect(rows[0]).toContain('Shift end');
+	expect(rows[0]).toContain('Full shift');
+	expect(rows[0]).toMatch(/class="shift__number[^"]*"[^>]*>1</);
+	expect(log.match(/class="log-day__title/g)).toHaveLength(1);
+});
