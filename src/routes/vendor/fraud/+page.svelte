@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import FraudWatchList from '$lib/components/FraudWatchList.svelte';
 
 	let { data } = $props();
@@ -18,5 +19,9 @@
 		</div>
 	</header>
 
-	<FraudWatchList cases={data.cases} testId="vendor-fraud" />
+	<FraudWatchList
+		cases={data.cases}
+		detailHref={(id) => resolve('/vendor/fraud/[id]', { id })}
+		testId="vendor-fraud"
+	/>
 </div>

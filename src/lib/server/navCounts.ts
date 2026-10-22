@@ -7,7 +7,7 @@ export type NavRole = 'admin' | 'vendor' | 'plant-manager';
 export type NavCounts = { attendance: number; fraud: number; approvals: number };
 
 // SQL condition putting a pump alias in the user's scope ($1 = user id).
-function pumpScope(role: NavRole, alias: string) {
+export function pumpScope(role: NavRole, alias: string) {
 	if (role === 'vendor') return `${alias}.vendor_id = $1`;
 	if (role === 'plant-manager')
 		return `${alias}.plant_id IN (SELECT plant_id FROM plant_manager_assignments WHERE manager_id = $1)`;

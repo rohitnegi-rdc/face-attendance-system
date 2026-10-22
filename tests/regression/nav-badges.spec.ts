@@ -175,6 +175,46 @@ test('NAV-05 opening the fraud list clears its badge; the cases stay listed unti
 	expect(badge(await html(admin, '/admin/fraud-flags'), 'fraud')).toBeNull();
 });
 
+test('NAV-06 a fraud case opens side by side, only for users with a pump in the pair', async () => {
+	const { plantId } = await createArea();
+	const vendorB = await createVendor();
+	const a = await createPump(plantId);
+	const b = await createPump(plantId, vendorB.id);
+	const manager = await login((await createPlantManager(plantId)).email);
+	await recordSession(await login(a.email), ['NAV06']);
+	const flaggedSession = await submitAndWait(await login(b.email), ['NAV06']);
+	const {
+		rows: [flag]
+	} = await db.query('SELECT id FROM fraud_flags WHERE session_id = $1', [flaggedSession]);
+
+	// The list links each case to its page.
+	const list = await html(manager, '/plant-manager/approvals');
+	expect(list).toContain(`/plant-manager/approvals/fraud/${flag.id}`);
+
+	const detail = await html(manager, `/plant-manager/approvals/fraud/${flag.id}`);
+	const first = detail.split('data-testid="fraud-sighting-first"')[1].split('</article>')[0];
+	const refused = detail.split('data-testid="fraud-sighting-refused"')[1].split('</article>')[0];
+	expect(first).toContain(a.code);
+	expect(refused).toContain(b.code);
+	// IST date and time, formatted: "Thu, 22 Oct 2026" and "12:32 pm".
+	for (const side of [first, refused]) {
+		expect(side).toMatch(/[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4}/);
+		expect(side).toMatch(/\d{2}:\d{2} (am|pm)/);
+		// Both pumps are in this manager's plant, so both group photos open.
+		expect(side).toContain('View group photo');
+	}
+	expect(detail).toContain('Waiting for admin');
+
+	// The vendor of one pump sees it too; nobody else, and a bad id is a plain 404.
+	expect(await html(await login(vendorB.email), `/vendor/fraud/${flag.id}`)).toContain(b.code);
+	const { plantId: otherPlant } = await createArea();
+	const outsider = await login((await createPlantManager(otherPlant)).email);
+	expect((await outsider.get(`/plant-manager/approvals/fraud/${flag.id}`)).status()).toBe(404);
+	const stranger = await login((await createVendor()).email);
+	expect((await stranger.get(`/vendor/fraud/${flag.id}`)).status()).toBe(404);
+	expect((await manager.get('/plant-manager/approvals/fraud/not-an-id')).status()).toBe(404);
+});
+
 test('UI-09 every worker of a session is shown inline, no fold-out list', async () => {
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);

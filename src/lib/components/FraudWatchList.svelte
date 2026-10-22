@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 
 	// Open cross-pump fraud cases (listOpenFraud in src/lib/server/navCounts.ts), read only:
@@ -15,7 +16,12 @@
 		matched_plant: string;
 	};
 
-	let { cases, testId = 'fraud-watch' }: { cases: FraudCase[]; testId?: string } = $props();
+	// detailHref: the read-only side-by-side page for one case.
+	let {
+		cases,
+		detailHref,
+		testId = 'fraud-watch'
+	}: { cases: FraudCase[]; detailHref: (id: string) => string; testId?: string } = $props();
 </script>
 
 <section class="panel fraud-panel" data-testid={testId}>
@@ -28,20 +34,23 @@
 		<ul class="fraud-list scroll-box">
 			{#each cases as item (item.id)}
 				<li>
-					{#if item.face_crop_url}<img
-							src={item.face_crop_url}
-							alt="Face found at two pumps"
-						/>{/if}
-					<span class="fraud-copy">
-						<strong>{item.flagged_pump} · {item.flagged_plant}</strong>
-						<span
-							>Already counted at <strong>{item.matched_pump}</strong> ({item.matched_plant}), face
-							match {Math.round(Number(item.similarity_score) * 100)}%{item.is_operator
-								? ', operator photo'
-								: ''}</span
-						>
-						<small>Found {item.flagged_at} · waiting for admin</small>
-					</span>
+					<a href={detailHref(item.id)}>
+						{#if item.face_crop_url}<img
+								src={item.face_crop_url}
+								alt="Face found at two pumps"
+							/>{/if}
+						<span class="fraud-copy">
+							<strong>{item.flagged_pump} · {item.flagged_plant}</strong>
+							<span
+								>Already counted at <strong>{item.matched_pump}</strong> ({item.matched_plant}),
+								face match {Math.round(Number(item.similarity_score) * 100)}%{item.is_operator
+									? ', operator photo'
+									: ''}</span
+							>
+							<small>Found {item.flagged_at} · waiting for admin</small>
+						</span>
+						<span class="fraud-open">Details <ChevronRight size={16} aria-hidden="true" /></span>
+					</a>
 				</li>
 			{/each}
 		</ul>
@@ -52,7 +61,7 @@
 
 <style>
 	.fraud-panel {
-		border-left: 4px solid var(--alert);
+		border-color: var(--alert);
 	}
 	.fraud-panel h2 {
 		display: flex;
@@ -75,14 +84,29 @@
 		padding: 0;
 		list-style: none;
 	}
-	.fraud-list li {
+	.fraud-list a {
 		display: flex;
+		color: inherit;
+		text-decoration: none;
 		align-items: center;
 		gap: var(--space-3);
 		padding: var(--space-3);
 		background: var(--alert-tint);
 		border: 1px solid var(--alert);
 		border-radius: var(--radius-md);
+		transition: background-color 150ms ease-out;
+	}
+	.fraud-list a:hover {
+		background: rgb(198 40 40 / 14%);
+	}
+	.fraud-open {
+		display: inline-flex;
+		flex: none;
+		align-items: center;
+		gap: 2px;
+		color: var(--alert);
+		font-size: var(--text-sm);
+		font-weight: 700;
 	}
 	.fraud-list img {
 		flex: none;

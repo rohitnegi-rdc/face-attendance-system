@@ -351,6 +351,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | NAV-03 | Admin clears a fraud case as not fraud | Badges drop it; rows no longer red; the face stays as a grey Cleared tile | 1 | P1 | Covered (nav-badges.spec) |
 | NAV-04 | Fraud case between two vendors' pumps | Both vendors get a red Fraud badge and see the case on /vendor/fraud (read only); a third vendor in the same Area sees nothing | 1 | P1 | Covered (nav-badges.spec) |
 | NAV-05 | User opens the fraud list (bug 2026-10-22: Approvals still showed 20 after viewing) | Every badge counts what is new since that user last opened its page: opening plant manager Approvals, vendor Fraud or admin Fraud flags clears it while the cases stay listed; a new case shows 1 | 1 | P1 | Covered (nav-badges.spec) |
+| NAV-06 | Plant manager or vendor opens a fraud case | Side-by-side page: counted-first pump and refused pump, each with face, IST photo date and time, shift and vendor; group photo only for the manager's own plants; 404 for anyone without a pump in the pair | 1 | P1 | Covered (nav-badges.spec) |
 
 ### PATH: sub-path hosting (BASE_PATH)
 

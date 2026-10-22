@@ -139,7 +139,13 @@
 											data-testid="fraud-row-badge">Same person at {row.fraudPumps.join(', ')}</span
 										>{/if}</td
 								>
-								<td><AttendanceEvidenceButtons session={row.evidence} allowFlag={false} /></td>
+								<td
+									><AttendanceEvidenceButtons
+										session={row.evidence}
+										allowFlag={false}
+										fraudCaseHref={(id) => resolve('/plant-manager/approvals/fraud/[id]', { id })}
+									/></td
+								>
 								<td>{row.error_reason ?? ''}</td>
 							</tr>{/each}
 					</tbody>

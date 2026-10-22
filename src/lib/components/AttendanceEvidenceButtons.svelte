@@ -52,11 +52,14 @@
 	let {
 		session,
 		showUnavailable = true,
-		allowFlag = true
+		allowFlag = true,
+		fraudCaseHref
 	}: {
 		session: SessionEvidence;
 		showUnavailable?: boolean;
 		allowFlag?: boolean;
+		// The read-only side-by-side page for a fraud case, where the role has one.
+		fraudCaseHref?: (flagId: string) => string;
 	} = $props();
 
 	const fraud = $derived(session.fraud ?? []);
@@ -217,6 +220,11 @@
 				{selected.fraud.state === 'cleared'
 					? 'Checked by an admin: not fraud.'
 					: 'Fraud check: the same person at two pumps in this Area.'}
+				{#if fraudCaseHref}
+					<a class="fraud-note__link" href={fraudCaseHref(selected.fraud.flagId)}
+						>See both places side by side</a
+					>
+				{/if}
 			</p>
 		{:else if selected.flagged}
 			<StatusBadge tone="attention" label="Error flagged for admin review" />
@@ -322,6 +330,7 @@
 	}
 	.fraud-note {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--space-2);
 		margin: var(--space-4);
@@ -331,6 +340,11 @@
 		border: 1px solid var(--alert);
 		border-radius: var(--radius-md);
 		font-weight: 700;
+	}
+	.fraud-note__link {
+		margin-left: auto;
+		color: inherit;
+		white-space: nowrap;
 	}
 	.fraud-note--cleared {
 		color: var(--ink-muted);

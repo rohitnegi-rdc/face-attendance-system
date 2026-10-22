@@ -15,14 +15,18 @@
 			<p class="eyebrow">Plant manager</p>
 			<h1>Approvals</h1>
 			<p>
-				Shift starts where the operator was more than 100 m from the pump, or the location could not
-				be checked. They are not counted in reports until you approve them.
+				Shift starts held for their location, waiting for your decision, and faces the fraud check
+				found at two pumps. Open a case to see both places side by side.
 			</p>
 		</div>
 	</header>
 
 	{#if data.fraud.length}
-		<FraudWatchList cases={data.fraud} testId="pm-fraud" />
+		<FraudWatchList
+			cases={data.fraud}
+			detailHref={(id) => resolve('/plant-manager/approvals/fraud/[id]', { id })}
+			testId="pm-fraud"
+		/>
 	{/if}
 
 	<section class="panel">
