@@ -5,6 +5,8 @@ import { expect, request, type APIRequestContext } from '@playwright/test';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
 import { randomBytes, randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export const BASE_URL = process.env.REGRESSION_BASE_URL ?? 'http://127.0.0.1:6105';
 const STUB_URL = process.env.REGRESSION_STUB_URL ?? 'http://127.0.0.1:6106';
@@ -257,4 +259,22 @@ export async function clearSettings() {
 export async function count(sql: string, params: unknown[] = []) {
 	const { rows } = await db.query(`SELECT count(*)::int AS n FROM (${sql}) q`, params);
 	return rows[0].n as number;
+}
+
+// JSON log lines of a service started by scripts/run-regression.mjs that contain every `texts`.
+export async function logLines(service: string, texts: string | string[], timeoutMs = 10_000) {
+	const all = [texts].flat();
+	const file = path.join(process.env.REGRESSION_OUTPUT_DIR ?? '', `${service}.log`);
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		const lines = fs.existsSync(file)
+			? fs
+					.readFileSync(file, 'utf8')
+					.split('\n')
+					.filter((l) => all.every((t) => l.includes(t)))
+			: [];
+		if (lines.length) return lines.map((l) => JSON.parse(l.slice(l.indexOf('{'))));
+		if (Date.now() >= deadline) return [];
+		await new Promise((r) => setTimeout(r, 250));
+	}
 }

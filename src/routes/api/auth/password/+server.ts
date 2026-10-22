@@ -3,13 +3,7 @@ import type { RequestHandler } from './$types';
 import { COOKIE_PATH } from '$lib/server/cookies';
 import { hashPassword, signToken } from '$lib/server/auth';
 import { pool } from '$lib/server/db';
-
-const accountTables = {
-	admin: 'admins',
-	vendor: 'vendors',
-	'plant-manager': 'plant_managers',
-	pump: 'pumps'
-} as const;
+import { ACCOUNT_TABLES, passwordProblem } from '$lib/server/passwordReset';
 
 export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 	const user = locals.user;
@@ -18,12 +12,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 	const body = await request.json().catch(() => null);
 	const password = typeof body?.password === 'string' ? body.password : '';
 	const confirmation = typeof body?.confirmation === 'string' ? body.confirmation : '';
-	if (password.length < 12 || password.length > 128) {
-		return json({ error: 'Choose a password between 12 and 128 characters.' }, { status: 400 });
-	}
-	if (password !== confirmation) return json({ error: 'The passwords do not match.' }, { status: 400 });
+	const problem = passwordProblem(password, confirmation);
+	if (problem) return json({ error: problem }, { status: 400 });
 
-	const table = accountTables[user.role];
+	const { table } = ACCOUNT_TABLES[user.role];
 	const passwordHash = await hashPassword(password);
 	const result = await pool.query(
 		`UPDATE ${table} SET password_hash = $1, must_change_password = FALSE WHERE id = $2`,

@@ -1,10 +1,12 @@
-import type { PageServerLoad } from './$types';
+import { fail } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
+import { issueTemporaryPassword } from '$lib/server/passwordReset';
 import { query } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
 
 export const load: PageServerLoad = async ({ locals }) => ({
 	pumps: await query<any>(
-		`SELECT pu.id, pu.pump_code, pl.name AS plant_name, a.name AS area_name,
+		`SELECT pu.id, pu.pump_code, pu.login_email, pl.name AS plant_name, a.name AS area_name,
 		        latest.submitted_at, latest.session_type, latest.status,
 		        COALESCE(ROUND(100.0 * COUNT(dpa.id) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched)
 		        / NULLIF(COUNT(dpa.id), 0), 0), 0)::int AS attendance_pct
@@ -14,6 +16,30 @@ export const load: PageServerLoad = async ({ locals }) => ({
 		 LEFT JOIN LATERAL (SELECT submitted_at, session_type, status FROM attendance_sessions
 		   WHERE pump_id = pu.id ORDER BY submitted_at DESC LIMIT 1) latest ON true
 		 GROUP BY pu.id, pl.name, a.name, latest.submitted_at, latest.session_type, latest.status
-		 ORDER BY a.name, pl.name, pu.pump_code`, [locals.user!.id, todayIST()]
+		 ORDER BY a.name, pl.name, pu.pump_code`,
+		[locals.user!.id, todayIST()]
 	)
 });
+
+export const actions: Actions = {
+	// Only pumps of this manager's own plants.
+	resetPumpPassword: async ({ request, locals }) => {
+		const id = String((await request.formData()).get('id') || '').trim();
+		const [pump] = /^[0-9a-f-]{36}$/i.test(id)
+			? await query<{ id: string }>(
+					`SELECT pu.id FROM pumps pu
+					 JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id AND pma.manager_id = $2
+					 WHERE pu.id = $1`,
+					[id, locals.user!.id]
+				)
+			: [];
+		const issued = pump
+			? await issueTemporaryPassword('pump', pump.id, {
+					role: 'plant-manager',
+					id: locals.user!.id
+				})
+			: null;
+		if (!issued) return fail(404, { message: 'This pump is not in your plants.' });
+		return { success: true, credentials: issued };
+	}
+};

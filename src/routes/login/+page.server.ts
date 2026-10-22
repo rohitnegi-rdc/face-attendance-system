@@ -11,5 +11,6 @@ const oauthErrors: Record<string, string> = {
 
 export const load: PageServerLoad = ({ url }) => ({
 	googleOAuthEnabled: Boolean(googleOAuthConfig()),
-	oauthError: oauthErrors[url.searchParams.get('oauth') ?? ''] ?? ''
+	oauthError: oauthErrors[url.searchParams.get('oauth') ?? ''] ?? '',
+	resetDone: url.searchParams.get('reset') === 'done'
 });

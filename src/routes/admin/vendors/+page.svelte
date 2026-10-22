@@ -112,7 +112,7 @@
 							<td>{vendor.area_name ?? 'National'}</td>
 							<td>{vendor.email}</td>
 							<td>{vendor.pump_count}</td>
-							<td><form method="POST" action="?/resetVendorPassword"><input type="hidden" name="id" value={vendor.id} /><button class="button button--secondary" type="submit">Reset password</button></form></td>
+							<td><form method="POST" action="?/resetVendorPassword"><input type="hidden" name="id" value={vendor.id} /><button class="button button--secondary" type="submit" onclick={(e) => { if (!confirm(`Reset the password of ${vendor.name}? The current password stops working at once.`)) e.preventDefault(); }}>Reset password</button></form></td>
 							<td
 								><a class="button button--secondary" href={resolve(`/admin/vendors/${vendor.id}`)}>View</a
 								></td
@@ -133,7 +133,7 @@
 			<thead><tr><th>Pump</th><th>Vendor</th><th>Plant</th><th>Login email</th><th>Access</th></tr></thead>
 			<tbody>
 				{#each data.pumps as pump}
-					<tr><td>{pump.pump_code}</td><td>{pump.vendor_name}</td><td>{pump.plant_name}</td><td>{pump.login_email}</td><td><form method="POST" action="?/resetPumpPassword"><input type="hidden" name="id" value={pump.id} /><button class="button button--secondary" type="submit">Reset password</button></form></td></tr>
+					<tr><td>{pump.pump_code}</td><td>{pump.vendor_name}</td><td>{pump.plant_name}</td><td>{pump.login_email}</td><td><form method="POST" action="?/resetPumpPassword"><input type="hidden" name="id" value={pump.id} /><button class="button button--secondary" type="submit" onclick={(e) => { if (!confirm(`Reset the password of ${pump.pump_code}? The current password stops working at once.`)) e.preventDefault(); }}>Reset password</button></form></td></tr>
 				{/each}
 				{#if !data.pumps.length}<tr><td colspan="5">No pump accounts.</td></tr>{/if}
 			</tbody>

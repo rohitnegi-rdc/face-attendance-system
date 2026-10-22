@@ -2,8 +2,6 @@
 // within 100 m of the pump's latest GPS reading (at most 30 minutes old). Otherwise the shift
 // starts on hold, the plant manager approves or rejects it on /plant-manager/approvals, and the
 // reports leave the day out until it is approved.
-import fs from 'node:fs';
-import path from 'node:path';
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import {
@@ -17,6 +15,7 @@ import {
 	db,
 	defaultOperatorPhoto,
 	login,
+	logLines,
 	photo,
 	waitForSession,
 	type Pump
@@ -187,24 +186,6 @@ test('LOC-06 only the plant manager of that plant sees it; login returns to the 
 		`next=${encodeURIComponent(`/plant-manager/approvals/${session.id}`)}`
 	);
 });
-
-// JSON log lines of a service started by scripts/run-regression.mjs that contain every `texts`.
-async function logLines(service: string, texts: string | string[], timeoutMs = 10_000) {
-	const all = [texts].flat();
-	const file = path.join(process.env.REGRESSION_OUTPUT_DIR ?? '', `${service}.log`);
-	const deadline = Date.now() + timeoutMs;
-	for (;;) {
-		const lines = fs.existsSync(file)
-			? fs
-					.readFileSync(file, 'utf8')
-					.split('\n')
-					.filter((l) => all.every((t) => l.includes(t)))
-			: [];
-		if (lines.length) return lines.map((l) => JSON.parse(l.slice(l.indexOf('{'))));
-		if (Date.now() >= deadline) return [];
-		await new Promise((r) => setTimeout(r, 250));
-	}
-}
 
 test('LOC-07 held shift emails the plant manager an absolute approval link', async () => {
 	test.skip(!process.env.REGRESSION_OUTPUT_DIR, 'needs the app log from run-regression');

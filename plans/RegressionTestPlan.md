@@ -406,6 +406,17 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | UI-08 | Pump screen language (added 2026-10-22) | Hindi (Devanagari, everyday English work words kept) by default; one EN / हिंदी toggle switches to English and is remembered after reload; only the pump screens | 1 | P1 | Covered (pump-language.spec) |
 | UI-09 | Session log with five workers (added 2026-10-22) | Every worker shown inline by name (a chip; the face opens on click, UI-10) next to View group, in a fixed-height scroll area; no fold-out list; plant manager Attendance has no Person records table | 1 | P1 | Covered (nav-badges.spec) |
 
+### PWD: forgot password and resets (added 2026-10-22)
+
+| ID | Scenario | Expected | Tier | Pri | Status |
+|---|---|---|---|---|---|
+| PWD-01 | Forgot password by email link (`MAIL_LOG_ONLY`) | Link `<origin>/reset-password?token=` logged to the account email; a typo in the confirmation keeps the link; saving signs in with the new password only; the link then shows "no longer works" and refuses a second use (410); logged in `password_reset_log` | 1 | P0 | Covered (password-reset.spec) |
+| PWD-02 | Unknown email | Same "Check your email" answer and help, no email | 1 | P0 | Covered (password-reset.spec) |
+| PWD-03 | System login ending in `.rdc` (no mailbox) | "Ask for a reset": plant manager or admin; no link created | 1 | P1 | Covered (password-reset.spec) |
+| PWD-04 | Expired or made-up link | "This link no longer works", reset refused, old password still works | 1 | P0 | Covered (password-reset.spec) |
+| PWD-05 | Plant manager resets a pump password | Own plant: temporary password shown once, the pump must change it at sign-in, logged; another plant's pump: 404, unchanged | 1 | P0 | Covered (password-reset.spec) |
+| PWD-06 | Admin resets a plant manager password | Temporary password, change forced at sign-in; any open email link stops working | 1 | P1 | Covered (password-reset.spec) |
+
 ### ACC: model accuracy (Tier 3, existing gate)
 
 | ID | Scenario | Expected | Tier | Pri | Status |

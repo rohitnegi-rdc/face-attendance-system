@@ -3,7 +3,7 @@
 // pump_locations).
 // Within range the shift starts normally; otherwise it starts on hold and the plant manager is
 // emailed to approve or reject it. Only areas with location_check_enabled are checked.
-import nodemailer from 'nodemailer';
+import { escapeHtml, mailer, mailFrom, mailLogOnly } from '$lib/server/mail';
 import type { PoolClient } from 'pg';
 import { query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
@@ -120,22 +120,6 @@ export async function checkShiftStartLocation(
 	return { status: 'ok', issue: null, distanceM, ...pump };
 }
 
-let transporter: nodemailer.Transporter | null = null;
-function mailer() {
-	if (!process.env.SMTP_HOST) return null;
-	transporter ??= nodemailer.createTransport({
-		host: process.env.SMTP_HOST,
-		port: Number(process.env.SMTP_PORT ?? 587),
-		secure: process.env.SMTP_SECURE === 'true',
-		auth: process.env.SMTP_USER
-			? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-			: undefined
-	});
-	return transporter;
-}
-
-const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
 // Best effort: the session row is the source of truth and the manager also sees it on the
 // Approvals page, so a mail failure is logged, never thrown.
 export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: string) {
@@ -165,7 +149,7 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 		const to = managers.map((m) => m.email).filter(Boolean);
 		if (!info) return;
 		// Testing: log exactly what would be mailed, send nothing.
-		if (process.env.MAIL_LOG_ONLY === 'true') {
+		if (mailLogOnly()) {
 			logger.info(
 				{
 					sessionId,
@@ -201,7 +185,7 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 			<p>Please call the operator to verify, then approve or reject. The attendance is not counted in reports until you approve it.</p>
 			<p><a href="${approvalUrl}" style="display:inline-block;padding:10px 18px;background:#0b6e69;color:#fff;border-radius:6px;text-decoration:none">Open approval</a></p>`;
 		await client.sendMail({
-			from: process.env.SMTP_FROM || process.env.SMTP_USER,
+			from: mailFrom(),
 			to,
 			cc: process.env.FRAUD_ALERT_CC_EMAIL || undefined,
 			subject,

@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { hashPassword } from '$lib/server/auth';
 import { pool, query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
+import { issueTemporaryPassword } from '$lib/server/passwordReset';
 
 function temporaryPassword() {
 	return randomBytes(12).toString('base64url');
@@ -21,7 +22,11 @@ export const load: PageServerLoad = async () => {
 			 LEFT JOIN pumps pu ON pu.plant_id = p.id
 			 GROUP BY p.id, a.name, pm.id ORDER BY a.name, p.name`
 		),
-		query<any>(`SELECT id, name, email FROM plant_managers ORDER BY name, email`)
+		query<any>(
+			`SELECT pm.id, pm.name, pm.email, COUNT(pma.plant_id)::int AS plant_count
+			 FROM plant_managers pm LEFT JOIN plant_manager_assignments pma ON pma.manager_id = pm.id
+			 GROUP BY pm.id ORDER BY pm.name, pm.email`
+		)
 	]);
 	return { plants, managers };
 };
@@ -31,7 +36,9 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const plantId = String(form.get('plant_id') || '').trim();
 		const name = String(form.get('manager_name') || '').trim();
-		const email = String(form.get('manager_email') || '').trim().toLowerCase();
+		const email = String(form.get('manager_email') || '')
+			.trim()
+			.toLowerCase();
 		if (!plantId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
 			return fail(400, { message: 'Choose a plant and provide a valid manager email.' });
 		}
@@ -48,7 +55,9 @@ export const actions: Actions = {
 			);
 			if (conflictingAccount.rows.length) {
 				await client.query('ROLLBACK');
-				return fail(409, { message: 'That email is already used by an admin, vendor, or pump account.' });
+				return fail(409, {
+					message: 'That email is already used by an admin, vendor, or pump account.'
+				});
 			}
 			const plantResult = await client.query(
 				' SELECT id, manager_name FROM plants WHERE id = $1 FOR UPDATE',
@@ -78,11 +87,18 @@ export const actions: Actions = {
 				);
 				manager = inserted.rows[0];
 			} else {
-				if (name) await client.query('UPDATE plant_managers SET name = $1 WHERE id = $2', [name, manager.id]);
+				if (name)
+					await client.query('UPDATE plant_managers SET name = $1 WHERE id = $2', [
+						name,
+						manager.id
+					]);
 				if (!manager.password_hash) {
 					issuedPassword = temporaryPassword();
 					const passwordHash = await hashPassword(issuedPassword);
-					await client.query('UPDATE plant_managers SET password_hash = $1 WHERE id = $2', [passwordHash, manager.id]);
+					await client.query('UPDATE plant_managers SET password_hash = $1 WHERE id = $2', [
+						passwordHash,
+						manager.id
+					]);
 				}
 			}
 			const assignedManagerName = name || manager.name;
@@ -99,17 +115,21 @@ export const actions: Actions = {
 				 assigned_by = EXCLUDED.assigned_by, assigned_at = now()`,
 				[plantId, manager.id, locals.user!.id]
 			);
-			await client.query(
-				`UPDATE plants SET manager_name = $1, manager_email = $2 WHERE id = $3`,
-				[assignedManagerName, email, plantId]
-			);
+			await client.query(`UPDATE plants SET manager_name = $1, manager_email = $2 WHERE id = $3`, [
+				assignedManagerName,
+				email,
+				plantId
+			]);
 			await client.query(
 				`INSERT INTO plant_manager_assignment_history (plant_id, old_manager_id, new_manager_id, changed_by)
 				 VALUES ($1, $2, $3, $4)`,
 				[plantId, oldManagerId, manager.id, locals.user!.id]
 			);
 			await client.query('COMMIT');
-			logger.info({ adminId: locals.user!.id, plantId, managerId: manager.id, oldManagerId }, 'plant manager assigned');
+			logger.info(
+				{ adminId: locals.user!.id, plantId, managerId: manager.id, oldManagerId },
+				'plant manager assigned'
+			);
 			return {
 				success: true,
 				message: `Plant manager ${assignedManagerName} assigned.`,
@@ -117,11 +137,33 @@ export const actions: Actions = {
 			};
 		} catch (error: any) {
 			await client.query('ROLLBACK').catch(() => {});
-			if (error?.code === '23505') return fail(409, { message: 'A manager account with this email was created at the same time. Refresh and assign again.' });
-			logger.error({ adminId: locals.user!.id, plantId, error: String(error?.message || error) }, 'plant manager assignment failed');
+			if (error?.code === '23505')
+				return fail(409, {
+					message:
+						'A manager account with this email was created at the same time. Refresh and assign again.'
+				});
+			logger.error(
+				{ adminId: locals.user!.id, plantId, error: String(error?.message || error) },
+				'plant manager assignment failed'
+			);
 			return fail(500, { message: 'Could not save the plant manager assignment.' });
 		} finally {
 			client.release();
 		}
+	},
+	resetManagerPassword: async ({ request, locals }) => {
+		const id = String((await request.formData()).get('id') || '').trim();
+		const issued = /^[0-9a-f-]{36}$/i.test(id)
+			? await issueTemporaryPassword('plant-manager', id, { role: 'admin', id: locals.user!.id })
+			: null;
+		if (!issued)
+			return fail(404, { formKind: 'reset', message: 'Plant manager account not found.' });
+		return {
+			formKind: 'reset',
+			success: true,
+			message:
+				'Temporary password issued. It is shown once; the manager must replace it at sign-in.',
+			credentials: issued
+		};
 	}
 };

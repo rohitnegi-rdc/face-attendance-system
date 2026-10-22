@@ -2,6 +2,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { query, queryOne } from '$lib/server/db';
 import { fail } from '@sveltejs/kit';
 import { hashPassword } from '$lib/server/auth';
+import { issueTemporaryPassword } from '$lib/server/passwordReset';
 import { slugify, slugifyLogin } from '$lib/server/csvImport';
 import { randomBytes } from 'node:crypto';
 
@@ -135,34 +136,25 @@ export const actions: Actions = {
 			credentials: { email: loginEmail, password }
 		};
 	},
-	resetVendorPassword: async ({ request }) => {
-		const form = await request.formData();
-		const id = String(form.get('id') || '').trim();
-		const password = temporaryPassword();
-		const result = await query(
-			'UPDATE vendors SET password_hash = $1, must_change_password = TRUE WHERE id = $2 RETURNING email',
-			[await hashPassword(password), id]
-		);
-		if (!result.length) return fail(404, { formKind: 'reset', message: 'Vendor account not found.' });
-		return {
-			formKind: 'reset', success: true,
-			message: 'Temporary password issued. It is shown once; the user must replace it at sign-in.',
-			credentials: { email: result[0].email, password }
-		};
-	},
-	resetPumpPassword: async ({ request }) => {
-		const form = await request.formData();
-		const id = String(form.get('id') || '').trim();
-		const password = temporaryPassword();
-		const result = await query(
-			'UPDATE pumps SET password_hash = $1, must_change_password = TRUE WHERE id = $2 RETURNING login_email',
-			[await hashPassword(password), id]
-		);
-		if (!result.length) return fail(404, { formKind: 'reset', message: 'Pump account not found.' });
-		return {
-			formKind: 'reset', success: true,
-			message: 'Temporary password issued. It is shown once; the user must replace it at sign-in.',
-			credentials: { email: result[0].login_email, password }
-		};
-	}
+	resetVendorPassword: async ({ request, locals }) => resetAccount('vendor', request, locals),
+	resetPumpPassword: async ({ request, locals }) => resetAccount('pump', request, locals)
 };
+
+async function resetAccount(role: 'vendor' | 'pump', request: Request, locals: App.Locals) {
+	const id = String((await request.formData()).get('id') || '').trim();
+	const issued = /^[0-9a-f-]{36}$/i.test(id)
+		? await issueTemporaryPassword(role, id, { role: 'admin', id: locals.user!.id })
+		: null;
+	if (!issued) {
+		return fail(404, {
+			formKind: 'reset',
+			message: role === 'vendor' ? 'Vendor account not found.' : 'Pump account not found.'
+		});
+	}
+	return {
+		formKind: 'reset',
+		success: true,
+		message: 'Temporary password issued. It is shown once; the user must replace it at sign-in.',
+		credentials: issued
+	};
+}
