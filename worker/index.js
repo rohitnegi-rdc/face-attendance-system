@@ -53,10 +53,15 @@ const PHOTO_SPOOF_CHECK_ENABLED = process.env.PHOTO_SPOOF_CHECK_ENABLED === 'tru
 // The pump screen shows the session's error_reason, so it gets a sentence an operator can act
 // on. The technical error stays in attendance_jobs.last_error and the log.
 class AiServiceError extends Error {}
+// The operator photo has no face. Retrying the same photo cannot help, so it fails at once.
+class OperatorPhotoError extends Error {}
 
 function userFacingReason(err) {
 	if (err instanceof AiServiceError) {
 		return 'The face service did not answer. Tap Retry, or contact Admin if it keeps happening.';
+	}
+	if (err instanceof OperatorPhotoError) {
+		return 'No face was found in the operator photo. Tap Retry and take a clear photo of the operator.';
 	}
 	if (err?.code === 'ENOENT') {
 		return 'The photo file is missing on the server. Tap Retry and take the photo again.';
@@ -199,6 +204,47 @@ async function dropBackup(sessionId) {
 	}
 }
 
+function cosineSimilarity(a, b) {
+	let dot = 0;
+	let normA = 0;
+	let normB = 0;
+	for (let i = 0; i < a.length; i++) {
+		dot += a[i] * b[i];
+		normA += a[i] * a[i];
+		normB += b[i] * b[i];
+	}
+	return dot / Math.sqrt(normA * normB);
+}
+
+// The operator photo should hold one person; if others got in, the biggest face is the operator.
+function largestFace(faces) {
+	const area = (face) =>
+		Array.isArray(face.bbox) ? (face.bbox[2] - face.bbox[0]) * (face.bbox[3] - face.bbox[1]) : 0;
+	return faces.reduce((best, face) => (!best || area(face) > area(best) ? face : best), null);
+}
+
+// Adds the operator to the session's faces. If the operator is also in the group photo, that
+// group face is marked as the operator instead, so the same person is counted once.
+function withOperatorFace(groupFaces, operatorFace) {
+	const faces = [...groupFaces];
+	if (!operatorFace) return faces;
+	let bestIndex = -1;
+	let bestSimilarity = -1;
+	faces.forEach((face, index) => {
+		const similarity = cosineSimilarity(face.embedding, operatorFace.embedding);
+		if (similarity > bestSimilarity) {
+			bestSimilarity = similarity;
+			bestIndex = index;
+		}
+	});
+	if (bestIndex >= 0 && bestSimilarity >= FACE_MATCH_THRESHOLD) {
+		faces[bestIndex] = { ...faces[bestIndex], is_operator: true };
+	} else {
+		faces.push({ ...operatorFace, is_operator: true });
+	}
+	return faces;
+}
+
 function toVectorLiteral(embedding) {
 	return `[${embedding.join(',')}]`;
 }
@@ -310,17 +356,24 @@ async function processJob(job) {
 		// jobs (see loop()) run this phase concurrently, which is what actually shortens a
 		// same-Area burst.
 		const photoBuffer = await fs.readFile(session.photo_url);
+		// Sessions from before the operator photo (030_operator_photo.sql) have none.
+		const operatorBuffer = session.operator_photo_url
+			? await fs.readFile(session.operator_photo_url)
+			: null;
 		const extractStart = Date.now();
-		const [extraction, recaptureCheck] = await Promise.all([
+		const [extraction, operatorExtraction, recaptureCheck] = await Promise.all([
 			extractFaces(photoBuffer, requestId),
+			operatorBuffer ? extractFaces(operatorBuffer, requestId) : Promise.resolve(null),
 			!PHOTO_SPOOF_CHECK_ENABLED
 				? Promise.resolve({ status: 'disabled' })
 				: session.fraud_resolution === 'marked_normal'
 					? Promise.resolve({ status: 'skipped_marked_normal' })
 					: checkRecapture(photoBuffer)
 		]);
+		const operatorFace = operatorExtraction ? largestFace(operatorExtraction.faces || []) : null;
+		if (operatorExtraction && !operatorFace) throw new OperatorPhotoError('no face in operator photo');
 		const {
-			faces,
+			faces: groupFaces,
 			image_preprocessing: imagePreprocessing,
 			normalized_photo_base64: normalizedPhotoBase64,
 			whole_image_liveness: wholeImageLiveness
@@ -328,6 +381,7 @@ async function processJob(job) {
 		if (normalizedPhotoBase64) {
 			await fs.writeFile(session.photo_url, Buffer.from(normalizedPhotoBase64, 'base64'));
 		}
+		const faces = withOperatorFace(groupFaces, operatorFace);
 		const extractMs = Date.now() - extractStart;
 		const livenessSummary = faces.reduce(
 			(summary, face) => {
@@ -348,6 +402,7 @@ async function processJob(job) {
 				session.id,
 				JSON.stringify({
 					ai_extraction_ms: extractMs,
+					operator_faces_detected: operatorExtraction ? operatorExtraction.faces.length : null,
 					image_preprocessing: imagePreprocessing || null,
 					anti_spoofing: livenessSummary,
 					whole_image_liveness: wholeImageLiveness || null,
@@ -506,8 +561,8 @@ async function processJob(job) {
 							// The face is skipped below, so keep it on the flag: an admin who rules the
 							// flag "not fraud" needs it to mark this worker present at this pump.
 							`INSERT INTO fraud_flags (session_id, person_id, matched_at_pump_id, matched_session_id,
-					                          similarity_score, face_embedding, face_crop_url)
-					 VALUES ($1, $2, $3, $4, $5, $6::vector, $7)`,
+					                          similarity_score, face_embedding, face_crop_url, is_operator)
+					 VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8)`,
 							[
 								session.id,
 								crossMatch.person_id,
@@ -515,7 +570,8 @@ async function processJob(job) {
 								crossMatch.matched_session_id,
 								crossMatch.similarity,
 								vec,
-								face.crop_base64 ? `data:image/jpeg;base64,${face.crop_base64}` : null
+								face.crop_base64 ? `data:image/jpeg;base64,${face.crop_base64}` : null,
+								Boolean(face.is_operator)
 							]
 						);
 						fraudFlags.push({ person_id: crossMatch.person_id, similarity: crossMatch.similarity });
@@ -546,14 +602,17 @@ async function processJob(job) {
 					let personId;
 					if (localMatch && localMatch.similarity >= FACE_MATCH_THRESHOLD) {
 						personId = localMatch.person_id;
-						await client.query(`UPDATE persons SET last_seen_at = now() WHERE id = $1`, [personId]);
+						await client.query(
+							`UPDATE persons SET last_seen_at = now(), is_operator = is_operator OR $2 WHERE id = $1`,
+							[personId, Boolean(face.is_operator)]
+						);
 						matchedPersons.push({ person_id: personId, similarity: localMatch.similarity });
 					} else {
 						const { rows: created } = await client.query(
-							`INSERT INTO persons (pump_id, status, display_seq)
-					 VALUES ($1, 'pending_review', (SELECT COALESCE(MAX(display_seq), 0) + 1 FROM persons WHERE pump_id = $1))
+							`INSERT INTO persons (pump_id, status, display_seq, is_operator)
+					 VALUES ($1, 'pending_review', (SELECT COALESCE(MAX(display_seq), 0) + 1 FROM persons WHERE pump_id = $1), $2)
 					 RETURNING id`,
-							[session.pump_id]
+							[session.pump_id, Boolean(face.is_operator)]
 						);
 						personId = created[0].id;
 						newPersons.push({ person_id: personId });
@@ -573,9 +632,11 @@ async function processJob(job) {
 					await client.query(
 						`INSERT INTO attendance_face_evidence
 				   (session_id, person_id, face_crop_url, match_confidence, liveness_status,
-				    liveness_score, liveness_quality, liveness_reason, liveness_model, liveness_inference_ms)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+				    liveness_score, liveness_quality, liveness_reason, liveness_model, liveness_inference_ms,
+				    is_operator)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 				 ON CONFLICT (session_id, person_id) DO UPDATE SET
+				   is_operator = attendance_face_evidence.is_operator OR EXCLUDED.is_operator,
 				   face_crop_url = EXCLUDED.face_crop_url,
 				   match_confidence = EXCLUDED.match_confidence,
 				   liveness_status = EXCLUDED.liveness_status,
@@ -596,7 +657,8 @@ async function processJob(job) {
 							face.liveness_quality === 'sufficient' ? 'sufficient' : 'insufficient',
 							face.liveness_reason ?? null,
 							face.liveness_model ?? null,
-							face.liveness_inference_ms ?? null
+							face.liveness_inference_ms ?? null,
+							Boolean(face.is_operator)
 						]
 					);
 					// Keep gallery capped at GALLERY_SIZE (drop oldest beyond it).
@@ -665,7 +727,7 @@ async function processJob(job) {
 		);
 	} catch (err) {
 		const errorMessage = String(err?.message || err);
-		const retrying = job.attempts < MAX_JOB_ATTEMPTS;
+		const retrying = job.attempts < MAX_JOB_ATTEMPTS && !(err instanceof OperatorPhotoError);
 		const retryInSeconds = JOB_RETRY_BASE_SECONDS * 2 ** (job.attempts - 1);
 		await pool.query(
 			`UPDATE attendance_jobs

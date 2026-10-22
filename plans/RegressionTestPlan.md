@@ -328,6 +328,16 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | BAK-03 | Same face already at another pump in the Area | Copy kept as `fraud` | 1 | P0 | Covered |
 | BAK-04 | Rejected upload (duplicate photo) | No copy saved | 1 | P1 | Covered |
 
+### OPR: operator photo with every shift photo (operator.spec, added 2026-10-22)
+
+| ID | Scenario | Expected | Tier | Pri | Status |
+|---|---|---|---|---|---|
+| OPR-01 | Shift photo sent without the operator photo | 400 "Take the operator photo too.", no session stored | 1 | P0 | Covered (operator.spec) |
+| OPR-02 | Operator not in the group photo | One extra person, `persons.is_operator` and the face evidence tagged, status API lists them as Operator and gives `operator_photo_url` | 1 | P0 | Covered (operator.spec) |
+| OPR-03 | Operator also in the group photo | Counted once: that group face is tagged Operator, no extra person | 1 | P0 | Covered (operator.spec) |
+| OPR-04 | Operator photo with no face | Session fails at once (1 attempt, no retries) with "No face was found in the operator photo" | 1 | P1 | Covered (operator.spec) |
+| OPR-05 | Operator photo served, then resent | `?kind=operator` serves the exact bytes; the same operator photo again is 409; the group photo reused as operator photo is 400 | 1 | P1 | Covered (operator.spec) |
+
 ### PATH: sub-path hosting (BASE_PATH)
 
 | ID | Scenario | Expected | Tier | Pri | Status |

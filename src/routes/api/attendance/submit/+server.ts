@@ -45,6 +45,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 
 	const form = await request.formData();
 	const file = form.get('photo') as File | null;
+	// A photo of the pump operator alone, required with every shift photo (030_operator_photo.sql).
+	const operatorFile = form.get('operator_photo') as File | null;
 	const coordinate = (name: string) => {
 		const value = Number(form.get(name));
 		return form.get(name) && Number.isFinite(value) ? value : null;
@@ -58,12 +60,30 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 	if (file.type && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
 		return json({ error: 'Upload a JPEG, PNG, or WebP photo.' }, { status: 415 });
 	}
+	if (!operatorFile) {
+		return json({ error: 'Take the operator photo too.' }, { status: 400 });
+	}
+	if (operatorFile.size <= 0 || operatorFile.size > MAX_UPLOAD_BYTES) {
+		return json({ error: 'The operator photo must be smaller than 18 MB.' }, { status: 413 });
+	}
+	if (operatorFile.type && !['image/jpeg', 'image/png', 'image/webp'].includes(operatorFile.type)) {
+		return json({ error: 'The operator photo must be a JPEG, PNG, or WebP.' }, { status: 415 });
+	}
 
 	const buffer = Buffer.from(await file.arrayBuffer());
 	const photoHash = crypto.createHash('sha256').update(buffer).digest('hex');
+	const operatorBuffer = Buffer.from(await operatorFile.arrayBuffer());
+	const operatorHash = crypto.createHash('sha256').update(operatorBuffer).digest('hex');
+	if (operatorHash === photoHash) {
+		return json(
+			{ error: 'Take a separate photo of the operator, not the group photo again.' },
+			{ status: 400 }
+		);
+	}
 	const client = await pool.connect();
 	let photoPath: string | null = null;
 	let backupPath: string | null = null;
+	let operatorPath: string | null = null;
 
 	try {
 		await client.query('BEGIN');
@@ -73,9 +93,11 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		);
 		// Checked first: a resubmitted photo is the most accurate reason to refuse, whatever
 		// state today's sessions are in.
+		// Either photo counts: a group photo sent again as the operator photo is a duplicate too.
 		const duplicate = await client.query(
-			'SELECT 1 FROM attendance_sessions WHERE photo_hash = $1',
-			[photoHash]
+			`SELECT 1 FROM attendance_sessions
+			 WHERE photo_hash = ANY($1::text[]) OR operator_photo_hash = ANY($1::text[])`,
+			[[photoHash, operatorHash]]
 		);
 		if (duplicate.rowCount) throw new SubmissionError('Duplicate photo - already submitted');
 		const settings = await getAttendanceSettings(client);
@@ -150,14 +172,18 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		await fs.mkdir(BACKUP_DIR, { recursive: true });
 		backupPath = path.join(BACKUP_DIR, path.basename(photoPath));
 		await fs.writeFile(backupPath, buffer);
+		// The worker never rewrites the operator photo, so it needs no separate backup copy.
+		operatorPath = path.join(UPLOAD_DIR, `${randomUUID()}-operator.jpg`);
+		await fs.writeFile(operatorPath, operatorBuffer);
 
 		const sessionResult = await client.query(
 			`INSERT INTO attendance_sessions
 			   (pump_id, session_date, session_type, status, pairing_status,
 			    photo_url, photo_hash, gps_lat, gps_lng, paired_session_id,
 			    location_status, location_issue, location_distance_m,
-			    pump_gps_lat, pump_gps_lng, pump_gps_at)
-			 VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			    pump_gps_lat, pump_gps_lng, pump_gps_at, operator_photo_url, operator_photo_hash)
+			 VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+			         $16, $17)
 			 RETURNING id`,
 			[
 				pumpId,
@@ -174,7 +200,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				location?.distanceM ?? null,
 				location?.pumpLat ?? null,
 				location?.pumpLng ?? null,
-				location?.pumpAt ?? null
+				location?.pumpAt ?? null,
+				operatorPath,
+				operatorHash
 			]
 		);
 		const session = sessionResult.rows[0];
@@ -233,6 +261,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		await client.query('ROLLBACK').catch(() => {});
 		if (photoPath) await fs.unlink(photoPath).catch(() => {});
 		if (backupPath) await fs.unlink(backupPath).catch(() => {});
+		if (operatorPath) await fs.unlink(operatorPath).catch(() => {});
 
 		if (error instanceof SubmissionError) {
 			logger.warn({ pumpId, requestId, reason: error.message }, 'attendance submission rejected');

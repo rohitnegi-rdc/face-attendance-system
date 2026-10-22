@@ -28,7 +28,7 @@
 
 <svelte:head
 	><title
-		>{personDisplayLabel(data.person.pump_code, data.person.display_seq)} | Face Attendance</title
+		>{personDisplayLabel(data.person.pump_code, data.person.display_seq, data.person.is_operator)} | Face Attendance</title
 	></svelte:head
 >
 
@@ -39,7 +39,7 @@
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Anonymous person</p>
-			<h1>{personDisplayLabel(data.person.pump_code, data.person.display_seq)}</h1>
+			<h1>{personDisplayLabel(data.person.pump_code, data.person.display_seq, data.person.is_operator)}</h1>
 			<p>
 				First seen {formatDate(data.person.first_seen_at)} · Last seen {formatDate(
 					data.person.last_seen_at

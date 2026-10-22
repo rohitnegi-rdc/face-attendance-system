@@ -6,7 +6,7 @@ import { shiftStillOpen } from '$lib/server/shiftSessions';
 
 export const load: PageServerLoad = async ({ params }) => {
 	const person = await queryOne<any>(
-		`SELECT p.id, p.display_seq, p.first_seen_at, p.last_seen_at, p.status,
+		`SELECT p.id, p.display_seq, p.is_operator, p.first_seen_at, p.last_seen_at, p.status,
 		        pu.id AS pump_id, pu.pump_code
 		 FROM persons p JOIN pumps pu ON pu.id = p.pump_id
 		 WHERE p.id = $1`,

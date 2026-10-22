@@ -134,7 +134,8 @@ export async function deleteSession(
 ): Promise<CleanupResult> {
 	const result = emptyResult();
 	const { rows } = await client.query(
-		`SELECT id, pump_id, session_date, session_type, photo_url, paired_session_id
+		`SELECT id, pump_id, session_date, session_type, photo_url, operator_photo_url,
+		        paired_session_id
 		 FROM attendance_sessions WHERE id = $1 FOR UPDATE`,
 		[sessionId]
 	);
@@ -208,6 +209,7 @@ export async function deleteSession(
 
 	result.sessionIds.push(session.id);
 	if (session.photo_url) result.photoPaths.push(session.photo_url);
+	if (session.operator_photo_url) result.photoPaths.push(session.operator_photo_url);
 	return result;
 }
 

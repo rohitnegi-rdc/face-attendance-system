@@ -64,7 +64,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	);
 
 	const roster = await query<any>(
-		`SELECT p.id, p.display_seq, p.first_seen_at, p.last_seen_at,
+		`SELECT p.id, p.display_seq, p.is_operator, p.first_seen_at, p.last_seen_at,
 		        COUNT(dpa.id) FILTER (
 		          WHERE dpa.morning_matched AND dpa.evening_matched
 		        ) AS days_present,
@@ -129,7 +129,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const sessionIds = sessionLog.map((s: any) => s.id);
 	const faceEvidence = sessionIds.length
 		? await query<any>(
-				`SELECT afe.session_id, afe.person_id, afe.face_crop_url, p.display_seq,
+				`SELECT afe.session_id, afe.person_id, afe.face_crop_url, p.display_seq, p.is_operator,
 			        EXISTS (
 			          SELECT 1 FROM attendance_review_flags arf
 			          WHERE arf.session_id = afe.session_id
@@ -147,7 +147,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		const people = evidenceBySession.get(face.session_id) ?? [];
 		people.push({
 			personId: face.person_id,
-			label: `Worker ${face.display_seq}`,
+			label: `Worker ${face.display_seq}${face.is_operator ? ' (Operator)' : ''}`,
 			cropUrl: face.face_crop_url,
 			flagged: face.flagged
 		});

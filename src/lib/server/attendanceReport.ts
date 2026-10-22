@@ -36,6 +36,7 @@ type DailyRow = {
 	session_date: string;
 	person_id: string;
 	display_seq: number;
+	is_operator: boolean;
 	pump_code: string;
 	vendor_name: string;
 	plant_name: string;
@@ -202,7 +203,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 			  AND NOT ${heldShiftDay('s.pump_id', 's.session_date')}
 			GROUP BY s.pump_id, s.session_date
 		)
-		SELECT w.session_date::text AS session_date, p.id AS person_id, p.display_seq,
+		SELECT w.session_date::text AS session_date, p.id AS person_id, p.display_seq, p.is_operator,
 		       sc.pump_code, sc.vendor_name, sc.plant_name, sc.area_name,
 		       -- From real attendance too: a shift moved to an earlier date predates first_seen_at.
 		       LEAST((p.first_seen_at AT TIME ZONE 'Asia/Kolkata')::date,
@@ -538,7 +539,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 			{ header: 'Fraud flags', key: 'fraud', width: 10, align: 'center' }
 		],
 		byPerson.map((g) => ({
-			person: personDisplayLabel(g.first.pump_code, g.first.display_seq),
+			person: personDisplayLabel(g.first.pump_code, g.first.display_seq, g.first.is_operator),
 			pump: g.first.pump_code,
 			plant: g.first.plant_name,
 			vendor: g.first.vendor_name,
@@ -586,7 +587,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		],
 		daily.filter(wanted).map((r) => ({
 			date: excelDate(r.session_date),
-			person: personDisplayLabel(r.pump_code, r.display_seq),
+			person: personDisplayLabel(r.pump_code, r.display_seq, r.is_operator),
 			pump: r.pump_code,
 			plant: r.plant_name,
 			result: dayResult(r),

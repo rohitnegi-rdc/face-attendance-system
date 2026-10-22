@@ -21,7 +21,7 @@
 	const entities = $derived(
 		data.roster.map((person: any) => ({
 			id: person.id,
-			label: personDisplayLabel(data.pump.pump_code, person.display_seq)
+			label: personDisplayLabel(data.pump.pump_code, person.display_seq, person.is_operator)
 		}))
 	);
 	const dailyBreakdownTotals = $derived(
@@ -369,7 +369,7 @@
 					>{#each data.roster as person}<tr
 							><td
 								><a href={resolve(`/admin/persons/${person.id}`)}
-									>{personDisplayLabel(data.pump.pump_code, person.display_seq)}</a
+									>{personDisplayLabel(data.pump.pump_code, person.display_seq, person.is_operator)}</a
 								></td
 							><td>{formatDate(person.first_seen_at)}</td><td>{formatDate(person.last_seen_at)}</td
 							><td>{person.days_present}</td><td>{person.days_morning_only}</td><td

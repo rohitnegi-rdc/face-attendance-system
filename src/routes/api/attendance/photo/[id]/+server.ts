@@ -6,14 +6,17 @@ import { queryOne } from '$lib/server/db';
 
 const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || './uploads');
 
-export const GET: RequestHandler = async ({ params, locals }) => {
+// ?kind=operator serves the operator photo of the session instead of the group photo.
+export const GET: RequestHandler = async ({ params, locals, url }) => {
 	if (!locals.user) return error(401, 'Unauthorized');
 
 	const session = await queryOne<any>(
-		'SELECT pump_id, photo_url FROM attendance_sessions WHERE id = $1',
+		'SELECT pump_id, photo_url, operator_photo_url FROM attendance_sessions WHERE id = $1',
 		[params.id]
 	);
-	if (!session?.photo_url) return error(404, 'Photo not found');
+	const storedPath =
+		url.searchParams.get('kind') === 'operator' ? session?.operator_photo_url : session?.photo_url;
+	if (!storedPath) return error(404, 'Photo not found');
 	if (locals.user.role === 'pump' && session.pump_id !== locals.user.id) {
 		return error(403, 'Forbidden');
 	}
@@ -27,7 +30,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		if (!assigned) return error(403, 'Forbidden');
 	}
 
-	const photoPath = path.resolve(session.photo_url);
+	const photoPath = path.resolve(storedPath);
 	const relative = path.relative(UPLOAD_DIR, photoPath);
 	if (relative.startsWith('..') || path.isAbsolute(relative)) {
 		return error(403, 'Invalid photo path');

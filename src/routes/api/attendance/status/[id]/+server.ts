@@ -27,7 +27,8 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 	const matched = await query<any>(
 		`SELECT p.id AS person_id, p.display_seq, pu.pump_code, dpa.morning_matched, dpa.evening_matched,
 		        pfv.source_photo_crop_url, afe.liveness_status, afe.liveness_score,
-		        afe.liveness_quality, afe.liveness_reason, afe.liveness_model
+		        afe.liveness_quality, afe.liveness_reason, afe.liveness_model,
+		        COALESCE(afe.is_operator, FALSE) AS is_operator
 		 FROM person_face_vectors current_vector
 		 JOIN persons p ON p.id = current_vector.person_id
 		 JOIN pumps pu ON pu.id = p.pump_id
@@ -40,7 +41,8 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 		   AND p.first_seen_at < $3
 		 GROUP BY p.id, p.display_seq, pu.pump_code, dpa.morning_matched,
 		          dpa.evening_matched, pfv.source_photo_crop_url, afe.liveness_status,
-		          afe.liveness_score, afe.liveness_quality, afe.liveness_reason, afe.liveness_model`,
+		          afe.liveness_score, afe.liveness_quality, afe.liveness_reason, afe.liveness_model,
+		          afe.is_operator`,
 		[session.id, session.session_date, session.submitted_at]
 	);
 
@@ -48,7 +50,7 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 		`SELECT p.id AS person_id, p.display_seq, pu.pump_code, p.first_seen_at,
 		        MIN(pfv.source_photo_crop_url) AS source_photo_crop_url,
 		        afe.liveness_status, afe.liveness_score, afe.liveness_quality,
-		        afe.liveness_reason, afe.liveness_model
+		        afe.liveness_reason, afe.liveness_model, COALESCE(afe.is_operator, FALSE) AS is_operator
 		 FROM person_face_vectors pfv
 		 JOIN persons p ON p.id = pfv.person_id
 		 JOIN pumps pu ON pu.id = p.pump_id
@@ -56,7 +58,8 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 		   ON afe.session_id = pfv.session_id AND afe.person_id = pfv.person_id
 		 WHERE pfv.session_id = $1 AND p.first_seen_at >= $2
 		 GROUP BY p.id, p.display_seq, pu.pump_code, p.first_seen_at, afe.liveness_status,
-		          afe.liveness_score, afe.liveness_quality, afe.liveness_reason, afe.liveness_model`,
+		          afe.liveness_score, afe.liveness_quality, afe.liveness_reason, afe.liveness_model,
+		          afe.is_operator`,
 		[session.id, session.submitted_at]
 	);
 
@@ -65,7 +68,9 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 		        other_pump.id AS other_pump_id, other_pump.pump_code AS other_pump_code,
 		        other_plant.name AS other_plant_name,
 		        source_pump.pump_code AS pump_code, p.display_seq,
-		        concat(source_pump.pump_code, ' Worker ', p.display_seq) AS person_label,
+		        concat(source_pump.pump_code, ' Worker ', p.display_seq,
+		               CASE WHEN ff.is_operator THEN ' (Operator)' ELSE '' END) AS person_label,
+		        ff.is_operator,
 		        matched_session.submitted_at AS matched_submitted_at,
 		        -- The face from this photo (stored on the flag); older flags fall back to the
 		        -- person's latest crop.
@@ -113,6 +118,9 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 		// page uses it from /pump, so it would drop BASE_PATH. Anchor it to an absolute path.
 		photo_url: session.photo_url
 			? new URL(resolve(`/api/attendance/photo/${session.id}`), url).pathname
+			: null,
+		operator_photo_url: session.operator_photo_url
+			? new URL(resolve(`/api/attendance/photo/${session.id}`), url).pathname + '?kind=operator'
 			: null,
 		error_reason: session.error_reason,
 		matched,

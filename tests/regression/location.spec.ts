@@ -14,6 +14,7 @@ import {
 	createPlantManager,
 	createPump,
 	db,
+	defaultOperatorPhoto,
 	login,
 	photo,
 	waitForSession,
@@ -44,8 +45,14 @@ async function startShift(
 	phone: { lat: number; lng: number } | null,
 	faces = ['loc-a']
 ) {
+	const group = await photo(faces);
 	const multipart: Record<string, any> = {
-		photo: { name: 'photo.jpg', mimeType: 'image/jpeg', buffer: await photo(faces) }
+		photo: { name: 'photo.jpg', mimeType: 'image/jpeg', buffer: group },
+		operator_photo: {
+			name: 'operator.jpg',
+			mimeType: 'image/jpeg',
+			buffer: await defaultOperatorPhoto(group)
+		}
 	};
 	if (phone) {
 		multipart.lat = String(phone.lat);

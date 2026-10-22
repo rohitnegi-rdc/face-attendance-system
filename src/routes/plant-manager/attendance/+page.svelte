@@ -110,7 +110,7 @@
 					><tbody
 						>{#each data.records as row}<tr
 								><td>{formatDate(row.session_date)}</td><td
-									>{personDisplayLabel(row.pump_code, row.display_seq)}</td
+									>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator)}</td
 								><td>{row.pump_code}</td><td>{row.plant_name}</td><td
 									><StatusBadge
 										tone={row.morning_matched ? 'success' : 'neutral'}

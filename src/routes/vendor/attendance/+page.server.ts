@@ -53,7 +53,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		),
 		query<any>(
 			`SELECT dpa.session_date, dpa.morning_matched, dpa.evening_matched,
-			        p.display_seq, pu.pump_code, pl.name AS plant_name, a.name AS area_name
+			        p.display_seq, p.is_operator, pu.pump_code, pl.name AS plant_name, a.name AS area_name
 			 FROM daily_person_attendance dpa
 			 JOIN persons p ON p.id = dpa.person_id
 			 JOIN pumps pu ON pu.id = dpa.pump_id

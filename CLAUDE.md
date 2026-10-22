@@ -31,6 +31,7 @@ Person records never merge across pumps — same human at two pumps = two Person
 - All date/time logic is explicit `Asia/Kolkata`, computed in code — never rely on container/DB default TZ.
 - Matching + fraud-check + person upsert for one session run inside one Postgres `SERIALIZABLE`-isolation transaction (optimistic concurrency — no blocking Area lock; conflicting concurrent writes abort with `40001`/`40P01` and are retried) — never remove this without understanding the race it prevents (`docs/Architecture.md` §9).
 - Duplicate photo (same sha256 hash) is rejected, never double-counted.
+- Every shift photo comes with a required operator photo (`operator_photo`, migration 030). The worker takes its largest face; if it matches a group face (>= threshold) that face is tagged `is_operator`, otherwise it is added as one more face. Never count the operator twice. No face in it fails the session at once (`OperatorPhotoError`, no retries).
 
 ## Where things live
 

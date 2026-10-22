@@ -47,7 +47,7 @@
 												alt=""
 												loading="lazy"
 											/>{:else}<span class="crop-placeholder"></span>{/if}<strong
-											>{personDisplayLabel(person.pump_code, person.display_seq)}</strong
+											>{personDisplayLabel(person.pump_code, person.display_seq, person.is_operator)}</strong
 										></span
 									></td
 								><td>{person.pump_code}</td><td>{formatDate(person.first_seen_at)}</td><td

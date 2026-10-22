@@ -30,6 +30,7 @@
 		liveness_status?: 'live' | 'suspicious' | 'unverified';
 		liveness_score?: number | null;
 		liveness_reason?: string | null;
+		is_operator?: boolean;
 	};
 
 	// null when the spoof check is switched off (ai-service ANTI_SPOOF_ENABLED=false): show no badge.
@@ -64,6 +65,11 @@
 	}
 	let selectedFile = $state<File | null>(null);
 	let previewUrl = $state('');
+	// The operator photo, required with every shift photo: the pump operator alone.
+	let operatorFile = $state<File | null>(null);
+	let operatorPreviewUrl = $state('');
+	// Which photo the open camera or screen capture is taking.
+	let captureTarget = $state<'group' | 'operator'>('group');
 	let result = $state<any>(null);
 	let today = $state<any>(null);
 	let todayLoading = $state(true);
@@ -188,6 +194,36 @@
 		previewUrl = '';
 	}
 
+	function clearOperatorPreview() {
+		if (operatorPreviewUrl) URL.revokeObjectURL(operatorPreviewUrl);
+		operatorPreviewUrl = '';
+	}
+
+	// Puts a captured frame into the photo the capture was started for.
+	function useCapturedFile(file: File) {
+		if (captureTarget === 'operator') {
+			clearOperatorPreview();
+			operatorFile = file;
+			operatorPreviewUrl = URL.createObjectURL(file);
+		} else {
+			clearPreview();
+			selectedFile = file;
+			previewUrl = URL.createObjectURL(file);
+		}
+	}
+
+	// Clears the photo about to be retaken; the other one is kept.
+	function clearTarget(target: 'group' | 'operator') {
+		captureTarget = target;
+		if (target === 'operator') {
+			clearOperatorPreview();
+			operatorFile = null;
+		} else {
+			clearPreview();
+			selectedFile = null;
+		}
+	}
+
 	function stopScreenCapture() {
 		if (screenStream) {
 			for (const track of screenStream.getTracks()) track.stop();
@@ -218,6 +254,9 @@
 	function resetCapture() {
 		clearPreview();
 		selectedFile = null;
+		clearOperatorPreview();
+		operatorFile = null;
+		captureTarget = 'group';
 		result = null;
 		selectedWorkerPreview = null;
 		errorMsg = '';
@@ -232,15 +271,14 @@
 		loadToday();
 	}
 
-	async function startCameraCapture() {
+	async function startCameraCapture(target: 'group' | 'operator' = captureTarget) {
 		cameraCaptureError = '';
 		screenCaptureError = '';
 		errorMsg = '';
 		result = null;
 		selectedWorkerPreview = null;
 		status = 'idle';
-		clearPreview();
-		selectedFile = null;
+		clearTarget(target);
 		cameraCaptureReady = false;
 		canSwitchCamera = false;
 		stopScreenCapture();
@@ -283,7 +321,13 @@
 
 	async function switchCamera() {
 		cameraFacingMode = cameraFacingMode === 'environment' ? 'user' : 'environment';
-		await startCameraCapture();
+		await startCameraCapture(captureTarget);
+	}
+
+	// The operator usually takes their own photo: start on the front camera.
+	async function startOperatorCamera() {
+		cameraFacingMode = 'user';
+		await startCameraCapture('operator');
 	}
 
 	async function captureCameraFrame() {
@@ -313,27 +357,24 @@
 		}
 
 		const sessionName = today?.state === 'evening' ? 'shift-end' : 'shift-start';
-		const file = new File([blob], `camera-${sessionName}-${Date.now()}.jpg`, {
+		const file = new File([blob], `camera-${captureTarget}-${sessionName}-${Date.now()}.jpg`, {
 			type: 'image/jpeg'
 		});
 
-		clearPreview();
-		selectedFile = file;
-		previewUrl = URL.createObjectURL(file);
+		useCapturedFile(file);
 		cameraCaptureError = '';
 		status = 'idle';
 		stopCameraCapture();
 	}
 
-	async function startScreenCapture() {
+	async function startScreenCapture(target: 'group' | 'operator' = captureTarget) {
 		cameraCaptureError = '';
 		screenCaptureError = '';
 		errorMsg = '';
 		result = null;
 		selectedWorkerPreview = null;
 		status = 'idle';
-		clearPreview();
-		selectedFile = null;
+		clearTarget(target);
 		screenCaptureReady = false;
 		stopCameraCapture();
 		stopScreenCapture();
@@ -393,19 +434,17 @@
 		}
 
 		const sessionName = today?.state === 'evening' ? 'shift-end' : 'shift-start';
-		const file = new File([blob], `video-call-${sessionName}-${Date.now()}.jpg`, {
+		const file = new File([blob], `video-call-${captureTarget}-${sessionName}-${Date.now()}.jpg`, {
 			type: 'image/jpeg'
 		});
 
-		clearPreview();
-		selectedFile = file;
-		previewUrl = URL.createObjectURL(file);
+		useCapturedFile(file);
 		screenCaptureError = '';
 		status = 'idle';
 		stopScreenCapture();
 	}
 	async function submitPhoto() {
-		if (!selectedFile) return;
+		if (!selectedFile || !operatorFile) return;
 		errorMsg = '';
 		selectedWorkerPreview = null;
 		retryingSession = false;
@@ -414,6 +453,7 @@
 
 		const form = new FormData();
 		form.append('photo', selectedFile);
+		form.append('operator_photo', operatorFile);
 		locationHold = '';
 		const position = await currentPosition();
 		if (position) {
@@ -495,7 +535,7 @@
 			return;
 		}
 		// Nothing to resend (the shift status failed to load): reload it.
-		if (!selectedFile) {
+		if (!selectedFile || !operatorFile) {
 			resetCapture();
 			return;
 		}
@@ -596,7 +636,7 @@
 		group: 'matched' | 'new',
 		trigger: HTMLButtonElement
 	) {
-		const label = personDisplayLabel(person.pump_code, person.display_seq);
+		const label = personDisplayLabel(person.pump_code, person.display_seq, person.is_operator);
 		workerPreviewTrigger = trigger;
 		selectedWorkerPreview = {
 			...person,
@@ -661,6 +701,92 @@
 <svelte:window onkeydown={handleWorkerPreviewKeydown} />
 <svelte:document onfullscreenchange={syncCameraFullscreen} />
 
+{#snippet cameraCapturePanel(guidance: string, note: string)}
+	<div
+		class="screen-capture-panel camera-capture-panel"
+		aria-label="Camera capture"
+		bind:this={cameraPanel}
+	>
+		<div class="screen-preview">
+			<video
+				bind:this={cameraPreview}
+				autoplay
+				muted
+				playsinline
+				onloadedmetadata={() => (cameraCaptureReady = true)}
+				oncanplay={() => (cameraCaptureReady = true)}
+				aria-label="Laptop camera preview"
+			></video>
+		</div>
+		<p class="camera-capture-guidance">{guidance}</p>
+		<div class="screen-actions">
+			<button
+				class="button button--primary"
+				type="button"
+				onclick={captureCameraFrame}
+				disabled={!cameraCaptureReady}
+			>
+				<Camera size={18} /> Use this photo
+			</button>
+			<button class="button button--secondary" type="button" onclick={stopCameraCapture}>
+				Stop camera
+			</button>
+			{#if canFullscreen}
+				<button class="button button--secondary" type="button" onclick={toggleCameraFullscreen}>
+					{#if cameraFullscreen}<Minimize size={18} /> Exit full screen{:else}<Maximize size={18} /> Full
+						screen{/if}
+				</button>
+			{/if}
+			{#if canSwitchCamera}
+				<button
+					class="button button--secondary"
+					type="button"
+					onclick={switchCamera}
+					aria-label={cameraFacingMode === 'environment'
+						? 'Switch to front camera'
+						: 'Switch to rear camera'}
+				>
+					<SwitchCamera size={18} />
+					{cameraFacingMode === 'environment' ? 'Use front camera' : 'Use rear camera'}
+				</button>
+			{/if}
+		</div>
+		<p class="capture-note">{note}</p>
+		{#if cameraCaptureError}<p class="capture-error">{cameraCaptureError}</p>{/if}
+	</div>
+{/snippet}
+
+{#snippet screenCapturePanel(note: string)}
+	<div class="screen-capture-panel">
+		<div class="screen-preview">
+			<video
+				bind:this={screenPreview}
+				autoplay
+				muted
+				playsinline
+				onloadedmetadata={() => (screenCaptureReady = true)}
+				oncanplay={() => (screenCaptureReady = true)}
+				aria-label="Selected video call preview"
+			></video>
+		</div>
+		<div class="screen-actions">
+			<button
+				class="button button--primary"
+				type="button"
+				onclick={captureScreenFrame}
+				disabled={!screenCaptureReady}
+			>
+				<Camera size={18} /> Use this frame
+			</button>
+			<button class="button button--secondary" type="button" onclick={stopScreenCapture}>
+				Stop sharing
+			</button>
+		</div>
+		<p class="capture-note">{note}</p>
+		{#if screenCaptureError}<p class="capture-error">{screenCaptureError}</p>{/if}
+	</div>
+{/snippet}
+
 <div class="capture-page">
 	<header class="capture-heading">
 		<div>
@@ -712,95 +838,15 @@
 						<span>{selectedFile?.name}</span>
 						<span>{selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB` : ''}</span>
 					</div>
-				{:else if cameraCaptureActive}
-					<div
-						class="screen-capture-panel camera-capture-panel"
-						aria-label="Camera capture"
-						bind:this={cameraPanel}
-					>
-						<div class="screen-preview">
-							<video
-								bind:this={cameraPreview}
-								autoplay
-								muted
-								playsinline
-								onloadedmetadata={() => (cameraCaptureReady = true)}
-								oncanplay={() => (cameraCaptureReady = true)}
-								aria-label="Laptop camera preview"
-							></video>
-						</div>
-						<p class="camera-capture-guidance">Keep the complete group inside the frame.</p>
-						<div class="screen-actions">
-							<button
-								class="button button--primary"
-								type="button"
-								onclick={captureCameraFrame}
-								disabled={!cameraCaptureReady}
-							>
-								<Camera size={18} /> Use this photo
-							</button>
-							<button class="button button--secondary" type="button" onclick={stopCameraCapture}>
-								Stop camera
-							</button>
-							{#if canFullscreen}
-								<button
-									class="button button--secondary"
-									type="button"
-									onclick={toggleCameraFullscreen}
-								>
-									{#if cameraFullscreen}<Minimize size={18} /> Exit full screen{:else}<Maximize
-											size={18}
-										/> Full screen{/if}
-								</button>
-							{/if}
-							{#if canSwitchCamera}
-								<button
-									class="button button--secondary"
-									type="button"
-									onclick={switchCamera}
-									aria-label={cameraFacingMode === 'environment'
-										? 'Switch to front camera'
-										: 'Switch to rear camera'}
-								>
-									<SwitchCamera size={18} />
-									{cameraFacingMode === 'environment' ? 'Use front camera' : 'Use rear camera'}
-								</button>
-							{/if}
-						</div>
-						<p class="capture-note">Keep every worker visible before capturing the photo.</p>
-						{#if cameraCaptureError}<p class="capture-error">{cameraCaptureError}</p>{/if}
-					</div>
-				{:else if screenCaptureActive}
-					<div class="screen-capture-panel">
-						<div class="screen-preview">
-							<video
-								bind:this={screenPreview}
-								autoplay
-								muted
-								playsinline
-								onloadedmetadata={() => (screenCaptureReady = true)}
-								oncanplay={() => (screenCaptureReady = true)}
-								aria-label="Selected video call preview"
-							></video>
-						</div>
-						<div class="screen-actions">
-							<button
-								class="button button--primary"
-								type="button"
-								onclick={captureScreenFrame}
-								disabled={!screenCaptureReady}
-							>
-								<Camera size={18} /> Use this frame
-							</button>
-							<button class="button button--secondary" type="button" onclick={stopScreenCapture}>
-								Stop sharing
-							</button>
-						</div>
-						<p class="capture-note">
-							Keep every worker visible in the WhatsApp call before capturing.
-						</p>
-						{#if screenCaptureError}<p class="capture-error">{screenCaptureError}</p>{/if}
-					</div>
+				{:else if cameraCaptureActive && captureTarget === 'group'}
+					{@render cameraCapturePanel(
+						'Keep the complete group inside the frame.',
+						'Keep every worker visible before capturing the photo.'
+					)}
+				{:else if screenCaptureActive && captureTarget === 'group'}
+					{@render screenCapturePanel(
+						'Keep every worker visible in the WhatsApp call before capturing.'
+					)}
 				{:else}
 					<div class="capture-empty">
 						<span class="capture-icon"><Users size={34} strokeWidth={1.6} /></span>
@@ -810,7 +856,7 @@
 							<button
 								class="button button--primary"
 								type="button"
-								onclick={startCameraCapture}
+								onclick={() => startCameraCapture('group')}
 								disabled={today?.state === 'locked' || today?.can_submit === false}
 							>
 								<Camera size={18} /> Take photo
@@ -818,7 +864,7 @@
 							<button
 								class="button button--secondary"
 								type="button"
-								onclick={startScreenCapture}
+								onclick={() => startScreenCapture('group')}
 								disabled={today?.state === 'locked' || today?.can_submit === false}
 							>
 								<MonitorUp size={18} /> Capture video call
@@ -826,6 +872,67 @@
 						</div>
 						{#if cameraCaptureError}<p class="capture-error">{cameraCaptureError}</p>{/if}
 						{#if screenCaptureError}<p class="capture-error">{screenCaptureError}</p>{/if}
+					</div>
+				{/if}
+
+				{#if previewUrl}
+					<div class="operator-block" data-testid="operator-photo">
+						<div class="section-heading">
+							<div>
+								<h2>Operator photo</h2>
+								<p>The pump operator alone, face clearly visible. Needed with every shift photo.</p>
+							</div>
+						</div>
+						{#if operatorPreviewUrl}
+							<div class="photo-preview operator-preview">
+								<img src={operatorPreviewUrl} alt="Selected operator" />
+								{#if status === 'submitting' || status === 'processing'}
+									<div class="processing-overlay" aria-hidden="true">
+										<LoaderCircle class="spin" size={30} />
+									</div>
+								{/if}
+							</div>
+							{#if status === 'idle'}
+								<button
+									class="button button--secondary"
+									type="button"
+									onclick={startOperatorCamera}
+								>
+									<Camera size={18} /> Retake operator photo
+								</button>
+							{/if}
+						{:else if cameraCaptureActive && captureTarget === 'operator'}
+							{@render cameraCapturePanel(
+								'Only the operator, face clearly visible.',
+								'Hold the phone at face height in good light.'
+							)}
+						{:else if screenCaptureActive && captureTarget === 'operator'}
+							{@render screenCapturePanel('Ask the operator to face the camera alone in the call.')}
+						{:else}
+							<div class="capture-empty operator-empty">
+								<span class="capture-icon"><UserRound size={30} strokeWidth={1.6} /></span>
+								<strong>Now the operator</strong>
+								<p>Take a photo of the pump operator alone, so their attendance is marked too.</p>
+								<div class="capture-choices">
+									<button
+										class="button button--primary"
+										type="button"
+										onclick={startOperatorCamera}
+									>
+										<Camera size={18} /> Take operator photo
+									</button>
+									<button
+										class="button button--secondary"
+										type="button"
+										onclick={() => startScreenCapture('operator')}
+									>
+										<MonitorUp size={18} /> Capture video call
+									</button>
+								</div>
+								{#if cameraCaptureError}<p class="capture-error">{cameraCaptureError}</p>{/if}
+								{#if screenCaptureError}<p class="capture-error">{screenCaptureError}</p>{/if}
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</section>
@@ -926,7 +1033,7 @@
 											class="face-row"
 											type="button"
 											onclick={(event) => openWorkerPreview(person, 'matched', event.currentTarget)}
-											aria-label={`Preview ${personDisplayLabel(person.pump_code, person.display_seq)}`}
+											aria-label={`Preview ${personDisplayLabel(person.pump_code, person.display_seq, person.is_operator)}`}
 											data-testid="worker-preview-trigger"
 										>
 											{#if person.source_photo_crop_url}
@@ -937,7 +1044,11 @@
 												>
 											{/if}
 											<span class="face-label"
-												>{personDisplayLabel(person.pump_code, person.display_seq)}</span
+												>{personDisplayLabel(
+													person.pump_code,
+													person.display_seq,
+													person.is_operator
+												)}</span
 											>
 											{#if livenessLabel(person)}
 												<span
@@ -966,7 +1077,7 @@
 											class="face-row"
 											type="button"
 											onclick={(event) => openWorkerPreview(person, 'new', event.currentTarget)}
-											aria-label={`Preview ${personDisplayLabel(person.pump_code, person.display_seq)}`}
+											aria-label={`Preview ${personDisplayLabel(person.pump_code, person.display_seq, person.is_operator)}`}
 											data-testid="worker-preview-trigger"
 										>
 											{#if person.source_photo_crop_url}
@@ -977,7 +1088,11 @@
 												>
 											{/if}
 											<span class="face-label"
-												>{personDisplayLabel(person.pump_code, person.display_seq)}</span
+												>{personDisplayLabel(
+													person.pump_code,
+													person.display_seq,
+													person.is_operator
+												)}</span
 											>
 											{#if livenessLabel(person)}
 												<span
@@ -1154,8 +1269,14 @@
 
 	{#if selectedFile && status === 'idle'}
 		<div class="sticky-submit">
-			<button class="button button--primary" type="button" onclick={submitPhoto}>
-				<Upload size={18} /> Submit group photo
+			<button
+				class="button button--primary"
+				type="button"
+				onclick={submitPhoto}
+				disabled={!operatorFile}
+			>
+				<Upload size={18} />
+				{operatorFile ? 'Submit photos' : 'Take the operator photo first'}
 			</button>
 			<button class="button button--ghost" type="button" onclick={resetCapture}>Cancel</button>
 		</div>
@@ -1346,6 +1467,22 @@
 		gap: var(--space-2);
 	}
 
+	.operator-block {
+		display: grid;
+		gap: var(--space-3);
+		margin-top: var(--space-5);
+		padding-top: var(--space-5);
+		border-top: 1px solid var(--brand-mist);
+	}
+	.operator-block .section-heading {
+		margin-bottom: 0;
+	}
+	.operator-preview {
+		max-width: 20rem;
+	}
+	.operator-empty {
+		min-height: 14rem;
+	}
 	.photo-preview {
 		position: relative;
 		overflow: hidden;

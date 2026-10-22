@@ -8,7 +8,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const [pumps, persons] = await Promise.all([
 		query<any>(`SELECT pu.id, pu.pump_code FROM pumps pu JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id WHERE pma.manager_id = $1 ORDER BY pu.pump_code`, [locals.user!.id]),
 		query<any>(
-			`SELECT p.id, p.display_seq, p.first_seen_at, p.last_seen_at, pu.pump_code,
+			`SELECT p.id, p.display_seq, p.is_operator, p.first_seen_at, p.last_seen_at, pu.pump_code,
 			        pfv.source_photo_crop_url,
 			        COUNT(dpa.id) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched)::int AS days_present,
 			        COUNT(dpa.id) FILTER (WHERE dpa.morning_matched AND NOT dpa.evening_matched AND NOT ${shiftStillOpen('dpa')})::int AS days_morning_only,

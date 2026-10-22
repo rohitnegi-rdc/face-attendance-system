@@ -93,10 +93,15 @@ export async function login(email: string, password = PASSWORD): Promise<APIRequ
 	return context;
 }
 
+type StubFace = string | { identity: string; similarity: number };
+
+// The faces registered for each fake photo, so submit() can build a matching operator photo.
+const photoFaces = new WeakMap<Buffer, StubFace[]>();
+
 // A fake photo. The stub AI service reads the marker and returns the registered faces.
 // faces: identity names, or { identity, similarity } for a deliberately imperfect match.
 export async function photo(
-	faces: (string | { identity: string; similarity: number })[] = [],
+	faces: StubFace[] = [],
 	options: { delayMs?: number; fail?: boolean; failTimes?: number } = {}
 ) {
 	const id = randomUUID().replace(/-/g, '');
@@ -111,12 +116,21 @@ export async function photo(
 			body: JSON.stringify({ photo_id: id, times: options.failTimes })
 		});
 	}
-	return Buffer.concat([
+	const buffer = Buffer.concat([
 		Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
 		Buffer.from(` STUBPHOTO:${id} `),
 		randomBytes(32),
 		Buffer.from([0xff, 0xd9])
 	]);
+	photoFaces.set(buffer, faces);
+	return buffer;
+}
+
+// The operator photo sent with a group photo when a test does not pick one: the group's first
+// face (the same vector, so the worker counts it once), or a lone new face for an empty group.
+export async function defaultOperatorPhoto(group: Buffer) {
+	const first = photoFaces.get(group)?.[0];
+	return photo([first ?? `OPERATOR-${randomUUID()}`]);
 }
 
 // How many times the worker asked the stub AI to read this photo.
@@ -126,10 +140,25 @@ export async function stubCalls(buffer: Buffer) {
 	return ((await response.json()) as { calls: number }).calls;
 }
 
-export async function submit(context: APIRequestContext, buffer: Buffer, mimeType = 'image/jpeg') {
-	const response = await context.post('/api/attendance/submit', {
-		multipart: { photo: { name: 'photo.jpg', mimeType, buffer } }
-	});
+// operator: the operator photo; omitted builds a default one, null sends none.
+export async function submit(
+	context: APIRequestContext,
+	buffer: Buffer,
+	mimeType = 'image/jpeg',
+	operator?: Buffer | null
+) {
+	const operatorBuffer = operator === undefined ? await defaultOperatorPhoto(buffer) : operator;
+	const multipart: Record<string, { name: string; mimeType: string; buffer: Buffer }> = {
+		photo: { name: 'photo.jpg', mimeType, buffer }
+	};
+	if (operatorBuffer) {
+		multipart.operator_photo = {
+			name: 'operator.jpg',
+			mimeType: 'image/jpeg',
+			buffer: operatorBuffer
+		};
+	}
+	const response = await context.post('/api/attendance/submit', { multipart });
 	return { status: response.status(), body: await response.json().catch(() => ({})) };
 }
 

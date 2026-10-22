@@ -38,7 +38,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			[managerId, from, to]
 		),
 		query<any>(
-			`SELECT dpa.session_date, dpa.morning_matched, dpa.evening_matched, p.display_seq,
+			`SELECT dpa.session_date, dpa.morning_matched, dpa.evening_matched, p.display_seq, p.is_operator,
 			        pu.pump_code, pl.name AS plant_name, a.name AS area_name
 			 FROM daily_person_attendance dpa JOIN persons p ON p.id = dpa.person_id
 			 JOIN pumps pu ON pu.id = dpa.pump_id JOIN plants pl ON pl.id = pu.plant_id
@@ -73,7 +73,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const sessionIds = sessionRows.map((session: any) => session.id);
 	const faces = sessionIds.length
 		? await query<any>(
-				`SELECT afe.session_id, afe.person_id, afe.face_crop_url, p.display_seq,
+				`SELECT afe.session_id, afe.person_id, afe.face_crop_url, p.display_seq, p.is_operator,
 				        EXISTS (
 				          SELECT 1 FROM attendance_review_flags arf
 				          WHERE arf.session_id = afe.session_id
@@ -90,7 +90,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		const people = peopleBySession.get(face.session_id) ?? [];
 		people.push({
 			personId: face.person_id,
-			label: `Worker ${face.display_seq}`,
+			label: `Worker ${face.display_seq}${face.is_operator ? ' (Operator)' : ''}`,
 			cropUrl: face.face_crop_url,
 			flagged: face.flagged
 		});
