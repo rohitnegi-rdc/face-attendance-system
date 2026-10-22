@@ -1,6 +1,8 @@
-import type { PageServerLoad } from './$types';
+import { fail } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
 import { query } from '$lib/server/db';
 import { shiftStillOpen } from '$lib/server/shiftSessions';
+import { renamePerson } from '$lib/server/personNames';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const vendorId = locals.user!.id;
@@ -10,27 +12,38 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	)
 		? requestedPump
 		: '';
+	// Names only; the face loads when opened (/api/persons/[id]/face).
 	const [pumps, persons] = await Promise.all([
 		query<any>('SELECT id, pump_code FROM pumps WHERE vendor_id = $1 ORDER BY pump_code', [
 			vendorId
 		]),
 		query<any>(
-			`SELECT p.id, p.display_seq, p.is_operator, p.first_seen_at, p.last_seen_at, pu.pump_code,
-			        pfv.source_photo_crop_url,
+			`SELECT p.id, p.display_seq, p.name, p.is_operator, p.first_seen_at, p.last_seen_at, pu.pump_code,
 			        COUNT(dpa.id) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched) AS days_present,
 			        COUNT(dpa.id) FILTER (WHERE dpa.morning_matched AND NOT dpa.evening_matched AND NOT ${shiftStillOpen('dpa')}) AS days_morning_only,
 			        COUNT(dpa.id) FILTER (WHERE NOT dpa.morning_matched AND dpa.evening_matched) AS days_evening_only
 			 FROM persons p JOIN pumps pu ON pu.id = p.pump_id
 			 LEFT JOIN daily_person_attendance dpa ON dpa.person_id = p.id
-			 LEFT JOIN LATERAL (
-			   SELECT source_photo_crop_url FROM person_face_vectors
-			   WHERE person_id = p.id ORDER BY created_at DESC LIMIT 1
-			 ) pfv ON true
 			 WHERE pu.vendor_id = $1 AND p.status = 'active' AND ($2 = '' OR pu.id = $2::uuid)
-			 GROUP BY p.id, pu.pump_code, pfv.source_photo_crop_url
+			 GROUP BY p.id, pu.pump_code
 			 ORDER BY p.last_seen_at DESC`,
 			[vendorId, pump]
 		)
 	]);
 	return { pumps, persons, pump };
+};
+
+export const actions: Actions = {
+	// The vendor corrects a name the operator wrote.
+	rename: async ({ request, locals }) => {
+		const form = await request.formData();
+		const personId = String(form.get('person_id') || '');
+		const result = await renamePerson(
+			{ role: 'vendor', id: locals.user!.id },
+			personId,
+			form.get('name')
+		);
+		if (result.error) return fail(result.status, { error: result.error, personId });
+		return { renamed: personId, name: result.name };
+	}
 };

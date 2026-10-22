@@ -39,7 +39,7 @@
 				<article class="review-item">
 					<div class="review-item__header">
 						<div>
-							<h2>{personDisplayLabel(flag.matched_at_pump, flag.display_seq)}</h2>
+							<h2>{personDisplayLabel(flag.matched_at_pump, flag.display_seq, false, flag.name)}</h2>
 							<p>{formatDate(flag.created_at)}</p>
 						</div>
 						<StatusBadge tone={flag.reviewed ? 'neutral' : 'attention'}>
@@ -60,7 +60,7 @@
 							{#if flag.source_photo_crop_url}
 								<img
 									src={flag.source_photo_crop_url}
-									alt={`Face crop for ${personDisplayLabel(flag.matched_at_pump, flag.display_seq)}`}
+									alt={`Face crop for ${personDisplayLabel(flag.matched_at_pump, flag.display_seq, false, flag.name)}`}
 									title={`Known worker at ${flag.matched_at_pump}`}
 									loading="lazy"
 								/>

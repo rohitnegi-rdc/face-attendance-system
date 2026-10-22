@@ -64,7 +64,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	);
 
 	const roster = await query<any>(
-		`SELECT p.id, p.display_seq, p.is_operator, p.first_seen_at, p.last_seen_at,
+		`SELECT p.id, p.display_seq, p.name, p.is_operator, p.first_seen_at, p.last_seen_at,
 		        COUNT(dpa.id) FILTER (
 		          WHERE dpa.morning_matched AND dpa.evening_matched
 		        ) AS days_present,

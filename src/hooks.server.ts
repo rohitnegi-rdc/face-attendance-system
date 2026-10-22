@@ -89,10 +89,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 			headers: { 'content-type': 'application/json' }
 		});
 	}
+	// Faces load on click from the session log; the face route checks the pump itself, so
+	// vendors may read it too.
 	const managerReadOnlyAttendance =
-		auth?.role === 'plant-manager' &&
 		event.request.method === 'GET' &&
-		/^\/api\/attendance\/(photo|status|backup)\//.test(path);
+		((auth?.role === 'plant-manager' &&
+			/^\/api\/attendance\/(photo|status|backup|face)\//.test(path)) ||
+			(auth?.role === 'vendor' && /^\/api\/attendance\/face\//.test(path)));
 	if (
 		path.startsWith('/api/attendance') &&
 		path !== '/api/auth/login' &&

@@ -184,9 +184,23 @@ export async function recordSession(
 	const submitted = await submit(context, await photo(faces));
 	expect(submitted.status, JSON.stringify(submitted.body)).toBe(202);
 	await waitForSession(submitted.body.session_id, ['review']);
-	const approved = await context.post(`/api/attendance/approve/${submitted.body.session_id}`);
+	const approved = await approve(context, submitted.body.session_id);
 	expect(approved.status(), await approved.text()).toBe(200);
 	return submitted.body.session_id as string;
+}
+
+// The approve call the pump makes: every worker in the photo still without a name gets one
+// (the operator must name them, migration 033). Names are unique per pump, so they come from
+// the worker number.
+export async function approve(context: APIRequestContext, sessionId: string) {
+	const status = await (await context.get(`/api/attendance/status/${sessionId}`)).json();
+	const people = [...(status.matched ?? []), ...(status.new_persons ?? [])];
+	const names = Object.fromEntries(
+		people
+			.filter((person: any) => !person.name)
+			.map((person: any) => [person.person_id, `Test Worker ${person.display_seq}`])
+	);
+	return context.post(`/api/attendance/approve/${sessionId}`, { data: { names } });
 }
 
 // Moves a session back in time without waiting (the server compares against now()). With

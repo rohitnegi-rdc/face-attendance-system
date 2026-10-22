@@ -3,10 +3,11 @@ import { query, queryOne } from '$lib/server/db';
 import { error, fail } from '@sveltejs/kit';
 import { createAttendanceReviewFlag } from '$lib/server/attendanceReview';
 import { shiftStillOpen } from '$lib/server/shiftSessions';
+import { renamePerson } from '$lib/server/personNames';
 
 export const load: PageServerLoad = async ({ params }) => {
 	const person = await queryOne<any>(
-		`SELECT p.id, p.display_seq, p.is_operator, p.first_seen_at, p.last_seen_at, p.status,
+		`SELECT p.id, p.display_seq, p.name, p.is_operator, p.first_seen_at, p.last_seen_at, p.status,
 		        pu.id AS pump_id, pu.pump_code
 		 FROM persons p JOIN pumps pu ON pu.id = p.pump_id
 		 WHERE p.id = $1`,
@@ -74,6 +75,17 @@ export const load: PageServerLoad = async ({ params }) => {
 };
 
 export const actions: Actions = {
+	// The admin corrects the name the operator wrote (audited in admin_audit_log).
+	rename: async ({ request, params, locals }) => {
+		const form = await request.formData();
+		const result = await renamePerson(
+			{ role: 'admin', id: locals.user!.id },
+			params.id,
+			form.get('name')
+		);
+		if (result.error) return fail(result.status, { success: false, message: result.error });
+		return { success: true, message: 'Name saved' };
+	},
 	flagEvidence: async ({ params, request, locals }) => {
 		const form = await request.formData();
 		const person = await queryOne<any>('SELECT pump_id FROM persons WHERE id = $1', [params.id]);

@@ -117,7 +117,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			params
 		);
 		rows = await query<any>(
-			`SELECT dpa.session_date, dpa.person_id, p.display_seq, p.is_operator, pu.id AS pump_id, pu.pump_code,
+			`SELECT dpa.session_date, dpa.person_id, p.display_seq, p.name, p.is_operator, pu.id AS pump_id, pu.pump_code,
 			        v.id AS vendor_id, v.name AS vendor_name, pl.name AS plant_name, a.id AS area_id, a.name AS area_name,
 			        dpa.morning_matched, dpa.evening_matched
 			 FROM daily_person_attendance dpa
@@ -133,7 +133,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	} else {
 		params.push(pageSize, (page - 1) * pageSize);
 		rows = await query<any>(
-			`SELECT dpa.session_date, dpa.person_id, p.display_seq, p.is_operator, pu.id AS pump_id, pu.pump_code,
+			`SELECT dpa.session_date, dpa.person_id, p.display_seq, p.name, p.is_operator, pu.id AS pump_id, pu.pump_code,
 			        v.id AS vendor_id, v.name AS vendor_name, pl.name AS plant_name, a.id AS area_id, a.name AS area_name,
 			        dpa.morning_matched, dpa.evening_matched
 			 FROM daily_person_attendance dpa

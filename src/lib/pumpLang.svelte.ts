@@ -242,7 +242,21 @@ const HI: Record<string, string> = {
 	Start: 'स्टार्ट',
 	End: 'एंड',
 	and: 'और',
-	'New attendance': 'नई अटेंडेंस'
+	'New attendance': 'नई अटेंडेंस',
+
+	// Naming workers before completing
+	'Name your workers': 'वर्कर्स के नाम लिखें',
+	'{n} left': '{n} बाकी',
+	'All named': 'सबके नाम लिखे गए',
+	'Write the full name of each worker. Attendance cannot be completed without it.':
+		'हर वर्कर का पूरा नाम लिखें। नाम के बिना अटेंडेंस पूरी नहीं होगी।',
+	'Full name': 'पूरा नाम',
+	'Write a name for every worker before completing.': 'पूरा करने से पहले हर वर्कर का नाम लिखें।',
+	'"{name}" is written twice. Each worker needs a different name.':
+		'"{name}" दो बार लिखा है। हर वर्कर का नाम अलग होना चाहिए।',
+	'"{name}" is already the name of another worker at this pump. Add the father\'s name or village.':
+		'"{name}" इस पंप पर किसी और वर्कर का नाम है। पिता का नाम या गाँव जोड़ें।',
+	'{n} names still to write above.': 'ऊपर {n} नाम लिखने बाकी हैं।'
 };
 
 export function t(english: string, vars: Record<string, string | number> = {}): string {

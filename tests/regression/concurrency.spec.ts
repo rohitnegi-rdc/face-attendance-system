@@ -3,6 +3,7 @@
 // scripts/run-regression.mjs), so jobs also race across workers.
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import {
+	approve,
 	createArea,
 	createPump,
 	db,
@@ -36,7 +37,7 @@ async function submitAll(stations: Station[], buffers: Buffer[]) {
 
 async function approveAll(stations: Station[], sessionIds: string[]) {
 	return Promise.all(
-		stations.map((station, i) => station.context.post(`/api/attendance/approve/${sessionIds[i]}`))
+		stations.map((station, i) => approve(station.context, sessionIds[i]))
 	);
 }
 
@@ -176,7 +177,7 @@ test('CONC-05 approve tapped three times at once completes the shift once and co
 	const context = await login(pump.email);
 	const start = await submit(context, await photo(['CONC05']));
 	await waitForSession(start.body.session_id, ['review']);
-	expect((await context.post(`/api/attendance/approve/${start.body.session_id}`)).status()).toBe(
+	expect((await approve(context, start.body.session_id)).status()).toBe(
 		200
 	);
 	await shiftBack(start.body.session_id, 600);
@@ -184,7 +185,7 @@ test('CONC-05 approve tapped three times at once completes the shift once and co
 	await waitForSession(end.body.session_id, ['review']);
 
 	const responses = await Promise.all(
-		Array.from({ length: 3 }, () => context.post(`/api/attendance/approve/${end.body.session_id}`))
+		Array.from({ length: 3 }, () => approve(context, end.body.session_id))
 	);
 	expect(responses.map((response) => response.status()).sort()).toEqual([200, 409, 409]);
 	const { rows } = await db.query(
@@ -201,7 +202,7 @@ test('CONC-06 End session and an end photo at the same instant: exactly one of t
 	const context = await login(pump.email);
 	const start = await submit(context, await photo(['CONC06']));
 	await waitForSession(start.body.session_id, ['review']);
-	await context.post(`/api/attendance/approve/${start.body.session_id}`);
+	await approve(context, start.body.session_id);
 	await shiftBack(start.body.session_id, 600);
 
 	const endPhoto = await photo(['CONC06']);

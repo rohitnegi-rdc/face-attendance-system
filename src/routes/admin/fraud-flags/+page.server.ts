@@ -8,7 +8,7 @@ export const load: PageServerLoad = async () => {
 	const flags = await query<any>(
 		`SELECT ff.id, ff.session_id, ff.person_id, ff.matched_at_pump_id, ff.matched_session_id,
 		        ff.similarity_score, ff.reviewed, ff.created_at, ff.face_crop_url, ff.resolution,
-		        ff.resolved_at, p.display_seq,
+		        ff.resolved_at, p.display_seq, p.name,
 		        pu1.pump_code AS flagged_at_pump, pl1.name AS flagged_at_plant,
 		        v1.name AS flagged_at_vendor, a1.name AS flagged_at_area,
 		        pu2.pump_code AS matched_at_pump, pl2.name AS matched_at_plant,

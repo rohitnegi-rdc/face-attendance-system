@@ -353,6 +353,18 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | NAV-05 | User opens the fraud list (bug 2026-10-22: Approvals still showed 20 after viewing) | Every badge counts what is new since that user last opened its page: opening plant manager Approvals, vendor Fraud or admin Fraud flags clears it while the cases stay listed; a new case shows 1 | 1 | P1 | Covered (nav-badges.spec) |
 | NAV-06 | Plant manager or vendor opens a fraud case | Side-by-side page: counted-first pump and refused pump, each with face, IST photo date and time, shift and vendor; group photo only for the manager's own plants; 404 for anyone without a pump in the pair | 1 | P1 | Covered (nav-badges.spec) |
 
+### NAME, CORR, UI-10: worker names, manual fixes, faces on click (names-corrections.spec, added 2026-10-22)
+
+| ID | Scenario | Expected | Tier | Pri | Status |
+|---|---|---|---|---|---|
+| NAME-01 | Pump completes a photo with unnamed workers (migration 033) | 422 with the unnamed ids until every worker has a usable name (2 to 60 letters, Hindi allowed, spaces tidied); then 200, `named_by = pump`; the next photo of the same workers shows the names and needs none | 1 | P0 | Covered |
+| NAME-02 | Same name twice at one pump | 409 naming the clash (case-insensitive); the same name at another pump is fine | 1 | P1 | Covered |
+| NAME-03 | Vendor or admin corrects a name | Vendor renames its own worker, another vendor gets 404; admin rename sets `named_by = admin` and writes `rename_person` with from/to to `admin_audit_log` | 1 | P1 | Covered |
+| RPT-06 | Vendor downloads the attendance report | `/vendor/attendance/export` holds only the vendor's pumps with the Name column; headcount works; plant manager and pump get 403 | 1 | P1 | Covered |
+| CORR-01 | Pump missed the shift start, so the day shows "Start only" | Plant manager opens Fix attendance from the session log, marks start and end present with a reason (required); day becomes full; correction stored with `corrected_by_manager_id`; another plant's manager gets 404 | 1 | P0 | Covered |
+| CORR-02 | Admin marks both halves on a day with one photo | Saved (the old rule wanted a photo of each type), correction stored with the admin | 1 | P1 | Covered |
+| UI-10 | Session log faces | Fraud faces inline; counted workers are name chips, their face served by `/api/attendance/face/[id]` (and People pages by `/api/persons/[id]/face`) only to users who can see the pump, 404 otherwise | 1 | P1 | Covered |
+
 ### PATH: sub-path hosting (BASE_PATH)
 
 | ID | Scenario | Expected | Tier | Pri | Status |
@@ -390,7 +402,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | UI-06 | Accessibility (axe) on login, pump and admin home | No serious violations | 2 | P1 | Covered |
 | UI-07 | Session expires while a page is open, then the user clicks an action | Sent to login, no silent failure | 2 | P2 | Missing |
 | UI-08 | Pump screen language (added 2026-10-22) | Hindi (Devanagari, everyday English work words kept) by default; one EN / हिंदी toggle switches to English and is remembered after reload; only the pump screens | 1 | P1 | Covered (pump-language.spec) |
-| UI-09 | Session log with five workers (added 2026-10-22) | Every worker shown inline as a face tile next to View group, in a fixed-height scroll area; no fold-out list; plant manager Attendance has no Person records table | 1 | P1 | Covered (nav-badges.spec) |
+| UI-09 | Session log with five workers (added 2026-10-22) | Every worker shown inline by name (a chip; the face opens on click, UI-10) next to View group, in a fixed-height scroll area; no fold-out list; plant manager Attendance has no Person records table | 1 | P1 | Covered (nav-badges.spec) |
 
 ### ACC: model accuracy (Tier 3, existing gate)
 

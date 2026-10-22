@@ -24,6 +24,7 @@
 		person_id: string;
 		display_seq: number;
 		pump_code: string;
+		name?: string | null;
 		source_photo_crop_url?: string | null;
 		morning_matched?: boolean;
 		evening_matched?: boolean;
@@ -43,7 +44,9 @@
 	}
 
 	function workerLabel(person: WorkerResult) {
-		return tLabel(personDisplayLabel(person.pump_code, person.display_seq, person.is_operator));
+		return tLabel(
+			personDisplayLabel(person.pump_code, person.display_seq, person.is_operator, person.name)
+		);
 	}
 	type WorkerPreview = WorkerResult & {
 		group: 'matched' | 'new' | 'held' | 'guest';
@@ -519,19 +522,69 @@
 		}
 	}
 
+	// Every worker in the photo needs a name before the operator can complete it (the server
+	// checks too). Names typed here, by person id.
+	let workerNames = $state<Record<string, string>>({});
+	let nameError = $state('');
+	const unnamedWorkers = $derived(
+		[...(result?.matched ?? []), ...(result?.new_persons ?? [])].filter(
+			(person: WorkerResult) => !person.name
+		) as WorkerResult[]
+	);
+	const namesLeft = $derived(
+		unnamedWorkers.filter((person) => (workerNames[person.person_id] ?? '').trim().length < 2)
+			.length
+	);
+
 	async function approveAttendanceReview() {
 		const sessionId = result?.session_id || currentSessionId;
 		if (!sessionId || approvingReview) return;
+		nameError = '';
+		if (namesLeft) {
+			nameError = t('Write a name for every worker before completing.');
+			return;
+		}
+		const typed = unnamedWorkers.map((person) => workerNames[person.person_id].trim());
+		const repeated = typed.find(
+			(name, i) => typed.findIndex((other) => other.toLowerCase() === name.toLowerCase()) !== i
+		);
+		if (repeated) {
+			nameError = t('"{name}" is written twice. Each worker needs a different name.', {
+				name: repeated
+			});
+			return;
+		}
 
 		approvingReview = true;
 		errorMsg = '';
 		try {
-			const res = await fetch(resolve(`/api/attendance/approve/${sessionId}`), { method: 'POST' });
+			const res = await fetch(resolve(`/api/attendance/approve/${sessionId}`), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					names: Object.fromEntries(
+						unnamedWorkers.map((person) => [person.person_id, workerNames[person.person_id]])
+					)
+				})
+			});
+			if (res.status === 409 || res.status === 422) {
+				const body = await res.json().catch(() => ({}));
+				nameError = body.duplicate
+					? t('"{name}" is already the name of another worker at this pump. Add the father\'s name or village.', {
+							name: body.duplicate
+						})
+					: body.unnamed
+						? t('Write a name for every worker before completing.')
+						: t(body.error || 'Could not complete this attendance review.');
+				approvingReview = false;
+				return;
+			}
 			if (!res.ok) {
 				errorMsg = await failureMessage(res, 'Could not complete this attendance review.');
 				approvingReview = false;
 				return;
 			}
+			workerNames = {};
 			resetCapture();
 		} catch {
 			toastConnectionLost();
@@ -1218,6 +1271,53 @@
 						</div>
 					{/if}
 
+					{#if unnamedWorkers.length}
+						<div class="result-group name-group" data-testid="name-workers">
+							<h3>
+								{t('Name your workers')}
+								<span data-testid="names-left"
+									>{namesLeft
+										? t('{n} left', { n: namesLeft })
+										: t('All named')}</span
+								>
+							</h3>
+							<p class="name-help">
+								{t('Write the full name of each worker. Attendance cannot be completed without it.')}
+							</p>
+							<ul class="name-list">
+								{#each unnamedWorkers as person (person.person_id)}
+									<li>
+										{#if person.source_photo_crop_url}
+											<img src={person.source_photo_crop_url} alt="" loading="lazy" />
+										{:else}
+											<span class="face-thumb-placeholder" aria-hidden="true"
+												><UserRound size={20} /></span
+											>
+										{/if}
+										<label>
+											<span>{workerLabel(person)}</span>
+											<input
+												type="text"
+												autocomplete="off"
+												autocapitalize="words"
+												maxlength="60"
+												required
+												placeholder={t('Full name')}
+												bind:value={workerNames[person.person_id]}
+												aria-invalid={Boolean(nameError) &&
+													(workerNames[person.person_id] ?? '').trim().length < 2}
+												data-testid="worker-name-input"
+											/>
+										</label>
+									</li>
+								{/each}
+							</ul>
+							{#if nameError}<p class="capture-error" role="alert" data-testid="name-error">
+									{nameError}
+								</p>{/if}
+						</div>
+					{/if}
+
 					<div class="result-review-actions">
 						<p>{t('Check the count and face crops before completing this attendance.')}</p>
 						{#if errorMsg}<p class="capture-error">{t(errorMsg)}</p>{/if}
@@ -1235,10 +1335,15 @@
 							type="button"
 							onclick={approveAttendanceReview}
 							disabled={approvingReview}
+							aria-describedby={unnamedWorkers.length ? 'names-left-note' : undefined}
+							data-testid="complete-review"
 						>
 							<Check size={17} />
 							{approvingReview ? t('Completing attendance') : t('Done reviewing')}
 						</button>
+						{#if unnamedWorkers.length && namesLeft}
+							<p id="names-left-note">{t('{n} names still to write above.', { n: namesLeft })}</p>
+						{/if}
 					</div>
 				</div>
 			{:else}
@@ -1794,6 +1899,60 @@
 		margin: var(--space-2) 0;
 		color: var(--ink-muted);
 		font-size: var(--text-sm);
+	}
+	/* Naming: one row per unnamed worker, big face so the operator knows who to name. */
+	.name-group h3 span {
+		color: var(--brand-teal);
+	}
+	.name-help {
+		margin: 0 0 var(--space-3);
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
+	}
+	.name-list {
+		display: grid;
+		gap: var(--space-3);
+		padding: 0;
+		margin: 0;
+		list-style: none;
+	}
+	.name-list li {
+		display: grid;
+		grid-template-columns: 3.5rem minmax(0, 1fr);
+		align-items: center;
+		gap: var(--space-3);
+	}
+	.name-list img,
+	.name-list .face-thumb-placeholder {
+		width: 3.5rem;
+		height: 3.5rem;
+		object-fit: cover;
+		border-radius: var(--radius-sm);
+	}
+	.name-list label {
+		display: grid;
+		gap: 0.2rem;
+		min-width: 0;
+	}
+	.name-list label span {
+		overflow: hidden;
+		color: var(--ink-muted);
+		font-size: var(--text-xs, 0.75rem);
+		font-weight: 700;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.name-list input {
+		width: 100%;
+		min-height: 2.75rem;
+		font-size: 1rem;
+	}
+	.name-list input[aria-invalid='true'] {
+		border-color: #9f1239;
+	}
+	.name-group .capture-error {
+		margin: var(--space-3) 0 0;
+		color: #9f1239;
 	}
 	.result-review-actions {
 		display: grid;

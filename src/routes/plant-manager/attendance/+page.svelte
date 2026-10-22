@@ -146,7 +146,15 @@
 										fraudCaseHref={(id) => resolve('/plant-manager/approvals/fraud/[id]', { id })}
 									/></td
 								>
-								<td>{row.error_reason ?? ''}</td>
+								<td
+									>{row.error_reason ?? ''}{#if row.status === 'completed' || row.status === 'review'}<a
+											class="fix-link"
+											href={resolve(
+												`/plant-manager/attendance/correct?pump=${row.pump_id}&day=${dateKey(row.session_date)}`
+											)}
+											data-testid="fix-attendance">Fix attendance</a
+										>{/if}</td
+								>
 							</tr>{/each}
 					</tbody>
 				</table>
@@ -195,6 +203,12 @@
 		gap: var(--space-3);
 	}
 	.header-actions .button {
+		white-space: nowrap;
+	}
+	.fix-link {
+		display: block;
+		color: var(--brand-teal);
+		font-weight: 700;
 		white-space: nowrap;
 	}
 	.compact-filter {

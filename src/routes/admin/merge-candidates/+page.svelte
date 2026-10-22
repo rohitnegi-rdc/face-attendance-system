@@ -48,7 +48,7 @@
 							{#if candidate.crop_a}<img src={candidate.crop_a} alt="" loading="lazy" />{:else}<span
 									>No crop</span
 								>{/if}
-							<strong>{personDisplayLabel(candidate.pump_code, candidate.display_seq_a)}</strong>
+							<strong>{personDisplayLabel(candidate.pump_code, candidate.display_seq_a, false, candidate.name_a)}</strong>
 							<small>First seen {formatDate(candidate.first_seen_a)}</small>
 							<small>Last seen {formatDate(candidate.last_seen_a)}</small>
 							<small>{candidate.days_a} attendance days</small>
@@ -58,7 +58,7 @@
 							{#if candidate.crop_b}<img src={candidate.crop_b} alt="" loading="lazy" />{:else}<span
 									>No crop</span
 								>{/if}
-							<strong>{personDisplayLabel(candidate.pump_code, candidate.display_seq_b)}</strong>
+							<strong>{personDisplayLabel(candidate.pump_code, candidate.display_seq_b, false, candidate.name_b)}</strong>
 							<small>First seen {formatDate(candidate.first_seen_b)}</small>
 							<small>Last seen {formatDate(candidate.last_seen_b)}</small>
 							<small>{candidate.days_b} attendance days</small>
@@ -66,7 +66,7 @@
 					</div>
 
 					<div class="merge-note">
-						Merging keeps {personDisplayLabel(candidate.pump_code, candidate.display_seq_a)} as the primary
+						Merging keeps {personDisplayLabel(candidate.pump_code, candidate.display_seq_a, false, candidate.name_a)} as the primary
 						identity and combines attendance history.
 					</div>
 					<div class="review-actions">

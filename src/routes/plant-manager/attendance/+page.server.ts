@@ -4,7 +4,7 @@ import { query } from '$lib/server/db';
 import { nowIST } from '$lib/server/time';
 import { isDateKey } from '$lib/date';
 
-// Face crops are stored inline, so the session log is paged to keep the page small.
+// The session log is paged to keep the page small (worker faces load on click).
 const SESSION_PAGE_SIZE = 25;
 
 export const load: PageServerLoad = async ({ locals, url }) => {
@@ -39,7 +39,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		),
 		query<any>(
 			`SELECT s.id, s.session_date, s.session_type, s.status, s.submitted_at, s.photo_url,
-			        s.pairing_status, s.closed_by, s.error_reason, s.location_status, pu.pump_code, pl.name AS plant_name,
+			        s.pairing_status, s.closed_by, s.error_reason, s.location_status, pu.id AS pump_id, pu.pump_code, pl.name AS plant_name,
 			        EXISTS (
 			          SELECT 1 FROM attendance_review_flags arf
 			          WHERE arf.session_id = s.id AND arf.person_id IS NULL AND arf.status = 'open'

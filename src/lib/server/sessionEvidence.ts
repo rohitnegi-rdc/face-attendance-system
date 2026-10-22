@@ -1,9 +1,11 @@
 // Per-session evidence for the session logs (admin pump page, plant manager attendance): the group
-// photo, every counted worker's face, and cross-pump fraud on either side of the pair.
+// photo, every counted worker (name, face on click), and cross-pump fraud on either side of the
+// pair (face shown inline).
 // A face flagged as fraud is not counted at its pump (the worker skips it), so it is not in
 // attendance_face_evidence; it comes from fraud_flags instead.
 import { resolve } from '$app/paths';
 import { query } from './db';
+import { personShortLabel } from '$lib/personLabel';
 
 export type FraudEvidence = {
 	flagId: string;
@@ -30,7 +32,8 @@ export async function attachSessionEvidence<T extends SessionRow>(sessions: T[])
 	const [faces, fraudRows] = sessionIds.length
 		? await Promise.all([
 				query<any>(
-					`SELECT afe.session_id, afe.person_id, afe.face_crop_url, p.display_seq, p.is_operator,
+					`SELECT afe.id, afe.session_id, afe.person_id, (afe.face_crop_url IS NOT NULL) AS has_crop,
+					        p.display_seq, p.is_operator, p.name,
 					        EXISTS (
 					          SELECT 1 FROM attendance_review_flags arf
 					          WHERE arf.session_id = afe.session_id
@@ -62,8 +65,9 @@ export async function attachSessionEvidence<T extends SessionRow>(sessions: T[])
 		const people = peopleBySession.get(face.session_id) ?? [];
 		people.push({
 			personId: face.person_id,
-			label: `Worker ${face.display_seq}${face.is_operator ? ' (Operator)' : ''}`,
-			cropUrl: face.face_crop_url,
+			label: personShortLabel(face.display_seq, face.is_operator, face.name),
+			// Loaded only when the face is opened; fraud crops below stay inline.
+			cropUrl: face.has_crop ? resolve('/api/attendance/face/[id]', { id: face.id }) : null,
 			flagged: face.flagged
 		});
 		peopleBySession.set(face.session_id, people);

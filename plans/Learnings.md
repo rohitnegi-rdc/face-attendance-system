@@ -81,3 +81,9 @@ The original 12-row illustrative sample in Prompt A never exposed several real p
 - Running two workers in the regression gate is cheap and is what actually exercises cross-worker races: one run logs about 40 `SERIALIZABLE` conflicts, all retried, with exact results (CONC-01..08).
 - Tests can reach "a worker crashed here" without killing a process: write the photo into `UPLOAD_DIR` and insert the session and job rows in the state a crash leaves (WRK-03/08/09).
 - Base-path URL bugs kept coming back one page at a time (pump review photo, then the location approval photo). Cause: SvelteKit's default `paths.relative: true` makes server-side `resolve()` return `../../...`, which is only right for the exact URL it was computed for, not for a `__data.json` load, an API response or an email. `paths.relative: false` (vite.config.ts) makes it absolute everywhere. The regression build uses an empty BASE_PATH, so a missing prefix still works there: PATH-07 checks for `../` in `__data.json` instead.
+
+## 2026-10-22: Worker names, plant manager fixes, faces on click
+
+- Every processed photo waits in `review` until the pump presses Complete, so a mandatory step belongs at approve, not at submit: the photo is never blocked, and a worker is named once (on first sight), not on every photo.
+- A missed shift start leaves one photo that the system rightly records as the start. Correction used to require a photo of the matching type, so neither admin nor plant manager could mark the end present. Corrections now need any processed photo that day; the reason and the actor (admin or plant manager) are stored.
+- Base64 face crops (~17 KB each) inlined in list pages made a 20-row session log weigh megabytes. List pages now serve crops through cached, role-checked image routes and load them on click; only fraud faces, the evidence a reader must see at once, stay inline.

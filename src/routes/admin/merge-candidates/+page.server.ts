@@ -10,7 +10,7 @@ export const load: PageServerLoad = async () => {
 	const candidates = await query<any>(
 		`SELECT DISTINCT ON (LEAST(p1.id, p2.id), GREATEST(p1.id, p2.id))
 		        p1.id AS person_a, p2.id AS person_b, p1.pump_id,
-		        p1.display_seq AS display_seq_a, p2.display_seq AS display_seq_b,
+		        p1.display_seq AS display_seq_a, p2.display_seq AS display_seq_b, p1.name AS name_a, p2.name AS name_b,
 		        p1.first_seen_at AS first_seen_a, p2.first_seen_at AS first_seen_b,
 		        p1.last_seen_at AS last_seen_a, p2.last_seen_at AS last_seen_b,
 		        pu.pump_code,

@@ -4,6 +4,7 @@ import { resolve } from '$app/paths';
 import { pool, query, queryOne } from '$lib/server/db';
 import { isDateKey } from '$lib/date';
 import { shiftStillOpen } from '$lib/server/shiftSessions';
+import { saveCorrection } from '$lib/server/attendanceCorrection';
 import { logger } from '$lib/server/log';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -28,7 +29,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			[pumpId, day]
 		),
 		query<any>(
-			`SELECT p.id, p.display_seq, COALESCE(dpa.morning_matched, false) AS morning_matched,
+			`SELECT p.id, p.display_seq, p.name, COALESCE(dpa.morning_matched, false) AS morning_matched,
 			        COALESCE(dpa.evening_matched, false) AS evening_matched,
 			        (SELECT source_photo_crop_url FROM person_face_vectors
 			         WHERE person_id = p.id AND source_photo_crop_url IS NOT NULL
@@ -38,10 +39,12 @@ export const load: PageServerLoad = async ({ url }) => {
 			[pumpId, day]
 		),
 		query<any>(
-			`SELECT ac.id, p.display_seq, ac.reason, ac.corrected_at,
-			        ac.corrected_morning_matched, ac.corrected_evening_matched, adm.email AS corrected_by
+			`SELECT ac.id, p.display_seq, p.name, ac.reason, ac.corrected_at,
+			        ac.corrected_morning_matched, ac.corrected_evening_matched,
+			        coalesce(adm.email, pm.email) AS corrected_by
 			 FROM attendance_corrections ac JOIN persons p ON p.id = ac.person_id
-			 JOIN admins adm ON adm.id = ac.corrected_by_admin_id
+			 LEFT JOIN admins adm ON adm.id = ac.corrected_by_admin_id
+			 LEFT JOIN plant_managers pm ON pm.id = ac.corrected_by_manager_id
 			 WHERE ac.pump_id = $1 AND ac.session_date = $2 ORDER BY ac.corrected_at DESC LIMIT 20`,
 			[pumpId, day]
 		),
@@ -64,112 +67,16 @@ export const load: PageServerLoad = async ({ url }) => {
 export const actions: Actions = {
 	correct: async ({ request, locals }) => {
 		if (!locals.user || locals.user.role !== 'admin') return fail(403, { error: 'Forbidden' });
-		const form = await request.formData();
-		const personId = String(form.get('person_id') || '');
-		const pumpId = String(form.get('pump_id') || '');
-		const day = String(form.get('day') || '');
-		const reason = String(form.get('reason') || '').trim();
-		const morningMatched = form.get('morning_present') === 'on';
-		const eveningMatched = form.get('evening_present') === 'on';
-		if (!UUID_PATTERN.test(personId) || !UUID_PATTERN.test(pumpId) || !isDateKey(day)) {
-			return fail(400, { error: 'Invalid attendance correction request' });
-		}
-		if (reason.length < 5 || reason.length > 500) {
-			return fail(400, {
-				error: 'Enter a correction reason between 5 and 500 characters',
-				personId
-			});
-		}
-
-		const client = await pool.connect();
 		try {
-			await client.query('BEGIN');
-			const person = await client.query(
-				`SELECT id FROM persons WHERE id = $1 AND pump_id = $2 AND status = 'active' FOR UPDATE`,
-				[personId, pumpId]
+			const result = await saveCorrection(
+				{ role: 'admin', id: locals.user.id },
+				await request.formData()
 			);
-			if (!person.rowCount) {
-				await client.query('ROLLBACK');
-				return fail(404, { error: 'Worker not found for this pump', personId });
-			}
-			const sessions = await client.query(
-				`SELECT session_type FROM attendance_sessions
-				 WHERE pump_id = $1 AND session_date = $2 AND status IN ('review', 'completed')`,
-				[pumpId, day]
-			);
-			if (!sessions.rowCount) {
-				await client.query('ROLLBACK');
-				return fail(409, {
-					error: 'No completed attendance session exists for this date',
-					personId
-				});
-			}
-			const available = new Set(sessions.rows.map((row) => row.session_type));
-			if (
-				(morningMatched && !available.has('morning')) ||
-				(eveningMatched && !available.has('evening'))
-			) {
-				await client.query('ROLLBACK');
-				return fail(409, {
-					error: 'Attendance cannot be added without its source session',
-					personId
-				});
-			}
-			const existing = await client.query(
-				`SELECT morning_matched, evening_matched FROM daily_person_attendance
-				 WHERE person_id = $1 AND session_date = $2 FOR UPDATE`,
-				[personId, day]
-			);
-			const previousMorning = existing.rows[0]?.morning_matched ?? false;
-			const previousEvening = existing.rows[0]?.evening_matched ?? false;
-
-			await client.query(
-				`INSERT INTO daily_person_attendance (person_id, pump_id, session_date, morning_matched, evening_matched, updated_at)
-				 VALUES ($1, $2, $3, $4, $5, now())
-				 ON CONFLICT (person_id, session_date) DO UPDATE SET morning_matched = EXCLUDED.morning_matched,
-				 evening_matched = EXCLUDED.evening_matched, updated_at = now()`,
-				[personId, pumpId, day, morningMatched, eveningMatched]
-			);
-			await client.query(
-				`INSERT INTO attendance_corrections
-				 (person_id, pump_id, session_date, previous_morning_matched, previous_evening_matched,
-				  corrected_morning_matched, corrected_evening_matched, reason, corrected_by_admin_id)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-				[
-					personId,
-					pumpId,
-					day,
-					previousMorning,
-					previousEvening,
-					morningMatched,
-					eveningMatched,
-					reason,
-					locals.user.id
-				]
-			);
-			await client.query(
-				`INSERT INTO person_attendance_yearly
-				 (person_id, year, days_present, days_morning_only, days_evening_only, last_updated)
-				 SELECT $1, EXTRACT(YEAR FROM $2::date)::int,
-				 COUNT(*) FILTER (WHERE morning_matched AND evening_matched),
-				 COUNT(*) FILTER (WHERE morning_matched AND NOT evening_matched
-				   AND NOT ${shiftStillOpen('daily_person_attendance')}),
-				 COUNT(*) FILTER (WHERE NOT morning_matched AND evening_matched), now()
-				 FROM daily_person_attendance WHERE person_id = $1
-				 AND EXTRACT(YEAR FROM session_date) = EXTRACT(YEAR FROM $2::date)
-				 ON CONFLICT (person_id, year) DO UPDATE SET days_present = EXCLUDED.days_present,
-				 days_morning_only = EXCLUDED.days_morning_only, days_evening_only = EXCLUDED.days_evening_only,
-				 last_updated = now()`,
-				[personId, day]
-			);
-			await client.query('COMMIT');
-			return { success: true, personId, message: 'Attendance correction saved' };
+			if (result.error) return fail(result.status, { error: result.error, personId: result.personId });
+			return { success: true, personId: result.personId, message: result.message };
 		} catch (err) {
-			await client.query('ROLLBACK');
 			logger.error({ error: String((err as any)?.message || err) }, 'attendance correction failed');
-			return fail(500, { error: 'Could not save the attendance correction', personId });
-		} finally {
-			client.release();
+			return fail(500, { error: 'Could not save the attendance correction' });
 		}
 	},
 	markDuplicate: async ({ request, locals }) => {

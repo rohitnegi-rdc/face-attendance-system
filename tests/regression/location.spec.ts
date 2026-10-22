@@ -7,6 +7,7 @@ import path from 'node:path';
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import {
+	approve,
 	action,
 	anonymous,
 	BASE_URL,
@@ -62,7 +63,7 @@ async function startShift(
 	const body = await response.json();
 	expect(response.status(), JSON.stringify(body)).toBe(202);
 	const session = await waitForSession(body.session_id, ['review']);
-	await context.post(`/api/attendance/approve/${body.session_id}`);
+	await approve(context, body.session_id);
 	return { body, session };
 }
 

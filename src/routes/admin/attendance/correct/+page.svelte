@@ -82,9 +82,9 @@
 					<input type="hidden" name="pump_id" value={data.pump.id} />
 					<input type="hidden" name="day" value={data.day} />
 					<div class="worker-identity">
-						{#if person.preview_url}<img src={person.preview_url} alt={`Preview of ${personDisplayLabel(data.pump.pump_code, person.display_seq)}`} loading="lazy" />{:else}<span class="preview-empty">No photo</span>{/if}
+						{#if person.preview_url}<img src={person.preview_url} alt={`Preview of ${personDisplayLabel(data.pump.pump_code, person.display_seq, false, person.name)}`} loading="lazy" />{:else}<span class="preview-empty">No photo</span>{/if}
 						<div>
-							<strong>{personDisplayLabel(data.pump.pump_code, person.display_seq)}</strong>
+							<strong>{personDisplayLabel(data.pump.pump_code, person.display_seq, false, person.name)}</strong>
 							<span>Worker attendance</span>
 						</div>
 					</div>
@@ -92,10 +92,10 @@
 						<div class="attendance-fields">
 							{#if morningDuplicate}
 								<div class="duplicate-state"><span><strong>Shift start:</strong> duplicate of {personDisplayLabel(data.pump.pump_code, morningDuplicate.kept_display_seq)}</span><button class="text-button" type="submit" formnovalidate name="resolution_id" value={morningDuplicate.id} formaction={`?/undoDuplicate&pump=${data.pump.id}&day=${data.day}`}><Undo2 size={15} /> Unmark</button></div>
-							{:else}<label class="check-field"><input type="checkbox" name="morning_present" checked={person.morning_matched} disabled={!availableSessions.has('morning')} /><span>Start present</span></label>{/if}
+							{:else}<label class="check-field"><input type="checkbox" name="morning_present" checked={person.morning_matched} disabled={!availableSessions.size} /><span>Start present</span></label>{/if}
 							{#if eveningDuplicate}
 								<div class="duplicate-state"><span><strong>Shift end:</strong> duplicate of {personDisplayLabel(data.pump.pump_code, eveningDuplicate.kept_display_seq)}</span><button class="text-button" type="submit" formnovalidate name="resolution_id" value={eveningDuplicate.id} formaction={`?/undoDuplicate&pump=${data.pump.id}&day=${data.day}`}><Undo2 size={15} /> Unmark</button></div>
-							{:else}<label class="check-field"><input type="checkbox" name="evening_present" checked={person.evening_matched} disabled={!availableSessions.has('evening')} /><span>End present</span></label>{/if}
+							{:else}<label class="check-field"><input type="checkbox" name="evening_present" checked={person.evening_matched} disabled={!availableSessions.size} /><span>End present</span></label>{/if}
 						</div>
 						<div class="correction-action">
 							<label class="reason-field">
@@ -107,7 +107,7 @@
 						<details class="duplicate-panel">
 							<summary><UserMinus size={16} /> Resolve duplicate detection</summary>
 							<div class="duplicate-controls">
-							<label><span>Duplicate of</span><select name="duplicate_person_id"><option value="">Select worker</option>{#each data.people.filter((candidate: any) => candidate.id !== person.id) as candidate}<option value={candidate.id}>{personDisplayLabel(data.pump.pump_code, candidate.display_seq)}</option>{/each}</select></label>
+							<label><span>Duplicate of</span><select name="duplicate_person_id"><option value="">Select worker</option>{#each data.people.filter((candidate: any) => candidate.id !== person.id) as candidate}<option value={candidate.id}>{personDisplayLabel(data.pump.pump_code, candidate.display_seq, false, candidate.name)}</option>{/each}</select></label>
 							<label><span>Duplicate reason</span><input name="duplicate_reason" minlength="5" maxlength="500" placeholder="How did you verify the duplicate?" /></label>
 							<label><span>Session</span><select name="session_type">{#each ['morning', 'evening'] as type}<option value={type} disabled={!availableSessions.has(type)}>{type === 'morning' ? 'Shift start' : 'Shift end'}</option>{/each}</select></label>
 							<button class="button button--secondary" type="submit" formnovalidate formaction={`?/markDuplicate&pump=${data.pump.id}&day=${data.day}`}><UserMinus size={16} /> Mark duplicate</button>
@@ -127,11 +127,11 @@
 			</div>
 			<div class="table-wrap history-table">
 				<table class="data-table">
-					<thead><tr><th>Worker</th><th>Changed to</th><th>Reason</th><th>Admin</th><th>Time</th></tr></thead>
+					<thead><tr><th>Worker</th><th>Changed to</th><th>Reason</th><th>By</th><th>Time</th></tr></thead>
 					<tbody>
 						{#each data.corrections as correction}
 							<tr>
-								<td>{personDisplayLabel(data.pump.pump_code, correction.display_seq)}</td>
+								<td>{personDisplayLabel(data.pump.pump_code, correction.display_seq, false, correction.name)}</td>
 								<td>M: {correction.corrected_morning_matched ? 'Present' : 'Absent'} · E: {correction.corrected_evening_matched ? 'Present' : 'Absent'}</td>
 								<td>{correction.reason}</td><td>{correction.corrected_by}</td>
 								<td>{new Date(correction.corrected_at).toLocaleString()}</td>
@@ -143,7 +143,7 @@
 			<div class="history-list">
 				{#each data.corrections as correction}
 					<article class="history-entry">
-						<strong>{personDisplayLabel(data.pump.pump_code, correction.display_seq)}</strong>
+						<strong>{personDisplayLabel(data.pump.pump_code, correction.display_seq, false, correction.name)}</strong>
 						<span>M: {correction.corrected_morning_matched ? 'Present' : 'Absent'} / E: {correction.corrected_evening_matched ? 'Present' : 'Absent'}</span>
 						<p>{correction.reason}</p>
 						<small>{correction.corrected_by} / {new Date(correction.corrected_at).toLocaleString()}</small>

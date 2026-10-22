@@ -46,8 +46,9 @@
 		fraud?: FraudEvidence;
 	};
 
-	// Every worker shows as a face tile next to the group photo button, in a fixed-height area
-	// that scrolls when the group is large. allowFlag shows the "Flag error" form, which posts to
+	// Fraud faces show as image tiles; every other worker as a name chip whose face loads when
+	// opened (keeps the page light: crops are ~17 KB each). All sit next to the group photo button,
+	// in a fixed-height area that scrolls when the group is large. allowFlag shows the "Flag error" form, which posts to
 	// the page's ?/flagEvidence action; turn it off on pages without that action (view-only roles).
 	let {
 		session,
@@ -162,12 +163,14 @@
 			{/each}
 			{#each session.people as person}
 				{#if person.cropUrl}
+					<!-- A name only; the face loads when opened (fraud faces above stay on screen). -->
 					<button
-						class="face-tile"
+						class="face-tile face-chip"
 						class:face-tile--flagged={person.flagged}
 						type="button"
 						title={person.label}
-						aria-label="View {person.label}"
+						aria-label="View face of {person.label}"
+						data-testid="worker-chip"
 						onclick={() =>
 							openEvidence({
 								sessionId: session.id,
@@ -178,13 +181,13 @@
 								flagged: Boolean(person.flagged)
 							})}
 					>
-						<img src={person.cropUrl} alt="" />
-						<span class="face-tile__label">{person.label}</span>
+						<ScanFace size={15} aria-hidden="true" />
+						<span class="face-chip__label">{person.label}</span>
 					</button>
 				{:else if showUnavailable}
-					<span class="face-tile face-tile--missing" title="{person.label} photo unavailable">
-						<span class="face-tile__empty"><ScanFace size={18} /></span>
-						<span class="face-tile__label">{person.label}</span>
+					<span class="face-tile face-chip face-tile--missing" title="{person.label} photo unavailable">
+						<ScanFace size={15} aria-hidden="true" />
+						<span class="face-chip__label">{person.label}</span>
 					</span>
 				{/if}
 			{/each}
@@ -310,6 +313,31 @@
 		line-height: 1.2;
 		text-align: center;
 		overflow-wrap: anywhere;
+	}
+	/* Worker without fraud: a name chip, face on click. Fraud tiles keep the image. */
+	.face-chip {
+		display: inline-flex;
+		width: auto;
+		max-width: 11rem;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.3rem 0.55rem;
+		color: var(--ink-default);
+		border-radius: 999px;
+	}
+	.face-chip :global(svg) {
+		flex: none;
+		color: var(--brand-teal);
+	}
+	.face-chip__label {
+		overflow: hidden;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.face-tile--missing.face-chip :global(svg) {
+		color: var(--ink-muted);
 	}
 	.face-tile--flagged {
 		border-color: var(--ink-strong);

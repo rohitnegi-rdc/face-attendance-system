@@ -28,7 +28,7 @@
 
 <svelte:head
 	><title
-		>{personDisplayLabel(data.person.pump_code, data.person.display_seq, data.person.is_operator)} | Face Attendance</title
+		>{personDisplayLabel(data.person.pump_code, data.person.display_seq, data.person.is_operator, data.person.name)} | Face Attendance</title
 	></svelte:head
 >
 
@@ -38,8 +38,8 @@
 	>
 	<header class="page-header">
 		<div class="page-header__copy">
-			<p class="eyebrow">Anonymous person</p>
-			<h1>{personDisplayLabel(data.person.pump_code, data.person.display_seq, data.person.is_operator)}</h1>
+			<p class="eyebrow">Worker</p>
+			<h1>{personDisplayLabel(data.person.pump_code, data.person.display_seq, data.person.is_operator, data.person.name)}</h1>
 			<p>
 				First seen {formatDate(data.person.first_seen_at)} · Last seen {formatDate(
 					data.person.last_seen_at
@@ -51,6 +51,13 @@
 			label={data.person.status}
 		/>
 	</header>
+	<form class="rename-form" method="POST" action="?/rename">
+		<label class="field">
+			<span>Name <small>written by the operator; correct it if wrong</small></span>
+			<input name="name" value={data.person.name ?? ''} maxlength="60" required />
+		</label>
+		<button class="button button--secondary" type="submit">Save name</button>
+	</form>
 	<MetricStrip {metrics} />
 	{#if form?.message}
 		<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
@@ -189,5 +196,16 @@
 	.history-evidence strong {
 		font-size: var(--text-xs);
 		text-transform: uppercase;
+	}
+	.rename-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: end;
+		gap: var(--space-3);
+		margin-bottom: var(--space-4);
+	}
+	.rename-form .field {
+		flex: 1;
+		max-width: 24rem;
 	}
 </style>

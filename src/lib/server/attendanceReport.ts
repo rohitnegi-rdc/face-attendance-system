@@ -37,6 +37,7 @@ type DailyRow = {
 	person_id: string;
 	display_seq: number;
 	is_operator: boolean;
+	name: string | null;
 	pump_code: string;
 	vendor_name: string;
 	plant_name: string;
@@ -203,7 +204,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 			  AND NOT ${heldShiftDay('s.pump_id', 's.session_date')}
 			GROUP BY s.pump_id, s.session_date
 		)
-		SELECT w.session_date::text AS session_date, p.id AS person_id, p.display_seq, p.is_operator,
+		SELECT w.session_date::text AS session_date, p.id AS person_id, p.display_seq, p.name, p.is_operator,
 		       sc.pump_code, sc.vendor_name, sc.plant_name, sc.area_name,
 		       -- From real attendance too: a shift moved to an earlier date predates first_seen_at.
 		       LEAST((p.first_seen_at AT TIME ZONE 'Asia/Kolkata')::date,
@@ -264,19 +265,20 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 	const changes = await query<any>(
 		`WITH ${scopeCte}
 		SELECT c.session_date::text AS session_date, 'Attendance corrected' AS kind,
-		       sc.pump_code, p.display_seq,
+		       sc.pump_code, p.display_seq, p.name,
 		       concat('Start ', CASE WHEN c.previous_morning_matched THEN 'present' ELSE 'missing' END,
 		              ' > ', CASE WHEN c.corrected_morning_matched THEN 'present' ELSE 'missing' END,
 		              ', End ', CASE WHEN c.previous_evening_matched THEN 'present' ELSE 'missing' END,
 		              ' > ', CASE WHEN c.corrected_evening_matched THEN 'present' ELSE 'missing' END) AS detail,
-		       c.reason, ad.email AS by_email, c.corrected_at AS at
+		       c.reason, coalesce(ad.email, pm.email) AS by_email, c.corrected_at AS at
 		FROM attendance_corrections c JOIN scope sc ON sc.id = c.pump_id
 		JOIN persons p ON p.id = c.person_id LEFT JOIN admins ad ON ad.id = c.corrected_by_admin_id
+		LEFT JOIN plant_managers pm ON pm.id = c.corrected_by_manager_id
 		WHERE c.session_date BETWEEN ${FROM} AND ${TO}
 		UNION ALL
 		SELECT r.session_date::text, CASE WHEN r.reversed_at IS NULL THEN 'Marked duplicate'
 		                                  ELSE 'Duplicate mark undone' END,
-		       sc.pump_code, dp.display_seq,
+		       sc.pump_code, dp.display_seq, dp.name,
 		       concat(CASE r.session_type WHEN 'morning' THEN 'Shift start' ELSE 'Shift end' END,
 		              ': same person as Worker ', kp.display_seq),
 		       r.reason, ad.email, coalesce(r.reversed_at, r.resolved_at)
@@ -285,7 +287,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		LEFT JOIN admins ad ON ad.id = coalesce(r.reversed_by_admin_id, r.resolved_by_admin_id)
 		WHERE r.session_date BETWEEN ${FROM} AND ${TO}
 		UNION ALL
-		SELECT s.session_date::text, 'Fraud flag', sc.pump_code, p.display_seq,
+		SELECT s.session_date::text, 'Fraud flag', sc.pump_code, p.display_seq, p.name,
 		       concat('Also matched at pump ', op.pump_code, ' (',
 		              round((f.similarity_score * 100)::numeric, 1), '% similar)'),
 		       CASE WHEN NOT f.reviewed THEN 'Open, not reviewed yet'
@@ -299,7 +301,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		LEFT JOIN pumps op ON op.id = f.matched_at_pump_id
 		LEFT JOIN admins ad ON ad.id = f.resolved_by_admin_id
 		WHERE s.session_date BETWEEN ${FROM} AND ${TO}
-		ORDER BY 1 DESC, 8 DESC`,
+		ORDER BY 1 DESC, 9 DESC`,
 		params.slice(0, n + 2)
 	);
 
@@ -522,7 +524,8 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		workbook,
 		'People',
 		[
-			{ header: 'Person', key: 'person', width: 22 },
+			{ header: 'Name', key: 'name', width: 22 },
+			{ header: 'Worker', key: 'person', width: 22 },
 			{ header: 'Pump', key: 'pump', width: 13 },
 			{ header: 'Plant', key: 'plant', width: 16 },
 			{ header: 'Vendor', key: 'vendor', width: 34 },
@@ -535,10 +538,11 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 			{ header: 'End only', key: 'endOnly', width: 10, align: 'center' },
 			{ header: 'Absent', key: 'absent', width: 10, align: 'center' },
 			{ header: 'Attendance %', key: 'pct', width: 12, align: 'center', numFmt: '0%' },
-			{ header: 'Admin fixes', key: 'corrected', width: 10, align: 'center' },
+			{ header: 'Manual fixes', key: 'corrected', width: 10, align: 'center' },
 			{ header: 'Fraud flags', key: 'fraud', width: 10, align: 'center' }
 		],
 		byPerson.map((g) => ({
+			name: g.first.name ?? 'Not named yet',
 			person: personDisplayLabel(g.first.pump_code, g.first.display_seq, g.first.is_operator),
 			pump: g.first.pump_code,
 			plant: g.first.plant_name,
@@ -573,7 +577,8 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		'Daily',
 		[
 			{ header: 'Date', key: 'date', width: 16, numFmt: DATE_FMT },
-			{ header: 'Person', key: 'person', width: 22 },
+			{ header: 'Name', key: 'name', width: 22 },
+			{ header: 'Worker', key: 'person', width: 22 },
 			{ header: 'Pump', key: 'pump', width: 13 },
 			{ header: 'Plant', key: 'plant', width: 16 },
 			{ header: 'Day result', key: 'result', width: 16, align: 'center' },
@@ -583,10 +588,11 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 			{ header: 'End photo time', key: 'endTime', width: 10, align: 'center' },
 			{ header: 'Shift hours', key: 'hours', width: 9, align: 'center' },
 			{ header: 'Vendor', key: 'vendor', width: 34 },
-			{ header: 'Admin note', key: 'note', width: 48 }
+			{ header: 'Note', key: 'note', width: 48 }
 		],
 		daily.filter(wanted).map((r) => ({
 			date: excelDate(r.session_date),
+			name: r.name ?? 'Not named yet',
 			person: personDisplayLabel(r.pump_code, r.display_seq, r.is_operator),
 			pump: r.pump_code,
 			plant: r.plant_name,
@@ -661,7 +667,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		[
 			{ header: 'Attendance date', key: 'date', width: 16, numFmt: DATE_FMT },
 			{ header: 'Change', key: 'kind', width: 20 },
-			{ header: 'Person', key: 'person', width: 22 },
+			{ header: 'Person', key: 'person', width: 30 },
 			{ header: 'What changed', key: 'detail', width: 44 },
 			{ header: 'Reason or outcome', key: 'reason', width: 40 },
 			{ header: 'By', key: 'by', width: 26 },
@@ -670,7 +676,10 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		changes.map((c) => ({
 			date: excelDate(c.session_date),
 			kind: c.kind,
-			person: c.display_seq != null ? personDisplayLabel(c.pump_code, c.display_seq) : c.pump_code,
+			person:
+				c.display_seq != null
+					? personDisplayLabel(c.pump_code, c.display_seq, false, c.name)
+					: c.pump_code,
 			detail: c.detail,
 			reason: c.reason ?? '',
 			by: c.by_email ?? '',
@@ -715,7 +724,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		['Worker-days', 'One worker on one day. 10 workers over 3 days is 30 worker-days.'],
 		[
 			'Workers',
-			'Workers are recognised by face, so they are named "PUMP Worker N". The number stays the same for that person at that pump.'
+			'Workers are recognised by face. Name is the name the pump operator wrote; Worker is "PUMP Worker N", a number that stays the same for that person at that pump. Manual fixes are changes made by a plant manager or admin, with a reason.'
 		],
 		['Times', 'All times are India time (IST).']
 	];

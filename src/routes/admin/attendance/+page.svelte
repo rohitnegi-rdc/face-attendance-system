@@ -269,7 +269,7 @@
 														><div class="person-records">
 															{#each pumpRows(pump.pump_id) as row}<a
 																	href={resolve(`/admin/persons/${row.person_id}`)}
-																	><span>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator)}</span
+																	><span>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</span
 																	><StatusBadge
 																		tone={isPresent(row) ? 'success' : 'neutral'}
 																		label={isPresent(row) ? 'Present' : 'Absent'}
@@ -311,7 +311,7 @@
 						>{#each data.rows as row}<tr
 								><td>{formatDate(row.session_date)}</td><td
 									><a href={resolve(`/admin/persons/${row.person_id}`)}
-										>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator)}</a
+										>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</a
 									></td
 								><td><a href={resolve(`/admin/pumps/${row.pump_id}`)}>{row.pump_code}</a></td><td
 									><a href={resolve(`/admin/vendors/${row.vendor_id}`)}>{row.vendor_name}</a></td
@@ -339,7 +339,7 @@
 					<article class="mobile-record">
 						<div>
 							<a href={resolve(`/admin/persons/${row.person_id}`)}
-								>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator)}</a
+								>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</a
 							><StatusBadge
 								tone={isPresent(row) ? 'success' : 'neutral'}
 								label={isPresent(row) ? 'Present' : 'Absent'}

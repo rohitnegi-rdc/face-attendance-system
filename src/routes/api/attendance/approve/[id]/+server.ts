@@ -2,10 +2,11 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { pool } from '$lib/server/db';
 import { logger } from '$lib/server/log';
+import { cleanPersonName } from '$lib/personLabel';
 
 type RollupColumn = 'days_present' | 'days_morning_only' | 'days_evening_only';
 
-export const POST: RequestHandler = async ({ params, locals }) => {
+export const POST: RequestHandler = async ({ params, locals, request }) => {
 	if (!locals.user || locals.user.role !== 'pump') {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
@@ -30,6 +31,55 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 		if (session.status !== 'review') {
 			await client.query('ROLLBACK');
 			return json({ error: 'This attendance is not awaiting review' }, { status: 409 });
+		}
+
+		// Every worker in this photo must have a name before the operator can complete it. Names
+		// come as { names: { [person_id]: "Name" } }; workers named earlier keep their name.
+		const body = await request.json().catch(() => ({}));
+		const given: Record<string, unknown> =
+			body && typeof body.names === 'object' && body.names ? body.names : {};
+		const { rows: unnamed } = await client.query<{ id: string; display_seq: number }>(
+			`SELECT DISTINCT p.id, p.display_seq FROM persons p
+			 JOIN person_face_vectors v ON v.person_id = p.id
+			 WHERE v.session_id = $1 AND p.name IS NULL AND p.status IN ('active', 'pending_review')
+			 ORDER BY p.display_seq`,
+			[session.id]
+		);
+		const names = unnamed.map((person) => ({ ...person, name: cleanPersonName(given[person.id]) }));
+		const missing = names.filter((person) => !person.name);
+		if (missing.length) {
+			await client.query('ROLLBACK');
+			return json(
+				{
+					error: 'Write a name for every worker before completing.',
+					unnamed: missing.map((person) => person.id)
+				},
+				{ status: 422 }
+			);
+		}
+		const lower = names.map((person) => person.name!.toLowerCase());
+		const taken = await client.query<{ name: string }>(
+			`SELECT name FROM persons
+			 WHERE pump_id = $1 AND lower(name) = ANY($2::text[]) AND status IN ('active', 'pending_review')`,
+			[session.pump_id, lower]
+		);
+		const repeated = lower.find((name, i) => lower.indexOf(name) !== i);
+		if (taken.rowCount || repeated) {
+			await client.query('ROLLBACK');
+			const name = taken.rows[0]?.name ?? names[lower.indexOf(repeated!)].name;
+			return json(
+				{
+					error: `"${name}" is already the name of another worker at this pump. Add something to tell them apart, for example the father's name or village.`,
+					duplicate: name
+				},
+				{ status: 409 }
+			);
+		}
+		for (const person of names) {
+			await client.query(
+				`UPDATE persons SET name = $2, named_by = 'pump', named_at = now() WHERE id = $1`,
+				[person.id, person.name]
+			);
 		}
 
 		await client.query(`UPDATE attendance_sessions SET status = 'completed' WHERE id = $1`, [session.id]);
@@ -89,6 +139,13 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 	} catch (err: any) {
 		await client.query('ROLLBACK').catch(() => {});
 		if (err?.status) throw err;
+		// The same name saved by a parallel request between the check and the update.
+		if (err?.code === '23505') {
+			return json(
+				{ error: 'That name is already the name of another worker at this pump.' },
+				{ status: 409 }
+			);
+		}
 		logger.error(
 			{ pumpId: locals.user?.id, sessionId: params.id, error: String(err?.message || err) },
 			'attendance review approval failed'

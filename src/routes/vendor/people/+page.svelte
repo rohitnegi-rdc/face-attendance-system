@@ -1,9 +1,16 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
+	import Pencil from '@lucide/svelte/icons/pencil';
 	import Search from '@lucide/svelte/icons/search';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import FacePeek from '$lib/components/FacePeek.svelte';
 	import { formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
-	let { data } = $props();
+	let { data, form } = $props();
+
+	// The worker whose name is being corrected (one at a time).
+	let editing = $state('');
 </script>
 
 <svelte:head><title>Vendor people | Face Attendance</title></svelte:head>
@@ -12,7 +19,7 @@
 		<div class="page-header__copy">
 			<p class="eyebrow">Vendor workspace</p>
 			<h1>People</h1>
-			<p>Anonymous identities discovered at your assigned pumps.</p>
+			<p>Workers at your pumps. The operator names each worker; correct a name here if needed.</p>
 		</div>
 	</header>
 	<form class="filter-bar compact-filter" method="GET">
@@ -34,23 +41,79 @@
 				<table class="data-table" data-testid="vendor-persons-table">
 					<thead
 						><tr
-							><th>Person</th><th>Pump</th><th>First seen</th><th>Last seen</th><th>Full shift</th><th
-								>Start only</th
-							><th>End only</th></tr
+							><th>Person</th><th>Pump</th><th>First seen</th><th>Last seen</th><th>Full shift</th
+							><th>Start only</th><th>End only</th></tr
 						></thead
 					><tbody
-						>{#each data.persons as person}<tr
-								><td
-									><span class="person-cell"
-										>{#if person.source_photo_crop_url}<img
-												src={person.source_photo_crop_url}
-												alt=""
-												loading="lazy"
-											/>{:else}<span class="crop-placeholder"></span>{/if}<strong
-											>{personDisplayLabel(person.pump_code, person.display_seq, person.is_operator)}</strong
-										></span
-									></td
-								><td>{person.pump_code}</td><td>{formatDate(person.first_seen_at)}</td><td
+						>{#each data.persons as person (person.id)}
+							{@const label = personDisplayLabel(
+								person.pump_code,
+								person.display_seq,
+								person.is_operator,
+								person.name
+							)}
+							<tr
+								><td>
+									{#if editing === person.id}
+										<form
+											class="rename-form"
+											method="POST"
+											action="?/rename"
+											use:enhance={() =>
+												async ({ result, update }) => {
+													await update({ reset: false });
+													if (result.type === 'success') editing = '';
+												}}
+										>
+											<span class="person-cell rename-form__who">
+												<FacePeek
+													url={resolve('/api/persons/[id]/face', { id: person.id })}
+													{label}
+												/>
+												<strong>{label}</strong>
+											</span>
+											<input type="hidden" name="person_id" value={person.id} />
+											<!-- svelte-ignore a11y_autofocus -->
+											<input
+												name="name"
+												value={person.name ?? ''}
+												maxlength="60"
+												required
+												autofocus
+												placeholder="Full name"
+												aria-label="Name of {label}"
+												data-testid="rename-input"
+											/>
+											<button class="button button--primary" type="submit">Save</button>
+											<button
+												class="button button--secondary"
+												type="button"
+												onclick={() => (editing = '')}>Cancel</button
+											>
+											{#if form?.error && form.personId === person.id}<p
+													class="form-error"
+													role="alert"
+												>
+													{form.error}
+												</p>{/if}
+										</form>
+									{:else}
+										<span class="person-cell">
+											<FacePeek
+												url={resolve('/api/persons/[id]/face', { id: person.id })}
+												{label}
+											/>
+											<strong class:unnamed={!person.name}>{label}</strong>
+											<button
+												class="icon-button"
+												type="button"
+												title="Edit name"
+												aria-label="Edit name of {label}"
+												onclick={() => (editing = person.id)}><Pencil size={15} /></button
+											>
+										</span>
+									{/if}
+								</td><td>{person.pump_code}</td><td>{formatDate(person.first_seen_at)}</td><td
 									>{formatDate(person.last_seen_at)}</td
 								><td>{person.days_present}</td><td>{person.days_morning_only}</td><td
 									>{person.days_evening_only}</td
@@ -84,13 +147,28 @@
 		gap: var(--space-2);
 		white-space: nowrap;
 	}
-	.person-cell img,
-	.crop-placeholder {
-		width: 2.5rem;
-		height: 2.5rem;
-		object-fit: cover;
-		background: var(--surface-muted);
-		border-radius: var(--radius-sm);
+	.unnamed {
+		color: var(--ink-muted);
+	}
+	.rename-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2);
+		min-width: 16rem;
+	}
+	.rename-form__who {
+		flex-basis: 100%;
+	}
+	.rename-form input[name='name'] {
+		flex: 1;
+		min-width: 10rem;
+	}
+	.form-error {
+		flex-basis: 100%;
+		margin: 0;
+		color: var(--alert);
+		font-size: var(--text-sm);
 	}
 	@media (max-width: 36rem) {
 		.compact-filter {

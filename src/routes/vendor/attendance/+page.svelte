@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import Download from '@lucide/svelte/icons/download';
 	import Search from '@lucide/svelte/icons/search';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { calendarDays, dateKey, formatDate } from '$lib/date';
+	import { calendarDays, dateKey, formatDate, todayStr } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
 	let { data } = $props();
@@ -31,6 +33,38 @@
 			<p class="eyebrow">Vendor workspace</p>
 			<h1>Attendance</h1>
 			<p>Compare daily outcomes and inspect person-level records.</p>
+		</div>
+		<!-- Same reports as the plant manager, for this vendor's pumps (payroll, billing). -->
+		<div class="header-actions">
+			<a
+				class="button button--secondary"
+				href={resolve(
+					`/vendor/attendance/export?${new URLSearchParams({ from: data.filters.from, to: data.filters.to })}`
+				)}
+				data-sveltekit-reload
+				data-testid="vendor-export"
+			>
+				<Download size={17} /> Export report
+			</a>
+			<form
+				class="headcount-form"
+				method="GET"
+				action={resolve('/vendor/attendance/export')}
+				data-sveltekit-reload
+			>
+				<input type="hidden" name="report" value="headcount" />
+				<label class="field"
+					><span>Headcount month</span><input
+						type="month"
+						name="month"
+						value={todayStr().slice(0, 7)}
+						max={todayStr().slice(0, 7)}
+					/></label
+				>
+				<button class="button button--secondary" type="submit"
+					><Download size={17} /> Headcount report</button
+				>
+			</form>
 		</div>
 	</header>
 
@@ -108,7 +142,7 @@
 				<tbody
 					>{#each data.records as row}<tr
 							><td>{formatDate(row.session_date)}</td><td
-								>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator)}</td
+								>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</td
 							><td>{row.pump_code}</td><td>{row.plant_name}</td><td
 								><StatusBadge
 									tone={row.morning_matched ? 'success' : 'neutral'}
@@ -134,5 +168,16 @@
 		font-size: var(--text-xs);
 		font-weight: 700;
 		text-transform: uppercase;
+	}
+	/* One row: export, then the month and its button, bottoms aligned; wraps on a phone. */
+	.header-actions,
+	.headcount-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: var(--space-3);
+	}
+	.header-actions .button {
+		white-space: nowrap;
 	}
 </style>

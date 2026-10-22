@@ -5,6 +5,7 @@ import { error } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
 import { queryOne } from './db';
 import { pumpScope, type NavRole } from './navCounts';
+import { personShortLabel } from '$lib/personLabel';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -41,7 +42,7 @@ export async function loadFraudCase(role: NavRole, userId: string, flagId: strin
 		        ${sighting('s')}, ${sighting('m')},
 		        pu.pump_code AS s_pump, pl.name AS s_plant, a.name AS s_area, v.name AS s_vendor,
 		        mp.pump_code AS m_pump, mpl.name AS m_plant, ma.name AS m_area, mv.name AS m_vendor,
-		        p.display_seq AS m_display_seq, p.is_operator AS m_is_operator,
+		        p.display_seq AS m_display_seq, p.is_operator AS m_is_operator, p.name AS m_name,
 		        COALESCE(afe.face_crop_url, pfv.source_photo_crop_url) AS matched_face,
 		        ${photoAllowed(role, 'pu')} AS s_photo_allowed,
 		        ${photoAllowed(role, 'mp')} AS m_photo_allowed
@@ -93,7 +94,7 @@ export async function loadFraudCase(role: NavRole, userId: string, flagId: strin
 		first: {
 			...side('m'),
 			face: row.matched_face as string | null,
-			countedAs: `Worker ${row.m_display_seq}${row.m_is_operator ? ' (Operator)' : ''}`
+			countedAs: personShortLabel(row.m_display_seq, row.m_is_operator, row.m_name)
 		},
 		refused: {
 			...side('s'),
