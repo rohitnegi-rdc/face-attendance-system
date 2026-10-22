@@ -319,6 +319,10 @@ test('UI-10 session logs show fraud faces inline and load other faces on click',
 	const log = await (await manager.get('/plant-manager/attendance')).text();
 	expect(log).toContain('data-testid="fraud-face"');
 	expect(log).toContain(fraudCrop);
+	// Each fraud tile names the worker it matched, so several tiles can be told apart.
+	expect(log).toMatch(
+		/data-testid="fraud-face"[\s\S]*?class="face-tile__who[^"]*">Test Worker \d+</
+	);
 	expect(log).toContain('data-testid="worker-chip"');
 	expect(log).not.toContain(workerCrop);
 	const faceUrl = log.match(/\/api\/attendance\/face\/[0-9a-f-]{36}/)![0];

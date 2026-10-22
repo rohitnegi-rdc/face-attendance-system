@@ -363,7 +363,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | RPT-06 | Vendor downloads the attendance report | `/vendor/attendance/export` holds only the vendor's pumps with the Name column; headcount works; plant manager and pump get 403 | 1 | P1 | Covered |
 | CORR-01 | Pump missed the shift start, so the day shows "Start only" | Plant manager opens Fix attendance from the session log, marks start and end present with a reason (required); day becomes full; correction stored with `corrected_by_manager_id`; another plant's manager gets 404 | 1 | P0 | Covered |
 | CORR-02 | Admin marks both halves on a day with one photo | Saved (the old rule wanted a photo of each type), correction stored with the admin | 1 | P1 | Covered |
-| UI-10 | Session log faces | Fraud faces inline; counted workers are name chips, their face served by `/api/attendance/face/[id]` (and People pages by `/api/persons/[id]/face`) only to users who can see the pump, 404 otherwise | 1 | P1 | Covered |
+| UI-10 | Session log faces | Fraud faces inline, each naming the matched worker (number or name), five tiles per row then scroll; counted workers are name chips, their face served by `/api/attendance/face/[id]` (and People pages by `/api/persons/[id]/face`) only to users who can see the pump, 404 otherwise | 1 | P1 | Covered |
 
 ### PATH: sub-path hosting (BASE_PATH)
 

@@ -22,6 +22,7 @@
 		side: 'flagged' | 'matched';
 		otherPump: string;
 		otherPlant: string;
+		worker: string;
 		similarity: number;
 		isOperator: boolean;
 		state: 'open' | 'confirmed' | 'cleared';
@@ -80,8 +81,8 @@
 
 	function fraudTitle(item: FraudEvidence) {
 		return item.side === 'flagged'
-			? `Same person as at ${item.otherPump}`
-			: `Also seen at ${item.otherPump}`;
+			? `Same person as ${item.otherPump} ${item.worker}`
+			: `${item.worker} also seen at ${item.otherPump}`;
 	}
 
 	function fraudDescription(item: FraudEvidence) {
@@ -156,8 +157,11 @@
 					{/if}
 					<span class="face-tile__label"
 						><strong>{fraudStateLabel(item)}</strong>
-						{item.side === 'flagged' ? 'as' : 'also'}
-						{item.otherPump}</span
+						{#if item.side === 'flagged'}{item.otherPump}
+							<b class="face-tile__who">{item.worker}</b>{:else}<b class="face-tile__who"
+								>{item.worker}</b
+							>
+							also {item.otherPump}{/if}</span
 					>
 				</button>
 			{/each}
@@ -185,7 +189,10 @@
 						<span class="face-chip__label">{person.label}</span>
 					</button>
 				{:else if showUnavailable}
-					<span class="face-tile face-chip face-tile--missing" title="{person.label} photo unavailable">
+					<span
+						class="face-tile face-chip face-tile--missing"
+						title="{person.label} photo unavailable"
+					>
 						<ScanFace size={15} aria-hidden="true" />
 						<span class="face-chip__label">{person.label}</span>
 					</span>
@@ -257,11 +264,13 @@
 </dialog>
 
 <style>
+	/* Group photo button on top, faces below: five per row, then the area scrolls. */
 	.evidence-actions {
 		display: flex;
+		flex-direction: column;
 		align-items: flex-start;
 		gap: var(--space-2);
-		min-width: 16rem;
+		min-width: 20rem;
 	}
 	.evidence-button {
 		flex-shrink: 0;
@@ -271,17 +280,17 @@
 	}
 	/* Fixed height: a big group scrolls inside the cell instead of stretching the row. */
 	.evidence-people {
-		display: flex;
-		flex: 1;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-		max-height: 9.5rem;
-		min-width: 0;
+		display: grid;
+		grid-template-columns: repeat(5, 3.75rem);
+		align-items: start;
+		gap: 0.3rem;
+		max-height: 14rem;
 		overflow-y: auto;
+		overscroll-behavior: contain;
 	}
 	.face-tile {
 		display: grid;
-		width: 4.25rem;
+		width: 100%;
 		justify-items: center;
 		align-content: start;
 		gap: 0.15rem;
@@ -307,6 +316,11 @@
 		background: var(--surface-muted);
 		border-radius: var(--radius-sm);
 	}
+	.face-tile__who {
+		display: block;
+		color: var(--ink-strong);
+		font-weight: 800;
+	}
 	.face-tile__label {
 		max-width: 100%;
 		font-size: 0.68rem;
@@ -316,25 +330,28 @@
 	}
 	/* Worker without fraud: a name chip, face on click. Fraud tiles keep the image. */
 	.face-chip {
-		display: inline-flex;
-		width: auto;
-		max-width: 11rem;
+		display: flex;
+		flex-direction: column;
 		align-items: center;
-		gap: 0.3rem;
-		padding: 0.3rem 0.55rem;
+		gap: 0.2rem;
+		padding: 0.35rem 0.25rem;
 		color: var(--ink-default);
-		border-radius: 999px;
 	}
 	.face-chip :global(svg) {
 		flex: none;
 		color: var(--brand-teal);
 	}
 	.face-chip__label {
+		display: -webkit-box;
 		overflow: hidden;
-		font-size: var(--text-xs);
-		font-weight: 600;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		font-size: 0.68rem;
+		font-weight: 700;
+		line-height: 1.2;
+		text-align: center;
+		overflow-wrap: anywhere;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
 	}
 	.face-tile--missing.face-chip :global(svg) {
 		color: var(--ink-muted);

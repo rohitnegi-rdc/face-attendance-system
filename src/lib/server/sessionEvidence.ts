@@ -15,6 +15,9 @@ export type FraudEvidence = {
 	side: 'flagged' | 'matched';
 	otherPump: string;
 	otherPlant: string;
+	// The worker the face matched, counted at the matched pump: "Worker 4" or the name, so the
+	// tiles of one session can be told apart.
+	worker: string;
 	similarity: number;
 	isOperator: boolean;
 	state: 'open' | 'confirmed' | 'cleared';
@@ -48,8 +51,10 @@ export async function attachSessionEvidence<T extends SessionRow>(sessions: T[])
 					`SELECT ff.id, ff.session_id, ff.matched_session_id, ff.face_crop_url, ff.similarity_score,
 					        ff.is_operator, ff.reviewed, ff.resolution,
 					        fp.pump_code AS flagged_pump, fpl.name AS flagged_plant,
-					        mp.pump_code AS matched_pump, mpl.name AS matched_plant
+					        mp.pump_code AS matched_pump, mpl.name AS matched_plant,
+					        p.display_seq, p.name AS person_name
 					 FROM fraud_flags ff
+					 JOIN persons p ON p.id = ff.person_id
 					 JOIN attendance_sessions fs ON fs.id = ff.session_id
 					 JOIN pumps fp ON fp.id = fs.pump_id JOIN plants fpl ON fpl.id = fp.plant_id
 					 JOIN pumps mp ON mp.id = ff.matched_at_pump_id JOIN plants mpl ON mpl.id = mp.plant_id
@@ -82,6 +87,7 @@ export async function attachSessionEvidence<T extends SessionRow>(sessions: T[])
 		const common = {
 			flagId: row.id,
 			cropUrl: row.face_crop_url,
+			worker: personShortLabel(row.display_seq, false, row.person_name),
 			similarity: Number(row.similarity_score),
 			isOperator: Boolean(row.is_operator),
 			state: (row.resolution === 'not_fraud'
