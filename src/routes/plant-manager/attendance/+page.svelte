@@ -8,7 +8,6 @@
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import LocationBadge from '$lib/components/LocationBadge.svelte';
 	import { calendarDays, dateKey, formatDate, todayStr } from '$lib/date';
-	import { personDisplayLabel } from '$lib/personLabel';
 	import { shiftOutcomeLabel, shiftTypeLabel } from '$lib/shiftLabels';
 	let { data } = $props();
 	const days = $derived(calendarDays(data.filters.from, data.filters.to));
@@ -38,34 +37,36 @@
 			<h1>Attendance</h1>
 			<p>Attendance and session evidence for your assigned plants.</p>
 		</div>
-		<a
-			class="button button--secondary"
-			href={resolve(
-				`/plant-manager/attendance/export?${new URLSearchParams({ from: data.filters.from, to: data.filters.to })}`
-			)}
-			data-sveltekit-reload
-		>
-			<Download size={17} /> Export report
-		</a>
-		<form
-			class="headcount-form"
-			method="GET"
-			action={resolve('/plant-manager/attendance/export')}
-			data-sveltekit-reload
-		>
-			<input type="hidden" name="report" value="headcount" />
-			<label class="field"
-				><span>Headcount month</span><input
-					type="month"
-					name="month"
-					value={todayStr().slice(0, 7)}
-					max={todayStr().slice(0, 7)}
-				/></label
+		<div class="header-actions">
+			<a
+				class="button button--secondary"
+				href={resolve(
+					`/plant-manager/attendance/export?${new URLSearchParams({ from: data.filters.from, to: data.filters.to })}`
+				)}
+				data-sveltekit-reload
 			>
-			<button class="button button--secondary" type="submit"
-				><Download size={17} /> Headcount report</button
+				<Download size={17} /> Export report
+			</a>
+			<form
+				class="headcount-form"
+				method="GET"
+				action={resolve('/plant-manager/attendance/export')}
+				data-sveltekit-reload
 			>
-		</form>
+				<input type="hidden" name="report" value="headcount" />
+				<label class="field"
+					><span>Headcount month</span><input
+						type="month"
+						name="month"
+						value={todayStr().slice(0, 7)}
+						max={todayStr().slice(0, 7)}
+					/></label
+				>
+				<button class="button button--secondary" type="submit"
+					><Download size={17} /> Headcount report</button
+				>
+			</form>
+		</div>
 	</header>
 	<form class="filter-bar compact-filter" method="GET">
 		<label class="field"
@@ -92,42 +93,6 @@
 			/>{:else}<EmptyState
 				title="No attendance in this range"
 				description="Choose another date range."
-			/>{/if}
-	</section>
-	<section class="section">
-		<div class="section-header">
-			<div>
-				<h2>Person records</h2>
-				<p class="supporting-text">{data.records.length} records shown</p>
-			</div>
-		</div>
-		{#if data.records.length}<div class="table-wrap">
-				<table class="data-table">
-					<thead
-						><tr
-							><th>Date</th><th>Person</th><th>Pump</th><th>Plant</th><th>Start</th><th>End</th></tr
-						></thead
-					><tbody
-						>{#each data.records as row}<tr
-								><td>{formatDate(row.session_date)}</td><td
-									>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator)}</td
-								><td>{row.pump_code}</td><td>{row.plant_name}</td><td
-									><StatusBadge
-										tone={row.morning_matched ? 'success' : 'neutral'}
-										label={row.morning_matched ? 'Present' : 'Missing'}
-									/></td
-								><td
-									><StatusBadge
-										tone={row.evening_matched ? 'success' : 'neutral'}
-										label={row.evening_matched ? 'Present' : 'Missing'}
-									/></td
-								></tr
-							>{/each}</tbody
-					>
-				</table>
-			</div>{:else}<EmptyState
-				title="No person records"
-				description="Attendance records will appear here after sessions are processed."
 			/>{/if}
 	</section>
 	<section class="section">
@@ -210,11 +175,43 @@
 		color: var(--ink-muted);
 		font-size: var(--text-sm);
 	}
+	/* One row: export, then the month and its button, bottoms aligned; wraps on a phone. */
+	.header-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: var(--space-3);
+	}
+	.headcount-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: var(--space-3);
+	}
+	.header-actions .button {
+		white-space: nowrap;
+	}
 	.compact-filter {
 		grid-template-columns: repeat(2, minmax(11rem, 16rem)) auto;
 		justify-content: start;
 	}
 	@media (max-width: 38rem) {
+		/* One row: export, then the month and its button, bottoms aligned; wraps on a phone. */
+		.header-actions {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: flex-end;
+			gap: var(--space-3);
+		}
+		.headcount-form {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: flex-end;
+			gap: var(--space-3);
+		}
+		.header-actions .button {
+			white-space: nowrap;
+		}
 		.compact-filter {
 			grid-template-columns: 1fr;
 		}

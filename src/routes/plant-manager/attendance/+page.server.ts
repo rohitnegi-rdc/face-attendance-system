@@ -18,7 +18,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		: today.format('YYYY-MM-DD');
 	const requestedPage = Number(url.searchParams.get('session_page') || '1');
 	const sessionPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
-	const [pumps, plants, daily, records, sessionRows, sessionCount] = await Promise.all([
+	const [pumps, plants, daily, sessionRows, sessionCount] = await Promise.all([
 		query<any>(
 			`SELECT pu.id, pu.pump_code FROM pumps pu JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id WHERE pma.manager_id = $1 ORDER BY pu.pump_code`,
 			[managerId]
@@ -35,16 +35,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			 JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id
 			 WHERE pma.manager_id = $1 AND dpa.session_date BETWEEN $2 AND $3
 			 GROUP BY pu.id, dpa.session_date ORDER BY dpa.session_date`,
-			[managerId, from, to]
-		),
-		query<any>(
-			`SELECT dpa.session_date, dpa.morning_matched, dpa.evening_matched, p.display_seq, p.is_operator,
-			        pu.pump_code, pl.name AS plant_name, a.name AS area_name
-			 FROM daily_person_attendance dpa JOIN persons p ON p.id = dpa.person_id
-			 JOIN pumps pu ON pu.id = dpa.pump_id JOIN plants pl ON pl.id = pu.plant_id
-			 JOIN areas a ON a.id = pl.area_id JOIN plant_manager_assignments pma ON pma.plant_id = pl.id
-			 WHERE pma.manager_id = $1 AND dpa.session_date BETWEEN $2 AND $3
-			 ORDER BY dpa.session_date DESC, pu.pump_code, p.display_seq LIMIT 500`,
 			[managerId, from, to]
 		),
 		query<any>(
@@ -76,7 +66,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		pumps,
 		plants,
 		daily,
-		records,
 		sessions,
 		sessionPagination: {
 			page: sessionPage,

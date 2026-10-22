@@ -185,6 +185,8 @@ test('UI-09 every worker of a session is shown inline, no fold-out list', async 
 	);
 	const page = await html(manager, '/plant-manager/attendance');
 	expect(page).not.toMatch(/<summary>\d+ workers<\/summary>/);
+	// The per-person table was removed from this page (2026-10-22); the session log covers it.
+	expect(page).not.toContain('Person records');
 	const evidence = (page.split('data-testid="evidence-people"')[1] ?? '').split('</div>')[0];
 	// Five workers; the operator is one of them or one more face. The stub AI returns no crops,
 	// so the tiles here are the "photo unavailable" kind; real photos give clickable ones.

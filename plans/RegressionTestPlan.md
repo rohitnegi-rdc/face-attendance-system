@@ -389,7 +389,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | UI-06 | Accessibility (axe) on login, pump and admin home | No serious violations | 2 | P1 | Covered |
 | UI-07 | Session expires while a page is open, then the user clicks an action | Sent to login, no silent failure | 2 | P2 | Missing |
 | UI-08 | Pump screen language (added 2026-10-22) | Hindi (Devanagari, everyday English work words kept) by default; one EN / हिंदी toggle switches to English and is remembered after reload; only the pump screens | 1 | P1 | Covered (pump-language.spec) |
-| UI-09 | Session log with five workers (added 2026-10-22) | Every worker shown inline as a face tile next to View group, in a fixed-height scroll area; no fold-out list | 1 | P1 | Covered (nav-badges.spec) |
+| UI-09 | Session log with five workers (added 2026-10-22) | Every worker shown inline as a face tile next to View group, in a fixed-height scroll area; no fold-out list; plant manager Attendance has no Person records table | 1 | P1 | Covered (nav-badges.spec) |
 
 ### ACC: model accuracy (Tier 3, existing gate)
 
