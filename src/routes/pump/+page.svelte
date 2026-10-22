@@ -16,6 +16,7 @@
 	import Users from '@lucide/svelte/icons/users';
 	import X from '@lucide/svelte/icons/x';
 	import { personDisplayLabel } from '$lib/personLabel';
+	import { t, tLabel } from '$lib/pumpLang.svelte';
 	import { showErrorToast, toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 
 	type FlowStatus = 'idle' | 'submitting' | 'processing' | 'completed' | 'failed' | 'fraud';
@@ -36,9 +37,13 @@
 	// null when the spoof check is switched off (ai-service ANTI_SPOOF_ENABLED=false): show no badge.
 	function livenessLabel(person: WorkerResult) {
 		if (person.liveness_reason === 'disabled') return null;
-		if (person.liveness_status === 'live') return 'Live check passed';
-		if (person.liveness_status === 'suspicious') return 'Needs review';
-		return 'Could not verify';
+		if (person.liveness_status === 'live') return t('Live check passed');
+		if (person.liveness_status === 'suspicious') return t('Needs review');
+		return t('Could not verify');
+	}
+
+	function workerLabel(person: WorkerResult) {
+		return tLabel(personDisplayLabel(person.pump_code, person.display_seq, person.is_operator));
 	}
 	type WorkerPreview = WorkerResult & {
 		group: 'matched' | 'new' | 'held' | 'guest';
@@ -561,7 +566,7 @@
 				if (body.status === 'failed') {
 					status = 'failed';
 					errorMsg = body.error_reason || 'Processing failed. Please try another photo.';
-					showErrorToast(body.error_reason || 'The photo could not be processed.');
+					showErrorToast(t(body.error_reason || 'The photo could not be processed.'));
 					return;
 				}
 				if (body.status === 'fraud_detected') {
@@ -580,7 +585,7 @@
 		}
 		status = 'failed';
 		errorMsg = 'Processing is taking longer than expected. Please retry the status check.';
-		showErrorToast('The photo is taking too long to process.');
+		showErrorToast(t('The photo is taking too long to process.'));
 	}
 
 	// Faces held by a fraud flag are not counted here until an admin clears them.
@@ -636,14 +641,14 @@
 		group: 'matched' | 'new',
 		trigger: HTMLButtonElement
 	) {
-		const label = personDisplayLabel(person.pump_code, person.display_seq, person.is_operator);
+		const label = workerLabel(person);
 		workerPreviewTrigger = trigger;
 		selectedWorkerPreview = {
 			...person,
 			group,
 			label,
 			statusLabel: [
-				group === 'matched' ? 'Matched existing worker' : 'New worker found',
+				group === 'matched' ? t('Matched existing worker') : t('New worker found'),
 				livenessLabel(person)
 			]
 				.filter(Boolean)
@@ -726,15 +731,18 @@
 				onclick={captureCameraFrame}
 				disabled={!cameraCaptureReady}
 			>
-				<Camera size={18} /> Use this photo
+				<Camera size={18} />
+				{t('Use this photo')}
 			</button>
 			<button class="button button--secondary" type="button" onclick={stopCameraCapture}>
-				Stop camera
+				{t('Stop camera')}
 			</button>
 			{#if canFullscreen}
 				<button class="button button--secondary" type="button" onclick={toggleCameraFullscreen}>
-					{#if cameraFullscreen}<Minimize size={18} /> Exit full screen{:else}<Maximize size={18} /> Full
-						screen{/if}
+					{#if cameraFullscreen}<Minimize size={18} /> {t('Exit full screen')}{:else}<Maximize
+							size={18}
+						/>
+						{t('Full screen')}{/if}
 				</button>
 			{/if}
 			{#if canSwitchCamera}
@@ -743,16 +751,16 @@
 					type="button"
 					onclick={switchCamera}
 					aria-label={cameraFacingMode === 'environment'
-						? 'Switch to front camera'
-						: 'Switch to rear camera'}
+						? t('Switch to front camera')
+						: t('Switch to rear camera')}
 				>
 					<SwitchCamera size={18} />
-					{cameraFacingMode === 'environment' ? 'Use front camera' : 'Use rear camera'}
+					{cameraFacingMode === 'environment' ? t('Use front camera') : t('Use rear camera')}
 				</button>
 			{/if}
 		</div>
 		<p class="capture-note">{note}</p>
-		{#if cameraCaptureError}<p class="capture-error">{cameraCaptureError}</p>{/if}
+		{#if cameraCaptureError}<p class="capture-error">{t(cameraCaptureError)}</p>{/if}
 	</div>
 {/snippet}
 
@@ -776,41 +784,44 @@
 				onclick={captureScreenFrame}
 				disabled={!screenCaptureReady}
 			>
-				<Camera size={18} /> Use this frame
+				<Camera size={18} />
+				{t('Use this frame')}
 			</button>
 			<button class="button button--secondary" type="button" onclick={stopScreenCapture}>
-				Stop sharing
+				{t('Stop sharing')}
 			</button>
 		</div>
 		<p class="capture-note">{note}</p>
-		{#if screenCaptureError}<p class="capture-error">{screenCaptureError}</p>{/if}
+		{#if screenCaptureError}<p class="capture-error">{t(screenCaptureError)}</p>{/if}
 	</div>
 {/snippet}
 
 <div class="capture-page">
 	<header class="capture-heading">
 		<div>
-			<p class="eyebrow">Shift attendance</p>
-			<h1 data-testid="session-title">{sessionTitle}</h1>
+			<p class="eyebrow">{t('Shift attendance')}</p>
+			<h1 data-testid="session-title">{t(sessionTitle)}</h1>
 			<p>
-				{today?.pump_code ? `${today.pump_code} - ${today.plant_name}` : 'Group photo attendance'}
+				{today?.pump_code
+					? `${today.pump_code} - ${today.plant_name}`
+					: t('Group photo attendance')}
 			</p>
 		</div>
 		{#if todayLoading}
-			<span class="status-badge"><LoaderCircle class="spin" size={14} /> Checking</span>
+			<span class="status-badge"><LoaderCircle class="spin" size={14} /> {t('Checking')}</span>
 		{:else if today?.state === 'locked'}
 			{#if today?.shift_outcome === 'start_only'}
-				<span class="status-badge" data-testid="shift-badge">Start only</span>
+				<span class="status-badge" data-testid="shift-badge">{t('Start only')}</span>
 			{:else}
 				<span class="status-badge status-badge--success" data-testid="shift-badge"
-					><Check size={14} /> Complete</span
+					><Check size={14} /> {t('Complete')}</span
 				>
 			{/if}
 		{:else}
 			<span class="status-badge">
 				{today?.can_submit === false
-					? 'Waiting'
-					: `${today?.state === 'evening' ? 'End' : 'Start'} open`}
+					? t('Waiting')
+					: t(today?.state === 'evening' ? t('End open') : t('Start open'))}
 			</span>
 		{/if}
 	</header>
@@ -820,8 +831,8 @@
 			<section class="capture-workspace" aria-labelledby="photo-heading">
 				<div class="section-heading">
 					<div>
-						<h2 id="photo-heading">Group photo</h2>
-						<p>Keep every face visible and inside the frame.</p>
+						<h2 id="photo-heading">{t('Group photo')}</h2>
+						<p>{t('Keep every face visible and inside the frame.')}</p>
 					</div>
 				</div>
 
@@ -840,18 +851,18 @@
 					</div>
 				{:else if cameraCaptureActive && captureTarget === 'group'}
 					{@render cameraCapturePanel(
-						'Keep the complete group inside the frame.',
-						'Keep every worker visible before capturing the photo.'
+						t('Keep the complete group inside the frame.'),
+						t('Keep every worker visible before capturing the photo.')
 					)}
 				{:else if screenCaptureActive && captureTarget === 'group'}
 					{@render screenCapturePanel(
-						'Keep every worker visible in the WhatsApp call before capturing.'
+						t('Keep every worker visible in the WhatsApp call before capturing.')
 					)}
 				{:else}
 					<div class="capture-empty">
 						<span class="capture-icon"><Users size={34} strokeWidth={1.6} /></span>
-						<strong>Ready for the team photo</strong>
-						<p>Stand where the whole group is evenly lit and facing the camera.</p>
+						<strong>{t('Ready for the team photo')}</strong>
+						<p>{t('Stand where the whole group is evenly lit and facing the camera.')}</p>
 						<div class="capture-choices">
 							<button
 								class="button button--primary"
@@ -859,7 +870,8 @@
 								onclick={() => startCameraCapture('group')}
 								disabled={today?.state === 'locked' || today?.can_submit === false}
 							>
-								<Camera size={18} /> Take photo
+								<Camera size={18} />
+								{t('Take photo')}
 							</button>
 							<button
 								class="button button--secondary"
@@ -867,11 +879,12 @@
 								onclick={() => startScreenCapture('group')}
 								disabled={today?.state === 'locked' || today?.can_submit === false}
 							>
-								<MonitorUp size={18} /> Capture video call
+								<MonitorUp size={18} />
+								{t('Capture video call')}
 							</button>
 						</div>
-						{#if cameraCaptureError}<p class="capture-error">{cameraCaptureError}</p>{/if}
-						{#if screenCaptureError}<p class="capture-error">{screenCaptureError}</p>{/if}
+						{#if cameraCaptureError}<p class="capture-error">{t(cameraCaptureError)}</p>{/if}
+						{#if screenCaptureError}<p class="capture-error">{t(screenCaptureError)}</p>{/if}
 					</div>
 				{/if}
 
@@ -879,8 +892,12 @@
 					<div class="operator-block" data-testid="operator-photo">
 						<div class="section-heading">
 							<div>
-								<h2>Operator photo</h2>
-								<p>The pump operator alone, face clearly visible. Needed with every shift photo.</p>
+								<h2>{t('Operator photo')}</h2>
+								<p>
+									{t(
+										'The pump operator alone, face clearly visible. Needed with every shift photo.'
+									)}
+								</p>
 							</div>
 						</div>
 						{#if operatorPreviewUrl}
@@ -898,39 +915,46 @@
 									type="button"
 									onclick={startOperatorCamera}
 								>
-									<Camera size={18} /> Retake operator photo
+									<Camera size={18} />
+									{t('Retake operator photo')}
 								</button>
 							{/if}
 						{:else if cameraCaptureActive && captureTarget === 'operator'}
 							{@render cameraCapturePanel(
-								'Only the operator, face clearly visible.',
-								'Hold the phone at face height in good light.'
+								t('Only the operator, face clearly visible.'),
+								t('Hold the phone at face height in good light.')
 							)}
 						{:else if screenCaptureActive && captureTarget === 'operator'}
-							{@render screenCapturePanel('Ask the operator to face the camera alone in the call.')}
+							{@render screenCapturePanel(
+								t('Ask the operator to face the camera alone in the call.')
+							)}
 						{:else}
 							<div class="capture-empty operator-empty">
 								<span class="capture-icon"><UserRound size={30} strokeWidth={1.6} /></span>
-								<strong>Now the operator</strong>
-								<p>Take a photo of the pump operator alone, so their attendance is marked too.</p>
+								<strong>{t('Now the operator')}</strong>
+								<p>
+									{t('Take a photo of the pump operator alone, so their attendance is marked too.')}
+								</p>
 								<div class="capture-choices">
 									<button
 										class="button button--primary"
 										type="button"
 										onclick={startOperatorCamera}
 									>
-										<Camera size={18} /> Take operator photo
+										<Camera size={18} />
+										{t('Take operator photo')}
 									</button>
 									<button
 										class="button button--secondary"
 										type="button"
 										onclick={() => startScreenCapture('operator')}
 									>
-										<MonitorUp size={18} /> Capture video call
+										<MonitorUp size={18} />
+										{t('Capture video call')}
 									</button>
 								</div>
-								{#if cameraCaptureError}<p class="capture-error">{cameraCaptureError}</p>{/if}
-								{#if screenCaptureError}<p class="capture-error">{screenCaptureError}</p>{/if}
+								{#if cameraCaptureError}<p class="capture-error">{t(cameraCaptureError)}</p>{/if}
+								{#if screenCaptureError}<p class="capture-error">{t(screenCaptureError)}</p>{/if}
 							</div>
 						{/if}
 					</div>
@@ -941,38 +965,39 @@
 		<aside class="session-panel" aria-live="polite">
 			{#if status === 'submitting' || status === 'processing'}
 				<div data-testid={status === 'submitting' ? 'status-submitting' : 'status-processing'}>
-					<p class="eyebrow">{status === 'submitting' ? 'Uploading' : 'Processing'}</p>
-					<h2>{status === 'submitting' ? 'Sending the photo' : 'Reading attendance'}</h2>
+					<p class="eyebrow">{status === 'submitting' ? t('Uploading') : t('Processing')}</p>
+					<h2>{status === 'submitting' ? t('Sending the photo') : t('Reading attendance')}</h2>
 					<ol class="processing-list">
 						{#each processingLabels as label, index (label)}
 							<li class:active={index === processingStep} class:complete={index < processingStep}>
-								<span>{index < processingStep ? 'Done' : index + 1}</span>{label}
+								<span>{index < processingStep ? t('Done') : index + 1}</span>{t(label)}
 							</li>
 						{/each}
 					</ol>
-					<p class="muted">Keep this page open while the group is processed.</p>
+					<p class="muted">{t('Keep this page open while the group is processed.')}</p>
 				</div>
 			{:else if status === 'fraud'}
 				<div class="result-state" data-testid="status-fraud">
 					<span class="result-icon"><ShieldAlert size={25} /></span>
-					<h2>Fake Image Detected</h2>
+					<h2>{t('Fake Image Detected')}</h2>
 					<p>
-						This photo could not be verified as a live photo. Your login has been disabled and the
-						plant manager has been notified. No attendance was recorded from this photo. Contact
-						your plant manager or admin to get your login re-enabled.
+						{t(
+							'This photo could not be verified as a live photo. Your login has been disabled and the plant manager has been notified. No attendance was recorded from this photo. Contact your plant manager or admin to get your login re-enabled.'
+						)}
 					</p>
 				</div>
 			{:else if status === 'failed'}
 				<div class="result-state" data-testid="status-failed">
 					<span class="result-icon"><ShieldAlert size={25} /></span>
-					<h2>Could not finish</h2>
-					<p>{errorMsg}</p>
+					<h2>{t('Could not finish')}</h2>
+					<p>{t(errorMsg)}</p>
 					<div class="result-actions">
 						<button class="button button--primary" type="button" onclick={retryFailedCapture}>
-							<RefreshCw size={17} /> Retry
+							<RefreshCw size={17} />
+							{t('Retry')}
 						</button>
 						<button class="button button--secondary" type="button" onclick={resetCapture}
-							>Choose another</button
+							>{t('Choose another')}</button
 						>
 					</div>
 				</div>
@@ -985,13 +1010,16 @@
 							<span class="result-icon"><ShieldAlert size={25} /></span>
 						{/if}
 						<div>
-							<p class="eyebrow">Review before completing</p>
+							<p class="eyebrow">{t('Review before completing')}</p>
 							<h2 data-testid="result-heading">
-								{peopleFound}
-								{peopleFound === 1 ? 'person' : 'people'} marked present
+								{t(peopleFound === 1 ? '{n} person marked present' : '{n} people marked present', {
+									n: peopleFound
+								})}
 							</h2>
 							{#if result.fraud_flags?.length}
-								<p data-testid="result-held">{result.fraud_flags.length} held for admin review</p>
+								<p data-testid="result-held">
+									{t('{n} held for admin review', { n: result.fraud_flags.length })}
+								</p>
 							{/if}
 						</div>
 					</div>
@@ -999,8 +1027,9 @@
 						<div class="alert location-hold" data-testid="location-hold" role="status">
 							<ShieldAlert size={18} aria-hidden="true" />
 							<p>
-								<strong>Waiting for plant manager approval.</strong>
-								{locationHold} The shift has started; the plant manager has been emailed to verify it.
+								<strong>{t('Waiting for plant manager approval.')}</strong>
+								{t(locationHold)}
+								{t('The shift has started; the plant manager has been emailed to verify it.')}
 							</p>
 						</div>
 					{/if}
@@ -1009,23 +1038,26 @@
 							<ShieldAlert size={18} aria-hidden="true" />
 							<p>
 								<strong
-									>{(result.liveness_summary.suspicious || 0) +
-										(result.liveness_summary.unverified || 0)} need review.</strong
+									>{t('{n} need review.', {
+										n:
+											(result.liveness_summary.suspicious || 0) +
+											(result.liveness_summary.unverified || 0)
+									})}</strong
 								>
-								Check the marked faces before completing attendance.
+								{t('Check the marked faces before completing attendance.')}
 							</p>
 						</div>
 					{/if}
 					{#if result.photo_url}
 						<div class="review-photo">
-							<p class="eyebrow">Submitted group photo</p>
+							<p class="eyebrow">{t('Submitted group photo')}</p>
 							<img src={result.photo_url} alt="Corrected group attendance" />
 						</div>
 					{/if}
 
 					{#if result.matched?.length}
 						<div class="result-group">
-							<h3>Matched <span>{result.matched.length}</span></h3>
+							<h3>{t('Matched')} <span>{result.matched.length}</span></h3>
 							<ul class="face-list">
 								{#each result.matched as person (person.person_id)}
 									<li>
@@ -1033,7 +1065,7 @@
 											class="face-row"
 											type="button"
 											onclick={(event) => openWorkerPreview(person, 'matched', event.currentTarget)}
-											aria-label={`Preview ${personDisplayLabel(person.pump_code, person.display_seq, person.is_operator)}`}
+											aria-label={`Preview ${workerLabel(person)}`}
 											data-testid="worker-preview-trigger"
 										>
 											{#if person.source_photo_crop_url}
@@ -1043,13 +1075,7 @@
 													><UserRound size={16} /></span
 												>
 											{/if}
-											<span class="face-label"
-												>{personDisplayLabel(
-													person.pump_code,
-													person.display_seq,
-													person.is_operator
-												)}</span
-											>
+											<span class="face-label">{workerLabel(person)}</span>
 											{#if livenessLabel(person)}
 												<span
 													class:liveness-warning={person.liveness_status !== 'live'}
@@ -1069,7 +1095,7 @@
 
 					{#if result.new_persons?.length}
 						<div class="result-group">
-							<h3>New people <span>{result.new_persons.length}</span></h3>
+							<h3>{t('New people')} <span>{result.new_persons.length}</span></h3>
 							<ul class="face-list">
 								{#each result.new_persons as person (person.person_id)}
 									<li>
@@ -1077,7 +1103,7 @@
 											class="face-row"
 											type="button"
 											onclick={(event) => openWorkerPreview(person, 'new', event.currentTarget)}
-											aria-label={`Preview ${personDisplayLabel(person.pump_code, person.display_seq, person.is_operator)}`}
+											aria-label={`Preview ${workerLabel(person)}`}
 											data-testid="worker-preview-trigger"
 										>
 											{#if person.source_photo_crop_url}
@@ -1087,13 +1113,7 @@
 													><UserRound size={16} /></span
 												>
 											{/if}
-											<span class="face-label"
-												>{personDisplayLabel(
-													person.pump_code,
-													person.display_seq,
-													person.is_operator
-												)}</span
-											>
+											<span class="face-label">{workerLabel(person)}</span>
 											{#if livenessLabel(person)}
 												<span
 													class:liveness-warning={person.liveness_status !== 'live'}
@@ -1110,10 +1130,10 @@
 
 					{#if result.fraud_flags?.length}
 						<div class="result-group attention-group">
-							<h3>Needs review <span>{result.fraud_flags.length}</span></h3>
+							<h3>{t('Needs review')} <span>{result.fraud_flags.length}</span></h3>
 							<ul class="face-list">
 								{#each result.fraud_flags as flag (flag.id)}
-									{@const where = `${flag.other_pump_code || 'another pump'}${flag.other_plant_name ? ` (${flag.other_plant_name})` : ''}`}
+									{@const where = `${flag.other_pump_code || t('another pump')}${flag.other_plant_name ? ` (${flag.other_plant_name})` : ''}`}
 									<li>
 										<button
 											class="face-row"
@@ -1122,8 +1142,8 @@
 												openHeldPreview(
 													{
 														group: 'held',
-														label: flag.person_label || 'Worker',
-														statusLabel: `Already marked at ${where}`,
+														label: tLabel(flag.person_label || t('Worker')),
+														statusLabel: t('Already marked at {where}', { where }),
 														source_photo_crop_url: flag.source_photo_crop_url
 													},
 													event.currentTarget
@@ -1138,12 +1158,14 @@
 													><UserRound size={16} /></span
 												>
 											{/if}
-											<span class="face-label">{flag.person_label || 'Worker'}</span>
+											<span class="face-label">{tLabel(flag.person_label || t('Worker'))}</span>
 											<span class="face-row-icons"><Eye size={15} aria-hidden="true" /></span>
 										</button>
 										<p data-testid="fraud-flag-line">
-											A face in this photo matches {flag.person_label || 'a worker'}, already marked
-											at {where}. Not counted here until an admin checks it.
+											{t(
+												'A face in this photo matches {who}, already marked at {where}. Not counted here until an admin checks it.',
+												{ who: tLabel(flag.person_label || t('a worker')), where }
+											)}
 										</p>
 									</li>
 								{/each}
@@ -1153,8 +1175,8 @@
 
 					{#if result.unknown_faces?.length}
 						<div class="result-group attention-group">
-							<h3>Awaiting guest review <span>{result.unknown_faces.length}</span></h3>
-							<p>These faces were saved for an administrator to review.</p>
+							<h3>{t('Awaiting guest review')} <span>{result.unknown_faces.length}</span></h3>
+							<p>{t('These faces were saved for an administrator to review.')}</p>
 							<ul class="face-list">
 								{#each result.unknown_faces as face, index (face.id)}
 									<li>
@@ -1165,8 +1187,8 @@
 												openHeldPreview(
 													{
 														group: 'guest',
-														label: `Guest ${index + 1}`,
-														statusLabel: 'Waiting for admin review',
+														label: t('Guest {n}', { n: index + 1 }),
+														statusLabel: t('Waiting for admin review'),
 														source_photo_crop_url: face.face_crop_url
 													},
 													event.currentTarget
@@ -1181,7 +1203,7 @@
 													><UserRound size={16} /></span
 												>
 											{/if}
-											<span class="face-label">Guest {index + 1}</span>
+											<span class="face-label">{t('Guest {n}', { n: index + 1 })}</span>
 											<span class="face-row-icons"><Eye size={15} aria-hidden="true" /></span>
 										</button>
 									</li>
@@ -1191,8 +1213,8 @@
 					{/if}
 
 					<div class="result-review-actions">
-						<p>Check the count and face crops before completing this attendance.</p>
-						{#if errorMsg}<p class="capture-error">{errorMsg}</p>{/if}
+						<p>{t('Check the count and face crops before completing this attendance.')}</p>
+						{#if errorMsg}<p class="capture-error">{t(errorMsg)}</p>{/if}
 						<button
 							class="button button--primary full-button"
 							type="button"
@@ -1200,7 +1222,7 @@
 							disabled={retryingSession}
 						>
 							<RefreshCw size={17} class={retryingSession ? 'spin' : ''} />
-							{retryingSession ? 'Preparing retry' : 'Retry with better photo'}
+							{retryingSession ? t('Preparing retry') : t('Retry with better photo')}
 						</button>
 						<button
 							class="button button--secondary full-button"
@@ -1209,47 +1231,49 @@
 							disabled={approvingReview}
 						>
 							<Check size={17} />
-							{approvingReview ? 'Completing attendance' : 'Done reviewing'}
+							{approvingReview ? t('Completing attendance') : t('Done reviewing')}
 						</button>
 					</div>
 				</div>
 			{:else}
 				<div class="session-details">
-					<p class="eyebrow">Session status</p>
-					<h2>{sessionTitle}</h2>
+					<p class="eyebrow">{t('Session status')}</p>
+					<h2>{t(sessionTitle)}</h2>
 					<dl>
 						<div>
-							<dt>Date</dt>
-							<dd>{today?.shift_date || today?.today || 'Today'}</dd>
+							<dt>{t('Date')}</dt>
+							<dd>{today?.shift_date || today?.today || t('Today')}</dd>
 						</div>
 						{#if today?.shift_started_at}
 							<div>
-								<dt>Started</dt>
+								<dt>{t('Started')}</dt>
 								<dd>{formatIST(today.shift_started_at)}</dd>
 							</div>
 						{/if}
 						<div>
-							<dt>Next step</dt>
+							<dt>{t('Next step')}</dt>
 							<dd data-testid="next-step">
 								{today?.state === 'locked'
 									? today?.shift_outcome === 'start_only'
-										? 'Shift ended without an end photo. The next shift starts tomorrow.'
-										: 'Shift recorded. The next shift starts tomorrow.'
+										? t('Shift ended without an end photo. The next shift starts tomorrow.')
+										: t('Shift recorded. The next shift starts tomorrow.')
 									: today?.state === 'review'
-										? 'Finish reviewing the submitted group photo'
+										? t('Finish reviewing the submitted group photo')
 										: today?.state === 'failed'
-											? 'Retry the photo that could not be processed'
+											? t('Retry the photo that could not be processed')
 											: today?.state === 'evening' && today?.can_submit === false
-												? `Shift end opens ${formatIST(today?.next_allowed_at)}`
+												? t('Shift end opens {time}', { time: formatIST(today?.next_allowed_at) })
 												: today?.state === 'evening'
-													? 'Submit the group photo to end the shift'
-													: 'Submit the group photo to start the shift'}
+													? t('Submit the group photo to end the shift')
+													: t('Submit the group photo to start the shift')}
 							</dd>
 						</div>
 					</dl>
 					{#if today?.can_end_session}
 						<div class="end-session">
-							<p>Missed the end photo? End the shift here so your next photo starts a new one.</p>
+							<p>
+								{t('Missed the end photo? End the shift here so your next photo starts a new one.')}
+							</p>
 							<button
 								class="button button--secondary full-button"
 								type="button"
@@ -1257,9 +1281,9 @@
 								disabled={endingSession}
 								data-testid="end-session"
 							>
-								{endingSession ? 'Ending session' : 'End session'}
+								{endingSession ? t('Ending session') : t('End session')}
 							</button>
-							{#if endSessionError}<p class="capture-error">{endSessionError}</p>{/if}
+							{#if endSessionError}<p class="capture-error">{t(endSessionError)}</p>{/if}
 						</div>
 					{/if}
 				</div>
@@ -1276,9 +1300,11 @@
 				disabled={!operatorFile}
 			>
 				<Upload size={18} />
-				{operatorFile ? 'Submit photos' : 'Take the operator photo first'}
+				{operatorFile ? t('Submit photos') : t('Take the operator photo first')}
 			</button>
-			<button class="button button--ghost" type="button" onclick={resetCapture}>Cancel</button>
+			<button class="button button--ghost" type="button" onclick={resetCapture}
+				>{t('Cancel')}</button
+			>
 		</div>
 	{/if}
 
@@ -1324,33 +1350,33 @@
 				{:else}
 					<div class="worker-preview-empty">
 						<UserRound size={44} strokeWidth={1.5} />
-						<span>No face crop was returned for this worker.</span>
+						<span>{t('No face crop was returned for this worker.')}</span>
 					</div>
 				{/if}
 			</div>
 
 			<dl class="worker-preview-meta">
 				<div>
-					<dt>Session</dt>
-					<dd>{result?.session_type === 'evening' ? 'Shift end' : 'Shift start'}</dd>
+					<dt>{t('Session')}</dt>
+					<dd>{result?.session_type === 'evening' ? t('Shift end') : t('Shift start')}</dd>
 				</div>
 				<div>
-					<dt>Result</dt>
+					<dt>{t('Result')}</dt>
 					<dd>{selectedWorkerPreview.statusLabel}</dd>
 				</div>
 				<div>
-					<dt>Daily match</dt>
+					<dt>{t('Daily match')}</dt>
 					<dd>
 						{#if selectedWorkerPreview.group === 'held' || selectedWorkerPreview.group === 'guest'}
-							Not counted until an admin checks it
+							{t('Not counted until an admin checks it')}
 						{:else}
-							{selectedWorkerPreview.morning_matched ? 'Start' : ''}
+							{selectedWorkerPreview.morning_matched ? t('Start') : ''}
 							{selectedWorkerPreview.morning_matched && selectedWorkerPreview.evening_matched
-								? ' and '
+								? ` ${t('and')} `
 								: ''}
-							{selectedWorkerPreview.evening_matched ? 'End' : ''}
+							{selectedWorkerPreview.evening_matched ? t('End') : ''}
 							{!selectedWorkerPreview.morning_matched && !selectedWorkerPreview.evening_matched
-								? 'New attendance'
+								? t('New attendance')
 								: ''}
 						{/if}
 					</dd>

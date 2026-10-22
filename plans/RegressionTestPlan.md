@@ -374,6 +374,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | UI-05 | Empty states (new vendor with no pumps; day with no attendance) | Helpful message, no crash | 2 | P1 | Partial |
 | UI-06 | Accessibility (axe) on login, pump and admin home | No serious violations | 2 | P1 | Covered |
 | UI-07 | Session expires while a page is open, then the user clicks an action | Sent to login, no silent failure | 2 | P2 | Missing |
+| UI-08 | Pump screen language (added 2026-10-22) | Hindi (Devanagari, everyday English work words kept) by default; one EN / हिंदी toggle switches to English and is remembered after reload; only the pump screens | 1 | P1 | Covered (pump-language.spec) |
 
 ### ACC: model accuracy (Tier 3, existing gate)
 
