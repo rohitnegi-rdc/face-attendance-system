@@ -346,10 +346,11 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | LOG-02 | An unhandled app error (500) | Stored as an app error with its path and errorId; search finds it under errors, not under warnings | 1 | P1 | Covered (logs.spec) |
 | LOG-03 | Pump or plant manager opens /admin/logs | 403 | 1 | P1 | Covered (logs.spec) |
 | LOG-04 | Lines older than LOG_RETENTION_DAYS | Removed by the worker's hourly sweep (not covered: the sweep runs hourly) | 1 | P2 | Missing |
-| NAV-01 | A pump sends a shift photo (added 2026-10-22) | Attendance badge in the side navigation for the admin, the owning vendor and the plant manager; opening Attendance clears it for that user only | 1 | P1 | Covered (nav-badges.spec) |
+| NAV-01 | A pump sends a shift photo (added 2026-10-22) | Attendance badge (new since last visit) in the side navigation for the admin, the owning vendor and the plant manager; opening Attendance clears it for that user only | 1 | P1 | Covered (nav-badges.spec) |
 | NAV-02 | Same person at two pumps in one Area | Red badge on admin Fraud flags and plant manager Approvals; the case listed on Approvals; both session-log rows red, each naming the other pump, refused face shown inline | 1 | P1 | Covered (nav-badges.spec) |
 | NAV-03 | Admin clears a fraud case as not fraud | Badges drop it; rows no longer red; the face stays as a grey Cleared tile | 1 | P1 | Covered (nav-badges.spec) |
 | NAV-04 | Fraud case between two vendors' pumps | Both vendors get a red Fraud badge and see the case on /vendor/fraud (read only); a third vendor in the same Area sees nothing | 1 | P1 | Covered (nav-badges.spec) |
+| NAV-05 | User opens the fraud list (bug 2026-10-22: Approvals still showed 20 after viewing) | Every badge counts what is new since that user last opened its page: opening plant manager Approvals, vendor Fraud or admin Fraud flags clears it while the cases stay listed; a new case shows 1 | 1 | P1 | Covered (nav-badges.spec) |
 
 ### PATH: sub-path hosting (BASE_PATH)
 

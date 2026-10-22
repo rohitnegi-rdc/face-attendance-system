@@ -50,14 +50,16 @@
 		return key && navCounts ? navCounts[key] : 0;
 	}
 
+	// Badges are news since the user last opened the page (src/lib/server/navCounts.ts).
 	function badgeTitle(key: BadgeKey) {
 		const n = badgeCount(key);
 		if (key === 'attendance')
 			return `${n} new shift ${n === 1 ? 'photo' : 'photos'} since your last visit`;
-		if (key === 'fraud') return `${n} fraud ${n === 1 ? 'case' : 'cases'} waiting for review`;
+		if (key === 'fraud')
+			return `${n} new fraud ${n === 1 ? 'case' : 'cases'} since your last visit`;
 		return navCounts?.fraud
-			? `${n} waiting, ${navCounts.fraud} of them fraud (same person at two pumps)`
-			: `${n} waiting for your decision`;
+			? `${n} new since your last visit, ${navCounts.fraud} of them fraud (same person at two pumps)`
+			: `${n} new since your last visit`;
 	}
 
 	// Red when fraud is involved; teal for plain news.

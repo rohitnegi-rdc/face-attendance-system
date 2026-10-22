@@ -42,45 +42,64 @@ export async function markSeen(role: NavRole, userId: string, section: string) {
 	);
 }
 
+// Which badge the page being opened clears: Attendance, or the fraud list (admin Fraud flags,
+// vendor Fraud, plant manager Approvals).
+export type NavSection = 'attendance' | 'fraud';
+
+// The section a path opens: the page itself or anything under it (an approval's detail page).
+export function sectionForPath(
+	pathname: string,
+	paths: Record<NavSection, string>
+): NavSection | null {
+	for (const section of ['attendance', 'fraud'] as const) {
+		const path = paths[section];
+		if (pathname === path || pathname.startsWith(`${path}/`)) return section;
+	}
+	return null;
+}
+
+// When the user last opened that section ($1 = user id). A first visit ever counts the last day,
+// not the whole history.
+function seenSince(role: NavRole, section: NavSection) {
+	return `COALESCE((SELECT seen_at FROM nav_seen
+	                  WHERE role = '${role}' AND user_id = $1 AND section = '${section}'),
+	                 now() - interval '24 hours')`;
+}
+
+// Every badge counts what is new since the user last opened its page, so opening the page
+// clears it. The pages still list everything open: the badge is news, not a to-do count.
 export async function loadNavCounts(
 	role: NavRole,
 	userId: string,
-	onAttendancePage: boolean
+	openingSection: NavSection | null
 ): Promise<NavCounts> {
-	// Opening the Attendance page clears its count. Done here, before counting, so the page and
-	// the badge never race each other.
-	if (onAttendancePage) await markSeen(role, userId, 'attendance');
-	const scopeParams = role === 'admin' ? [] : [userId];
-	const seenParam = `$${scopeParams.length + 1}`;
+	// Marked before counting, so the page and the badge never race each other.
+	if (openingSection) await markSeen(role, userId, openingSection);
+	const params = [userId];
 	const [attendance, fraud, location] = await Promise.all([
-		onAttendancePage
-			? Promise.resolve({ n: 0 })
-			: // A first visit ever counts the last day, not the whole history.
-				queryOne<{ n: number }>(
-					`SELECT count(*)::int AS n
-					 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
-					 WHERE ${pumpScope(role, 'pu')}
-					   AND s.submitted_at > COALESCE(
-					     (SELECT seen_at FROM nav_seen
-					      WHERE role = '${role}' AND user_id = ${seenParam} AND section = 'attendance'),
-					     now() - interval '24 hours')`,
-					[...scopeParams, userId]
-				),
+		queryOne<{ n: number }>(
+			`SELECT count(*)::int AS n
+			 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
+			 WHERE ${pumpScope(role, 'pu')} AND s.submitted_at > ${seenSince(role, 'attendance')}`,
+			params
+		),
 		queryOne<{ n: number }>(
 			`SELECT count(*)::int AS n
 			 FROM fraud_flags ff
 			 JOIN attendance_sessions s ON s.id = ff.session_id
 			 JOIN pumps pu ON pu.id = s.pump_id
 			 JOIN pumps mp ON mp.id = ff.matched_at_pump_id
-			 WHERE NOT ff.reviewed AND (${pumpScope(role, 'pu')} OR ${pumpScope(role, 'mp')})`,
-			scopeParams
+			 WHERE NOT ff.reviewed AND (${pumpScope(role, 'pu')} OR ${pumpScope(role, 'mp')})
+			   AND ff.created_at > ${seenSince(role, 'fraud')}`,
+			params
 		),
 		role === 'plant-manager'
 			? queryOne<{ n: number }>(
 					`SELECT count(*)::int AS n
 					 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
-					 WHERE s.location_status = 'pending' AND ${pumpScope(role, 'pu')}`,
-					scopeParams
+					 WHERE s.location_status = 'pending' AND ${pumpScope(role, 'pu')}
+					   AND s.submitted_at > ${seenSince(role, 'fraud')}`,
+					params
 				)
 			: Promise.resolve({ n: 0 })
 	]);

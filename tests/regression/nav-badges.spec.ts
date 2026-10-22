@@ -142,6 +142,39 @@ test('NAV-04 vendors on both sides of a fraud case see the red Fraud badge and t
 	expect(await html(other, '/vendor/fraud')).not.toContain(a.code);
 });
 
+test('NAV-05 opening the fraud list clears its badge; the cases stay listed until an admin decides', async () => {
+	const { plantId } = await createArea();
+	const vendorA = await createVendor();
+	const a = await createPump(plantId, vendorA.id);
+	const b = await createPump(plantId);
+	const c = await createPump(plantId);
+	const manager = await login((await createPlantManager(plantId)).email);
+	const owner = await login(vendorA.email);
+	await recordSession(await login(a.email), ['NAV05A', 'NAV05B']);
+	await submitAndWait(await login(b.email), ['NAV05A']);
+
+	expect(badge(await html(manager, '/plant-manager'), 'approvals')).toBe('1');
+	expect(badge(await html(owner, '/vendor'), 'fraud')).toBe('1');
+
+	// Opening the page clears the badge for that user, there and afterwards; the case is still listed.
+	const approvals = await html(manager, '/plant-manager/approvals');
+	expect(badge(approvals, 'approvals')).toBeNull();
+	expect(approvals.split('data-testid="pm-fraud"')[1]).toContain(b.code);
+	expect(badge(await html(manager, '/plant-manager'), 'approvals')).toBeNull();
+	expect(badge(await html(owner, '/vendor/fraud'), 'fraud')).toBeNull();
+	expect(badge(await html(owner, '/vendor'), 'fraud')).toBeNull();
+
+	// A new case brings it back, counting only the new one.
+	await submitAndWait(await login(c.email), ['NAV05B']);
+	expect(badge(await html(manager, '/plant-manager'), 'approvals')).toBe('1');
+	expect(badge(await html(owner, '/vendor'), 'fraud')).toBe('1');
+
+	// Admin: opening Fraud flags clears its badge on that page.
+	const admin = await login((await createAdmin()).email);
+	expect(badge(await html(admin, '/admin'), 'fraud')).not.toBeNull();
+	expect(badge(await html(admin, '/admin/fraud-flags'), 'fraud')).toBeNull();
+});
+
 test('UI-09 every worker of a session is shown inline, no fold-out list', async () => {
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);

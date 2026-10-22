@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 import { resolve } from '$app/paths';
-import { loadNavCounts } from '$lib/server/navCounts';
+import { loadNavCounts, sectionForPath } from '$lib/server/navCounts';
 
 // navCounts: the side navigation badges, refreshed on every navigation and by AppShell's timer.
 export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
@@ -10,7 +10,10 @@ export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
 		navCounts: await loadNavCounts(
 			'plant-manager',
 			locals.user!.id,
-			url.pathname === resolve('/plant-manager/attendance')
+			sectionForPath(url.pathname, {
+				attendance: resolve('/plant-manager/attendance'),
+				fraud: resolve('/plant-manager/approvals')
+			})
 		)
 	};
 };
