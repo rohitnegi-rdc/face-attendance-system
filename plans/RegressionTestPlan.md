@@ -364,6 +364,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | CORR-01 | Pump missed the shift start, so the day shows "Start only" | Plant manager opens Fix attendance from the session log, marks start and end present with a reason (required); day becomes full; correction stored with `corrected_by_manager_id`; another plant's manager gets 404 | 1 | P0 | Covered |
 | CORR-02 | Admin marks both halves on a day with one photo | Saved (the old rule wanted a photo of each type), correction stored with the admin | 1 | P1 | Covered |
 | UI-11 | Session log rows (added 2026-10-22) | One numbered row per shift (pump + date) with Shift start and Shift end side by side (stacked on a phone); the date is a heading shown once per day; status in plain words | 1 | P1 | Covered (names-corrections.spec) |
+| UI-12 | Admin pump session log (added 2026-10-22) | Same shift rows as the plant manager log; each photo keeps Delete / reset and Fix shift, Fix attendance opens the admin correction; the page renders with a pager (more than 25 workers) instead of a 500 from reading `window` on the server | 1 | P1 | Covered (names-corrections.spec) |
 | UI-10 | Session log faces | Fraud faces inline, each naming the matched worker (number or name), five tiles per row then scroll; counted workers are name chips, their face served by `/api/attendance/face/[id]` (and People pages by `/api/persons/[id]/face`) only to users who can see the pump, 404 otherwise | 1 | P1 | Covered |
 
 ### PATH: sub-path hosting (BASE_PATH)

@@ -1,8 +1,8 @@
 import type { PageServerLoad } from './$types';
-import { attachSessionEvidence } from '$lib/server/sessionEvidence';
+import { attachSessionEvidence, groupShifts } from '$lib/server/sessionEvidence';
 import { query } from '$lib/server/db';
 import { nowIST } from '$lib/server/time';
-import { dateKey, isDateKey } from '$lib/date';
+import { isDateKey } from '$lib/date';
 
 // The session log shows one row per shift (pump + date) with its start and end photos side by
 // side, paged by shift to keep the page small (worker faces load on click).
@@ -71,39 +71,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	// Same per-worker and fraud evidence the admin pump page shows. Sessions are already limited to
 	// this manager's plants, so the evidence is too.
 	const sessions = await attachSessionEvidence(sessionRows);
-	type Shift = {
-		key: string;
-		session_date: string;
-		pump_id: string;
-		pump_code: string;
-		plant_name: string;
-		start: typeof sessions;
-		end: typeof sessions;
-		fraudPumps: string[];
-	};
-	const shifts = new Map<string, Shift>();
-	for (const session of sessions) {
-		const key = `${session.pump_id}|${dateKey(session.session_date)}`;
-		const shift: Shift = shifts.get(key) ?? {
-			key,
-			session_date: session.session_date,
-			pump_id: session.pump_id,
-			pump_code: session.pump_code,
-			plant_name: session.plant_name,
-			start: [],
-			end: [],
-			fraudPumps: []
-		};
-		shift[session.session_type === 'evening' ? 'end' : 'start'].push(session);
-		shift.fraudPumps = [...new Set([...shift.fraudPumps, ...session.fraudPumps])];
-		shifts.set(key, shift);
-	}
 	const sessionTotal = sessionCount[0]?.n ?? 0;
 	return {
 		pumps,
 		plants,
 		daily,
-		shifts: [...shifts.values()],
+		shifts: groupShifts(sessions),
 		sessionPagination: {
 			page: sessionPage,
 			pageSize: SESSION_PAGE_SIZE,

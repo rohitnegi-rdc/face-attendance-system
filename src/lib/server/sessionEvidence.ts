@@ -6,6 +6,7 @@
 import { resolve } from '$app/paths';
 import { query } from './db';
 import { personShortLabel } from '$lib/personLabel';
+import { dateKey } from '$lib/date';
 
 export type FraudEvidence = {
 	flagId: string;
@@ -134,4 +135,46 @@ export async function attachSessionEvidence<T extends SessionRow>(sessions: T[])
 			}
 		};
 	});
+}
+
+// One shift = one pump and session date: its start and end photos, side by side in the logs.
+// Sessions must arrive in display order (newest shift first, photos oldest first within it).
+export function groupShifts<
+	T extends {
+		pump_id: string;
+		pump_code: string;
+		plant_name: string;
+		session_date: string;
+		session_type: string;
+		fraudPumps: string[];
+	}
+>(sessions: T[]) {
+	type Shift = {
+		key: string;
+		session_date: string;
+		pump_id: string;
+		pump_code: string;
+		plant_name: string;
+		start: T[];
+		end: T[];
+		fraudPumps: string[];
+	};
+	const shifts = new Map<string, Shift>();
+	for (const session of sessions) {
+		const key = `${session.pump_id}|${dateKey(session.session_date)}`;
+		const shift: Shift = shifts.get(key) ?? {
+			key,
+			session_date: session.session_date,
+			pump_id: session.pump_id,
+			pump_code: session.pump_code,
+			plant_name: session.plant_name,
+			start: [],
+			end: [],
+			fraudPumps: []
+		};
+		shift[session.session_type === 'evening' ? 'end' : 'start'].push(session);
+		shift.fraudPumps = [...new Set([...shift.fraudPumps, ...session.fraudPumps])];
+		shifts.set(key, shift);
+	}
+	return [...shifts.values()];
 }

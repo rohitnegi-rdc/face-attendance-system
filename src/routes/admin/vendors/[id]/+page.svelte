@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import ArrowDownUp from '@lucide/svelte/icons/arrow-down-up';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -33,9 +34,9 @@
 		const value = data.dailyMap[`${pumpId}|${day}`];
 		return !value || value.total === 0 ? null : Math.round((value.present / value.total) * 100);
 	}
-	function pageUrl(page: number) {
-		const params = new URLSearchParams(window.location.search);
-		params.set('page', String(page));
+	function pageUrl(n: number) {
+		const params = new URLSearchParams(page.url.search);
+		params.set('page', String(n));
 		return `?${params.toString()}`;
 	}
 </script>

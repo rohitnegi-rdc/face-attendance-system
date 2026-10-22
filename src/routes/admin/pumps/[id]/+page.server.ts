@@ -1,5 +1,5 @@
 import type { Actions, PageServerLoad } from './$types';
-import { attachSessionEvidence } from '$lib/server/sessionEvidence';
+import { attachSessionEvidence, groupShifts } from '$lib/server/sessionEvidence';
 import type { PoolClient } from 'pg';
 import { pool, query, queryOne } from '$lib/server/db';
 import { error, fail } from '@sveltejs/kit';
@@ -24,6 +24,7 @@ import {
 } from '$lib/server/shiftSessions';
 
 const PAGE_SIZES = [25, 50, 100];
+const SHIFT_PAGE_SIZE = 15;
 
 function readPaging(url: URL, pagePrefix: string) {
 	const requestedPage = Number(url.searchParams.get(`${pagePrefix}_page`) || '1');
@@ -105,28 +106,39 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		attendanceMap[`${r.person_id}|${sessionDate}`] = status;
 	}
 
+	// Session log: one row per shift (date), start and end side by side, paged by shift like the
+	// plant manager's log.
 	const [{ count: sessionLogTotal }] = await query<any>(
-		`SELECT COUNT(*) AS count FROM attendance_sessions
+		`SELECT COUNT(DISTINCT session_date) AS count FROM attendance_sessions
 		 WHERE pump_id = $1 AND session_date >= $2 AND session_date <= $3`,
 		[pump.id, from, to]
 	);
 	const sessionLog = await query<any>(
-		`SELECT id, session_date, session_type, status, pairing_status, paired_session_id,
-		        closed_by, submitted_at, processed_at, error_reason, photo_url,
-		        fraud_resolution, fraud_resolved_at, location_status,
+		`SELECT s.id, s.pump_id, s.session_date, s.session_type, s.status, s.pairing_status,
+		        s.paired_session_id, s.closed_by, s.submitted_at, s.processed_at, s.error_reason,
+		        s.photo_url, s.fraud_resolution, s.fraud_resolved_at, s.location_status,
 		        EXISTS (
 		          SELECT 1 FROM attendance_review_flags arf
-		          WHERE arf.session_id = attendance_sessions.id
-		            AND arf.person_id IS NULL AND arf.status = 'open'
+		          WHERE arf.session_id = s.id AND arf.person_id IS NULL AND arf.status = 'open'
 		        ) AS group_flagged
-		 FROM attendance_sessions
-		 WHERE pump_id = $1 AND session_date >= $2 AND session_date <= $3
-		 ORDER BY submitted_at DESC
-		 LIMIT $4 OFFSET $5`,
-		[pump.id, from, to, sessionPaging.pageSize, (sessionPaging.page - 1) * sessionPaging.pageSize]
+		 FROM attendance_sessions s
+		 JOIN (
+		   SELECT session_date FROM attendance_sessions
+		   WHERE pump_id = $1 AND session_date >= $2 AND session_date <= $3
+		   GROUP BY session_date ORDER BY session_date DESC LIMIT $4 OFFSET $5
+		 ) shift ON shift.session_date = s.session_date
+		 WHERE s.pump_id = $1
+		 ORDER BY s.session_date DESC, s.submitted_at`,
+		[pump.id, from, to, SHIFT_PAGE_SIZE, (sessionPaging.page - 1) * SHIFT_PAGE_SIZE]
 	);
 
-	const sessions = await attachSessionEvidence(sessionLog);
+	const sessions = await attachSessionEvidence(
+		sessionLog.map((row: any) => ({
+			...row,
+			pump_code: pump.pump_code,
+			plant_name: pump.plant_name
+		}))
+	);
 
 	// Rejection counts are computed from the full range, not just the current session-log
 	// page, so they need their own unpaginated read of the relevant fields.
@@ -196,12 +208,12 @@ export const load: PageServerLoad = async ({ params, url }) => {
 			total: Number(rosterTotal),
 			totalPages: Math.max(1, Math.ceil(Number(rosterTotal) / rosterPaging.pageSize))
 		},
-		sessionLog: sessions,
+		shifts: groupShifts(sessions),
 		sessionPagination: {
 			page: sessionPaging.page,
-			pageSize: sessionPaging.pageSize,
+			pageSize: SHIFT_PAGE_SIZE,
 			total: Number(sessionLogTotal),
-			totalPages: Math.max(1, Math.ceil(Number(sessionLogTotal) / sessionPaging.pageSize))
+			totalPages: Math.max(1, Math.ceil(Number(sessionLogTotal) / SHIFT_PAGE_SIZE))
 		},
 		range: { from, to },
 		days,

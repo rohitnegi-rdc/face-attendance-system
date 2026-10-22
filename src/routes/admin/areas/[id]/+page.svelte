@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
@@ -31,9 +32,9 @@
 		const value = data.pumpDailyMap[`${pumpId}|${day}`];
 		return !value || value.total === 0 ? null : Math.round((value.present / value.total) * 100);
 	}
-	function pageUrl(param: string, page: number) {
-		const params = new URLSearchParams(window.location.search);
-		params.set(param, String(page));
+	function pageUrl(param: string, n: number) {
+		const params = new URLSearchParams(page.url.search);
+		params.set(param, String(n));
 		return `?${params.toString()}`;
 	}
 </script>

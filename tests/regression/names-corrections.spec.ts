@@ -361,3 +361,33 @@ test('UI-11 the session log shows one numbered row per shift, start and end toge
 	expect(rows[0]).toMatch(/class="shift__number[^"]*"[^>]*>1</);
 	expect(log.match(/class="log-day__title/g)).toHaveLength(1);
 });
+
+test('UI-12 the admin pump page shows the same shift rows, with the admin tools on each photo', async () => {
+	const { plantId } = await createArea();
+	const pump = await createPump(plantId);
+	const admin = await login((await createAdmin()).email);
+	const context = await login(pump.email);
+	const start = await recordSession(context, ['UI12A']);
+	await shiftBack(start, 600);
+	await recordSession(context, ['UI12A']);
+	// More workers than one roster page (25), so the page renders its pager on the server: it
+	// used to read window and fail with a 500.
+	await db.query(
+		`INSERT INTO persons (pump_id, display_seq, name)
+		 SELECT $1, 100 + n, 'Pager Worker ' || n FROM generate_series(1, 26) n`,
+		[pump.id]
+	);
+
+	const response = await admin.get(`/admin/pumps/${pump.id}`);
+	expect(response.status()).toBe(200);
+	const page = await response.text();
+	const rows = page.split('data-testid="shift-row"').slice(1);
+	expect(rows).toHaveLength(1);
+	expect(rows[0]).toContain('Full shift');
+	expect(rows[0]).toMatch(/class="shift__number[^"]*"[^>]*>1</);
+	// Both photos keep Delete / reset and Fix shift; Fix attendance opens the admin correction.
+	expect(rows[0].match(/Delete \/ reset/g)).toHaveLength(2);
+	expect(rows[0].match(/data-testid="shift-fix"/g)).toHaveLength(2);
+	expect(rows[0]).toContain(`/admin/attendance/correct?pump=${pump.id}`);
+	expect(page).toMatch(/Page 1 of 2/);
+});

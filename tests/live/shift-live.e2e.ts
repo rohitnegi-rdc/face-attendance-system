@@ -221,7 +221,8 @@ function answerNextDialog(page: Page, accept: boolean) {
 }
 
 function sessionRow(page: Page, id: string) {
-	return page.locator('tbody tr', {
+	// One photo's block inside its shift row (start or end), with that photo's admin tools.
+	return page.locator('.half', {
 		has: page.locator(`input[name="session_id"][value="${id}"]`)
 	});
 }

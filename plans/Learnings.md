@@ -87,3 +87,7 @@ The original 12-row illustrative sample in Prompt A never exposed several real p
 - Every processed photo waits in `review` until the pump presses Complete, so a mandatory step belongs at approve, not at submit: the photo is never blocked, and a worker is named once (on first sight), not on every photo.
 - A missed shift start leaves one photo that the system rightly records as the start. Correction used to require a photo of the matching type, so neither admin nor plant manager could mark the end present. Corrections now need any processed photo that day; the reason and the actor (admin or plant manager) are stored.
 - Base64 face crops (~17 KB each) inlined in list pages made a 20-row session log weigh megabytes. List pages now serve crops through cached, role-checked image routes and load them on click; only fraud faces, the evidence a reader must see at once, stay inline.
+
+### 2026-10-22: pagers built from `window` crash server rendering
+
+The admin pump, area and vendor pages built pager links with `new URLSearchParams(window.location.search)`. That runs during server rendering whenever a pager shows (more than one page), so those pages returned 500 only once the data grew past one page, and never in small test data. Build page links from `page.url` (`$app/state`), which exists on the server and in the browser. UI-12 renders the admin pump page with 26 workers to keep the pager on.
