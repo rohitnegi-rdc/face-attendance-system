@@ -126,6 +126,12 @@
 			icon: CalendarCheck,
 			badge: 'attendance'
 		},
+		{
+			href: resolve('/vendor/fraud'),
+			label: 'Fraud',
+			icon: TriangleAlert,
+			badge: 'fraud'
+		},
 		{ href: resolve('/vendor/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/vendor/people'), label: 'People', icon: UsersRound }
 	];

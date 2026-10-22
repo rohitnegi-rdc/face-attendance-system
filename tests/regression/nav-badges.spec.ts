@@ -116,6 +116,32 @@ test('NAV-03 a fraud case an admin cleared stops counting and is no longer red',
 	expect(log).toContain('Cleared');
 });
 
+test('NAV-04 vendors on both sides of a fraud case see the red Fraud badge and the case', async () => {
+	const { plantId } = await createArea();
+	const vendorA = await createVendor();
+	const vendorB = await createVendor();
+	const bystander = await createVendor();
+	const a = await createPump(plantId, vendorA.id);
+	const b = await createPump(plantId, vendorB.id);
+	await createPump(plantId, bystander.id);
+	await recordSession(await login(a.email), ['NAV04']);
+	await submitAndWait(await login(b.email), ['NAV04']);
+
+	for (const vendor of [vendorA, vendorB]) {
+		const context = await login(vendor.email);
+		const overview = await html(context, '/vendor');
+		expect(badge(overview, 'fraud')).toBe('1');
+		expect(overview).toMatch(/nav-badge--alert[^>]*data-testid="nav-badge-fraud"/);
+		const list = (await html(context, '/vendor/fraud')).split('data-testid="vendor-fraud"')[1];
+		expect(list).toContain(a.code);
+		expect(list).toContain(b.code);
+	}
+	// A vendor with no pump in the pair sees nothing, same Area or not.
+	const other = await login(bystander.email);
+	expect(badge(await html(other, '/vendor'), 'fraud')).toBeNull();
+	expect(await html(other, '/vendor/fraud')).not.toContain(a.code);
+});
+
 test('UI-09 every worker of a session is shown inline, no fold-out list', async () => {
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);

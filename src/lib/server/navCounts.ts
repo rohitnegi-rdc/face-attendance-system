@@ -14,6 +14,26 @@ function pumpScope(role: NavRole, alias: string) {
 	return 'TRUE';
 }
 
+// Open cross-pump fraud cases touching the user's pumps, for the read-only lists (plant manager
+// Approvals, vendor Fraud). Same scope as the badge count, so the badge and the list always agree.
+// Confirming or clearing is the admin's call (/admin/fraud-flags).
+export async function listOpenFraud(role: NavRole, userId: string) {
+	return query<any>(
+		`SELECT ff.id, ff.face_crop_url, ff.similarity_score, ff.is_operator,
+		        to_char(ff.created_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon, HH12:MI am') AS flagged_at,
+		        pu.pump_code AS flagged_pump, fpl.name AS flagged_plant,
+		        mp.pump_code AS matched_pump, mpl.name AS matched_plant
+		 FROM fraud_flags ff
+		 JOIN attendance_sessions s ON s.id = ff.session_id
+		 JOIN pumps pu ON pu.id = s.pump_id JOIN plants fpl ON fpl.id = pu.plant_id
+		 JOIN pumps mp ON mp.id = ff.matched_at_pump_id JOIN plants mpl ON mpl.id = mp.plant_id
+		 WHERE NOT ff.reviewed AND (${pumpScope(role, 'pu')} OR ${pumpScope(role, 'mp')})
+		 ORDER BY ff.created_at DESC
+		 LIMIT 100`,
+		role === 'admin' ? [] : [userId]
+	);
+}
+
 export async function markSeen(role: NavRole, userId: string, section: string) {
 	await query(
 		`INSERT INTO nav_seen (role, user_id, section, seen_at) VALUES ($1, $2, $3, now())
