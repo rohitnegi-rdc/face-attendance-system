@@ -74,16 +74,51 @@ function isSerializationConflict(err) {
 	return err?.code === '40001' || err?.code === '40P01';
 }
 
+// ISO 8601 in Asia/Kolkata, computed in code; same as istTimestamp in src/lib/server/log.ts.
+function istTimestamp(date = new Date()) {
+	return new Date(date.getTime() + 330 * 60_000).toISOString().replace('Z', '+05:30');
+}
+
+const STORED_LOG_LEVELS = new Set(['warn', 'error', 'fatal']);
+const MAX_LOG_DETAILS_CHARS = 8000;
+const LOG_RETENTION_DAYS = Number(process.env.LOG_RETENTION_DAYS) || 30;
+
+// Same line shape as the app (src/lib/server/log.ts). Warnings and errors also go to
+// system_logs for the admin Logs page; a failed insert only writes to stderr, never loops.
 function log(level, fields, message) {
 	console.log(
-		JSON.stringify({
-			level,
-			service: 'worker',
-			timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-			message,
-			...fields
-		})
+		JSON.stringify({ timestamp: istTimestamp(), level, service: 'worker', message, ...fields })
 	);
+	if (!STORED_LOG_LEVELS.has(level)) return;
+	let details = JSON.stringify(fields);
+	if (details.length > MAX_LOG_DETAILS_CHARS) {
+		details = JSON.stringify({ truncated: details.slice(0, MAX_LOG_DETAILS_CHARS) });
+	}
+	const text = (value) => (value == null || value === '' ? null : String(value));
+	pool
+		.query(
+			`INSERT INTO system_logs (level, service, message, request_id, session_id, pump_id, details)
+			 VALUES ($1, 'worker', $2, $3, $4, $5, $6::jsonb)`,
+			[
+				level,
+				message || '(no message)',
+				text(fields.requestId ?? fields.request_id),
+				text(fields.sessionId ?? fields.session_id),
+				text(fields.pumpId ?? fields.pump_id),
+				details
+			]
+		)
+		.catch((err) => {
+			console.error(
+				JSON.stringify({
+					timestamp: istTimestamp(),
+					level: 'error',
+					service: 'worker',
+					message: 'could not store log line',
+					error: String(err?.message || err)
+				})
+			);
+		});
 }
 
 async function writeHeartbeat() {
@@ -371,7 +406,8 @@ async function processJob(job) {
 					: checkRecapture(photoBuffer)
 		]);
 		const operatorFace = operatorExtraction ? largestFace(operatorExtraction.faces || []) : null;
-		if (operatorExtraction && !operatorFace) throw new OperatorPhotoError('no face in operator photo');
+		if (operatorExtraction && !operatorFace)
+			throw new OperatorPhotoError('no face in operator photo');
 		const {
 			faces: groupFaces,
 			image_preprocessing: imagePreprocessing,
@@ -794,6 +830,15 @@ async function loop() {
 					log('info', { expiredCount }, 'periodic sweep expired stale morning sessions');
 			} catch (err) {
 				log('error', { error: String(err?.message || err) }, 'periodic expiry sweep failed');
+			}
+			try {
+				const { rowCount } = await pool.query(
+					`DELETE FROM system_logs WHERE logged_at < now() - make_interval(days => $1)`,
+					[LOG_RETENTION_DAYS]
+				);
+				if (rowCount > 0) log('info', { deleted: rowCount }, 'old log lines removed');
+			} catch (err) {
+				log('error', { error: String(err?.message || err) }, 'log retention sweep failed');
 			}
 		},
 		60 * 60 * 1000

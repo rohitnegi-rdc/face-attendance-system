@@ -40,6 +40,7 @@ Person records never merge across pumps — same human at two pumps = two Person
 | SvelteKit backend routes | `src/routes/api/**`, `src/routes/admin/**`, `src/routes/vendor/**`, `src/routes/pump/**` |
 | Auth (JWT httpOnly cookie, role guards) | `src/lib/server/auth.ts` |
 | DB access | `src/lib/server/db.ts` |
+| Logging (one JSON line shape for app, worker, ai-service; warn/error also in `system_logs`, shown at `/admin/logs`, kept `LOG_RETENTION_DAYS`=30) | `src/lib/server/log.ts`, `log()` in `worker/index.js` |
 | IST time helpers | `src/lib/server/time.ts`, `src/lib/date.ts` |
 | CSV vendor/pump/plant import | `src/lib/server/csvImport.ts` |
 | Attendance evidence/review (flagged guests, merge, fraud) | `src/lib/server/attendanceReview.ts` |

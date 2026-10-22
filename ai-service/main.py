@@ -5,10 +5,12 @@ embedding + base64 crop per detected face. Internal-only (Docker network).
 See plans/MasterPlan.md §5 / Prompt A "AI MICROSERVICE".
 """
 import base64
+import json
 import logging
 import os
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 import cv2
@@ -26,8 +28,29 @@ RESIZE_JPEG_QUALITY = min(100, max(50, int(os.getenv("AI_RESIZE_JPEG_QUALITY", "
 MAX_UPLOAD_BYTES = max(1, int(os.getenv("AI_MAX_UPLOAD_BYTES", str(18 * 1024 * 1024))))
 MAX_IMAGE_PIXELS = 20_000_000
 
-# Structured JSON logging (plans/MasterPlan.md §7a)
-logging.basicConfig(level=logging.INFO, format='{"timestamp":"%(asctime)s","level":"%(levelname)s","service":"ai-service","message":"%(message)s"}')
+# Structured JSON logging (plans/MasterPlan.md §7a): the same line shape as the app and the worker
+# (src/lib/server/log.ts), ISO timestamp in Asia/Kolkata. json.dumps keeps quotes in a message
+# from breaking the line. This service has no database: its failures reach the admin Logs page
+# through the worker, which logs them with the same request_id.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        entry = {
+            "timestamp": datetime.fromtimestamp(record.created, IST).isoformat(timespec="milliseconds"),
+            "level": record.levelname.lower().replace("warning", "warn"),
+            "service": "ai-service",
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            entry["error"] = self.formatException(record.exc_info)
+        return json.dumps(entry)
+
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(JsonFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[_handler], force=True)
 logger = logging.getLogger("ai-service")
 
 app = FastAPI(title="Face AI Microservice")

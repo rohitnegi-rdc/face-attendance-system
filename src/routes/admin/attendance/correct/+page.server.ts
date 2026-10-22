@@ -4,6 +4,7 @@ import { resolve } from '$app/paths';
 import { pool, query, queryOne } from '$lib/server/db';
 import { isDateKey } from '$lib/date';
 import { shiftStillOpen } from '$lib/server/shiftSessions';
+import { logger } from '$lib/server/log';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -74,7 +75,10 @@ export const actions: Actions = {
 			return fail(400, { error: 'Invalid attendance correction request' });
 		}
 		if (reason.length < 5 || reason.length > 500) {
-			return fail(400, { error: 'Enter a correction reason between 5 and 500 characters', personId });
+			return fail(400, {
+				error: 'Enter a correction reason between 5 and 500 characters',
+				personId
+			});
 		}
 
 		const client = await pool.connect();
@@ -95,12 +99,21 @@ export const actions: Actions = {
 			);
 			if (!sessions.rowCount) {
 				await client.query('ROLLBACK');
-				return fail(409, { error: 'No completed attendance session exists for this date', personId });
+				return fail(409, {
+					error: 'No completed attendance session exists for this date',
+					personId
+				});
 			}
 			const available = new Set(sessions.rows.map((row) => row.session_type));
-			if ((morningMatched && !available.has('morning')) || (eveningMatched && !available.has('evening'))) {
+			if (
+				(morningMatched && !available.has('morning')) ||
+				(eveningMatched && !available.has('evening'))
+			) {
 				await client.query('ROLLBACK');
-				return fail(409, { error: 'Attendance cannot be added without its source session', personId });
+				return fail(409, {
+					error: 'Attendance cannot be added without its source session',
+					personId
+				});
 			}
 			const existing = await client.query(
 				`SELECT morning_matched, evening_matched FROM daily_person_attendance
@@ -122,7 +135,17 @@ export const actions: Actions = {
 				 (person_id, pump_id, session_date, previous_morning_matched, previous_evening_matched,
 				  corrected_morning_matched, corrected_evening_matched, reason, corrected_by_admin_id)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-				[personId, pumpId, day, previousMorning, previousEvening, morningMatched, eveningMatched, reason, locals.user.id]
+				[
+					personId,
+					pumpId,
+					day,
+					previousMorning,
+					previousEvening,
+					morningMatched,
+					eveningMatched,
+					reason,
+					locals.user.id
+				]
 			);
 			await client.query(
 				`INSERT INTO person_attendance_yearly
@@ -143,7 +166,7 @@ export const actions: Actions = {
 			return { success: true, personId, message: 'Attendance correction saved' };
 		} catch (err) {
 			await client.query('ROLLBACK');
-			console.error('attendance correction failed', err);
+			logger.error({ error: String((err as any)?.message || err) }, 'attendance correction failed');
 			return fail(500, { error: 'Could not save the attendance correction', personId });
 		} finally {
 			client.release();
@@ -158,11 +181,17 @@ export const actions: Actions = {
 		const day = String(form.get('day') || '');
 		const sessionType = String(form.get('session_type') || '');
 		const reason = String(form.get('duplicate_reason') || '').trim();
-		if (![keptId, duplicateId, pumpId].every((value) => UUID_PATTERN.test(value)) || keptId === duplicateId || !isDateKey(day)) {
+		if (
+			![keptId, duplicateId, pumpId].every((value) => UUID_PATTERN.test(value)) ||
+			keptId === duplicateId ||
+			!isDateKey(day)
+		) {
 			return fail(400, { error: 'Choose a valid duplicate worker' });
 		}
-		if (!['morning', 'evening'].includes(sessionType)) return fail(400, { error: 'Choose shift start or shift end' });
-		if (reason.length < 5 || reason.length > 500) return fail(400, { error: 'Enter a reason between 5 and 500 characters' });
+		if (!['morning', 'evening'].includes(sessionType))
+			return fail(400, { error: 'Choose shift start or shift end' });
+		if (reason.length < 5 || reason.length > 500)
+			return fail(400, { error: 'Enter a reason between 5 and 500 characters' });
 
 		const client = await pool.connect();
 		try {
@@ -179,13 +208,15 @@ export const actions: Actions = {
 				 AND session_type = $3 AND status IN ('review', 'completed')`,
 				[pumpId, day, sessionType]
 			);
-			if (!session.rowCount) throw new Error('No completed source session exists for this selection.');
+			if (!session.rowCount)
+				throw new Error('No completed source session exists for this selection.');
 			const existingResolution = await client.query(
 				`SELECT id FROM attendance_duplicate_resolutions WHERE pump_id = $1 AND session_date = $2
 				 AND session_type = $3 AND duplicate_person_id = $4 AND reversed_at IS NULL FOR UPDATE`,
 				[pumpId, day, sessionType, duplicateId]
 			);
-			if (existingResolution.rowCount) throw new Error('This worker is already marked duplicate for that session.');
+			if (existingResolution.rowCount)
+				throw new Error('This worker is already marked duplicate for that session.');
 			const previous = await client.query(
 				`SELECT person_id, morning_matched, evening_matched FROM daily_person_attendance
 				 WHERE session_date = $1 AND person_id IN ($2, $3) FOR UPDATE`,
@@ -193,7 +224,9 @@ export const actions: Actions = {
 			);
 			const previousFor = (personId: string) => {
 				const row = previous.rows.find((item) => item.person_id === personId);
-				return sessionType === 'morning' ? (row?.morning_matched ?? false) : (row?.evening_matched ?? false);
+				return sessionType === 'morning'
+					? (row?.morning_matched ?? false)
+					: (row?.evening_matched ?? false);
 			};
 
 			await client.query(
@@ -217,16 +250,34 @@ export const actions: Actions = {
 				 (kept_person_id, duplicate_person_id, pump_id, session_date, session_type,
 				  previous_kept_present, previous_duplicate_present, reason, resolved_by_admin_id)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-				[keptId, duplicateId, pumpId, day, sessionType, previousFor(keptId), previousFor(duplicateId), reason, locals.user.id]
+				[
+					keptId,
+					duplicateId,
+					pumpId,
+					day,
+					sessionType,
+					previousFor(keptId),
+					previousFor(duplicateId),
+					reason,
+					locals.user.id
+				]
 			);
 			await recalculateYear(client, keptId, day);
 			await recalculateYear(client, duplicateId, day);
 			await client.query('COMMIT');
-			return { success: true, message: 'Duplicate detection removed; the selected worker remains present.' };
+			return {
+				success: true,
+				message: 'Duplicate detection removed; the selected worker remains present.'
+			};
 		} catch (err) {
 			await client.query('ROLLBACK');
-			console.error('attendance duplicate resolution failed', err);
-			return fail(400, { error: err instanceof Error ? err.message : 'Could not resolve duplicate detection' });
+			logger.error(
+				{ error: String((err as any)?.message || err) },
+				'attendance duplicate resolution failed'
+			);
+			return fail(400, {
+				error: err instanceof Error ? err.message : 'Could not resolve duplicate detection'
+			});
 		} finally {
 			client.release();
 		}
@@ -235,7 +286,8 @@ export const actions: Actions = {
 		if (!locals.user || locals.user.role !== 'admin') return fail(403, { error: 'Forbidden' });
 		const form = await request.formData();
 		const resolutionId = String(form.get('resolution_id') || '');
-		if (!UUID_PATTERN.test(resolutionId)) return fail(400, { error: 'Invalid duplicate resolution' });
+		if (!UUID_PATTERN.test(resolutionId))
+			return fail(400, { error: 'Invalid duplicate resolution' });
 		const client = await pool.connect();
 		try {
 			await client.query('BEGIN');
@@ -245,7 +297,10 @@ export const actions: Actions = {
 			);
 			if (!result.rowCount) throw new Error('This duplicate decision has already been reversed.');
 			const resolution = result.rows[0];
-			for (const [personId, present] of [[resolution.kept_person_id, resolution.previous_kept_present], [resolution.duplicate_person_id, resolution.previous_duplicate_present]]) {
+			for (const [personId, present] of [
+				[resolution.kept_person_id, resolution.previous_kept_present],
+				[resolution.duplicate_person_id, resolution.previous_duplicate_present]
+			]) {
 				await client.query(
 					`UPDATE daily_person_attendance SET
 					 morning_matched = CASE WHEN $3 = 'morning' THEN COALESCE($4, false) ELSE morning_matched END,
@@ -260,10 +315,15 @@ export const actions: Actions = {
 				[resolutionId, locals.user.id]
 			);
 			await client.query('COMMIT');
-			return { success: true, message: 'Duplicate decision undone and previous attendance restored.' };
+			return {
+				success: true,
+				message: 'Duplicate decision undone and previous attendance restored.'
+			};
 		} catch (err) {
 			await client.query('ROLLBACK');
-			return fail(400, { error: err instanceof Error ? err.message : 'Could not undo duplicate decision' });
+			return fail(400, {
+				error: err instanceof Error ? err.message : 'Could not undo duplicate decision'
+			});
 		} finally {
 			client.release();
 		}

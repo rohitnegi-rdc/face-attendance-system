@@ -17,6 +17,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import Settings from '@lucide/svelte/icons/settings';
+	import ScrollText from '@lucide/svelte/icons/scroll-text';
 	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 
 	let {
@@ -56,6 +57,7 @@
 		{ href: resolve('/admin/vendors'), label: 'Vendors', icon: Building2 },
 		{ href: resolve('/admin/plant-managers'), label: 'Plant managers', icon: Building2 },
 		{ href: resolve('/admin/import'), label: 'Imports', icon: FileUp },
+		{ href: resolve('/admin/logs'), label: 'Logs', icon: ScrollText },
 		{ href: resolve('/admin/settings'), label: 'Settings', icon: Settings }
 	];
 

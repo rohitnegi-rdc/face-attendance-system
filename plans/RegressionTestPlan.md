@@ -338,6 +338,15 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | OPR-04 | Operator photo with no face | Session fails at once (1 attempt, no retries) with "No face was found in the operator photo" | 1 | P1 | Covered (operator.spec) |
 | OPR-05 | Operator photo served, then resent | `?kind=operator` serves the exact bytes; the same operator photo again is 409; the group photo reused as operator photo is 400 | 1 | P1 | Covered (operator.spec) |
 
+### LOG: central log (logs.spec, added 2026-10-22)
+
+| ID | Scenario | Expected | Tier | Pri | Status |
+|---|---|---|---|---|---|
+| LOG-01 | A photo fails in the worker | `system_logs` gets a worker error with the session and request id; /admin/logs searched by the request id shows it with the pump code | 1 | P1 | Covered (logs.spec) |
+| LOG-02 | An unhandled app error (500) | Stored as an app error with its path and errorId; search finds it under errors, not under warnings | 1 | P1 | Covered (logs.spec) |
+| LOG-03 | Pump or plant manager opens /admin/logs | 403 | 1 | P1 | Covered (logs.spec) |
+| LOG-04 | Lines older than LOG_RETENTION_DAYS | Removed by the worker's hourly sweep (not covered: the sweep runs hourly) | 1 | P2 | Missing |
+
 ### PATH: sub-path hosting (BASE_PATH)
 
 | ID | Scenario | Expected | Tier | Pri | Status |

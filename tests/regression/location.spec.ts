@@ -215,7 +215,7 @@ test('LOC-07 held shift emails the plant manager an absolute approval link', asy
 	const mails = await logLines('app', [session.id, 'location approval email']);
 	expect(mails).toHaveLength(1);
 	const [mail] = mails;
-	expect(mail.msg).toBe('location approval email NOT sent (MAIL_LOG_ONLY)');
+	expect(mail.message).toBe('location approval email NOT sent (MAIL_LOG_ONLY)');
 	expect(mail.to).toEqual([manager.email]);
 	expect(mail.subject).toContain(pump.code);
 	// Regression: the link was once built as "<origin>../../plant-manager/...".
