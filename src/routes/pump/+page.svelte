@@ -335,6 +335,12 @@
 		await startCameraCapture('operator');
 	}
 
+	// The group photo is taken of the crew: back to the rear camera.
+	async function startGroupCamera() {
+		cameraFacingMode = 'environment';
+		await startCameraCapture('group');
+	}
+
 	async function captureCameraFrame() {
 		if (!cameraPreview || !cameraPreview.videoWidth || !cameraPreview.videoHeight) {
 			cameraCaptureError = 'The camera preview is not ready yet.';
@@ -831,123 +837,123 @@
 			<section class="capture-workspace" aria-labelledby="photo-heading">
 				<div class="section-heading">
 					<div>
-						<h2 id="photo-heading">{t('Group photo')}</h2>
-						<p>{t('Keep every face visible and inside the frame.')}</p>
+						<h2 id="photo-heading">{t('Operator photo')}</h2>
+						<p>
+							{t('The pump operator alone, face clearly visible. Needed with every shift photo.')}
+						</p>
 					</div>
 				</div>
 
-				{#if previewUrl}
-					<div class="photo-preview">
-						<img src={previewUrl} alt="Selected group attendance preview" />
-						{#if status === 'submitting' || status === 'processing'}
-							<div class="processing-overlay" aria-hidden="true">
-								<LoaderCircle class="spin" size={30} />
-							</div>
-						{/if}
-					</div>
-					<div class="photo-meta">
-						<span>{selectedFile?.name}</span>
-						<span>{selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB` : ''}</span>
-					</div>
-				{:else if cameraCaptureActive && captureTarget === 'group'}
-					{@render cameraCapturePanel(
-						t('Keep the complete group inside the frame.'),
-						t('Keep every worker visible before capturing the photo.')
-					)}
-				{:else if screenCaptureActive && captureTarget === 'group'}
-					{@render screenCapturePanel(
-						t('Keep every worker visible in the WhatsApp call before capturing.')
-					)}
-				{:else}
-					<div class="capture-empty">
-						<span class="capture-icon"><Users size={34} strokeWidth={1.6} /></span>
-						<strong>{t('Ready for the team photo')}</strong>
-						<p>{t('Stand where the whole group is evenly lit and facing the camera.')}</p>
-						<div class="capture-choices">
-							<button
-								class="button button--primary"
-								type="button"
-								onclick={() => startCameraCapture('group')}
-								disabled={today?.state === 'locked' || today?.can_submit === false}
-							>
-								<Camera size={18} />
-								{t('Take photo')}
-							</button>
-							<button
-								class="button button--secondary"
-								type="button"
-								onclick={() => startScreenCapture('group')}
-								disabled={today?.state === 'locked' || today?.can_submit === false}
-							>
-								<MonitorUp size={18} />
-								{t('Capture video call')}
-							</button>
+				<div data-testid="operator-photo">
+					{#if operatorPreviewUrl}
+						<div class="photo-preview operator-preview">
+							<img src={operatorPreviewUrl} alt="Selected operator" />
+							{#if status === 'submitting' || status === 'processing'}
+								<div class="processing-overlay" aria-hidden="true">
+									<LoaderCircle class="spin" size={30} />
+								</div>
+							{/if}
 						</div>
-						{#if cameraCaptureError}<p class="capture-error">{t(cameraCaptureError)}</p>{/if}
-						{#if screenCaptureError}<p class="capture-error">{t(screenCaptureError)}</p>{/if}
-					</div>
-				{/if}
+						{#if status === 'idle'}
+							<button class="button button--secondary" type="button" onclick={startOperatorCamera}>
+								<Camera size={18} />
+								{t('Retake operator photo')}
+							</button>
+						{/if}
+					{:else if cameraCaptureActive && captureTarget === 'operator'}
+						{@render cameraCapturePanel(
+							t('Only the operator, face clearly visible.'),
+							t('Hold the phone at face height in good light.')
+						)}
+					{:else if screenCaptureActive && captureTarget === 'operator'}
+						{@render screenCapturePanel(
+							t('Ask the operator to face the camera alone in the call.')
+						)}
+					{:else}
+						<div class="capture-empty operator-empty">
+							<span class="capture-icon"><UserRound size={30} strokeWidth={1.6} /></span>
+							<strong>{t('Start with the operator')}</strong>
+							<p>
+								{t('Take a photo of the pump operator alone, so their attendance is marked too.')}
+							</p>
+							<div class="capture-choices">
+								<button
+									class="button button--primary"
+									type="button"
+									onclick={startOperatorCamera}
+									disabled={today?.state === 'locked' || today?.can_submit === false}
+								>
+									<Camera size={18} />
+									{t('Take operator photo')}
+								</button>
+								<button
+									class="button button--secondary"
+									type="button"
+									onclick={() => startScreenCapture('operator')}
+									disabled={today?.state === 'locked' || today?.can_submit === false}
+								>
+									<MonitorUp size={18} />
+									{t('Capture video call')}
+								</button>
+							</div>
+							{#if cameraCaptureError}<p class="capture-error">{t(cameraCaptureError)}</p>{/if}
+							{#if screenCaptureError}<p class="capture-error">{t(screenCaptureError)}</p>{/if}
+						</div>
+					{/if}
+				</div>
 
-				{#if previewUrl}
-					<div class="operator-block" data-testid="operator-photo">
+				{#if operatorPreviewUrl}
+					<div class="second-step" data-testid="group-photo">
 						<div class="section-heading">
 							<div>
-								<h2>{t('Operator photo')}</h2>
-								<p>
-									{t(
-										'The pump operator alone, face clearly visible. Needed with every shift photo.'
-									)}
-								</p>
+								<h2>{t('Group photo')}</h2>
+								<p>{t('Keep every face visible and inside the frame.')}</p>
 							</div>
 						</div>
-						{#if operatorPreviewUrl}
-							<div class="photo-preview operator-preview">
-								<img src={operatorPreviewUrl} alt="Selected operator" />
+						{#if previewUrl}
+							<div class="photo-preview">
+								<img src={previewUrl} alt="Selected group attendance preview" />
 								{#if status === 'submitting' || status === 'processing'}
 									<div class="processing-overlay" aria-hidden="true">
 										<LoaderCircle class="spin" size={30} />
 									</div>
 								{/if}
 							</div>
-							{#if status === 'idle'}
-								<button
-									class="button button--secondary"
-									type="button"
-									onclick={startOperatorCamera}
+							<div class="photo-meta">
+								<span>{selectedFile?.name}</span>
+								<span
+									>{selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB` : ''}</span
 								>
-									<Camera size={18} />
-									{t('Retake operator photo')}
-								</button>
-							{/if}
-						{:else if cameraCaptureActive && captureTarget === 'operator'}
+							</div>
+						{:else if cameraCaptureActive && captureTarget === 'group'}
 							{@render cameraCapturePanel(
-								t('Only the operator, face clearly visible.'),
-								t('Hold the phone at face height in good light.')
+								t('Keep the complete group inside the frame.'),
+								t('Keep every worker visible before capturing the photo.')
 							)}
-						{:else if screenCaptureActive && captureTarget === 'operator'}
+						{:else if screenCaptureActive && captureTarget === 'group'}
 							{@render screenCapturePanel(
-								t('Ask the operator to face the camera alone in the call.')
+								t('Keep every worker visible in the WhatsApp call before capturing.')
 							)}
 						{:else}
-							<div class="capture-empty operator-empty">
-								<span class="capture-icon"><UserRound size={30} strokeWidth={1.6} /></span>
-								<strong>{t('Now the operator')}</strong>
-								<p>
-									{t('Take a photo of the pump operator alone, so their attendance is marked too.')}
-								</p>
+							<div class="capture-empty">
+								<span class="capture-icon"><Users size={34} strokeWidth={1.6} /></span>
+								<strong>{t('Now the group photo')}</strong>
+								<p>{t('Stand where the whole group is evenly lit and facing the camera.')}</p>
 								<div class="capture-choices">
 									<button
 										class="button button--primary"
 										type="button"
-										onclick={startOperatorCamera}
+										onclick={startGroupCamera}
+										disabled={today?.state === 'locked' || today?.can_submit === false}
 									>
 										<Camera size={18} />
-										{t('Take operator photo')}
+										{t('Take photo')}
 									</button>
 									<button
 										class="button button--secondary"
 										type="button"
-										onclick={() => startScreenCapture('operator')}
+										onclick={() => startScreenCapture('group')}
+										disabled={today?.state === 'locked' || today?.can_submit === false}
 									>
 										<MonitorUp size={18} />
 										{t('Capture video call')}
@@ -1291,16 +1297,16 @@
 		</aside>
 	</div>
 
-	{#if selectedFile && status === 'idle'}
+	{#if operatorFile && status === 'idle'}
 		<div class="sticky-submit">
 			<button
 				class="button button--primary"
 				type="button"
 				onclick={submitPhoto}
-				disabled={!operatorFile}
+				disabled={!selectedFile}
 			>
 				<Upload size={18} />
-				{operatorFile ? t('Submit photos') : t('Take the operator photo first')}
+				{selectedFile ? t('Submit photos') : t('Take the group photo first')}
 			</button>
 			<button class="button button--ghost" type="button" onclick={resetCapture}
 				>{t('Cancel')}</button
@@ -1493,14 +1499,14 @@
 		gap: var(--space-2);
 	}
 
-	.operator-block {
+	.second-step {
 		display: grid;
 		gap: var(--space-3);
 		margin-top: var(--space-5);
 		padding-top: var(--space-5);
 		border-top: 1px solid var(--brand-mist);
 	}
-	.operator-block .section-heading {
+	.second-step .section-heading {
 		margin-bottom: 0;
 	}
 	.operator-preview {

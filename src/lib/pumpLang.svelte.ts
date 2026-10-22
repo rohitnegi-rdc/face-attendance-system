@@ -48,7 +48,6 @@ const HI: Record<string, string> = {
 	// Group photo
 	'Group photo': 'ग्रुप फोटो',
 	'Keep every face visible and inside the frame.': 'हर चेहरा साफ़ और फ्रेम के अंदर रखें।',
-	'Ready for the team photo': 'टीम फोटो के लिए तैयार',
 	'Stand where the whole group is evenly lit and facing the camera.':
 		'ऐसी जगह खड़े हों जहाँ पूरे ग्रुप पर बराबर रोशनी हो और सब कैमरे की तरफ देखें।',
 	'Take photo': 'फोटो लें',
@@ -68,12 +67,13 @@ const HI: Record<string, string> = {
 	'Hold the phone at face height in good light.': 'अच्छी रोशनी में फ़ोन चेहरे की ऊँचाई पर रखें।',
 	'Ask the operator to face the camera alone in the call.':
 		'ऑपरेटर से कहें कि कॉल में अकेले कैमरे की तरफ देखें।',
-	'Now the operator': 'अब ऑपरेटर',
+	'Start with the operator': 'पहले ऑपरेटर की फोटो',
+	'Now the group photo': 'अब ग्रुप फोटो',
+	'Take the group photo first': 'पहले ग्रुप फोटो लें',
 	'Take a photo of the pump operator alone, so their attendance is marked too.':
 		'पंप ऑपरेटर की अकेले फोटो लें, ताकि उनकी अटेंडेंस भी लगे।',
 	'Take operator photo': 'ऑपरेटर फोटो लें',
 	'Submit photos': 'फोटो भेजें',
-	'Take the operator photo first': 'पहले ऑपरेटर फोटो लें',
 	Cancel: 'रद्द करें',
 
 	// Camera and screen capture
