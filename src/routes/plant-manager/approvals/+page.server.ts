@@ -22,12 +22,31 @@ export const load: PageServerLoad = async ({ locals }) => {
 		 LIMIT 200`,
 		[locals.user!.id]
 	);
+	// Cross-pump fraud touching this manager's pumps (either side), still waiting for an admin.
+	// The manager only watches: confirming or clearing is the admin's call (/admin/fraud-flags).
+	const fraud = await query<any>(
+		`SELECT ff.id, ff.face_crop_url, ff.similarity_score, ff.is_operator,
+		        to_char(ff.created_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon, HH12:MI am') AS flagged_at,
+		        fp.pump_code AS flagged_pump, fpl.name AS flagged_plant,
+		        mp.pump_code AS matched_pump, mpl.name AS matched_plant
+		 FROM fraud_flags ff
+		 JOIN attendance_sessions fs ON fs.id = ff.session_id
+		 JOIN pumps fp ON fp.id = fs.pump_id JOIN plants fpl ON fpl.id = fp.plant_id
+		 JOIN pumps mp ON mp.id = ff.matched_at_pump_id JOIN plants mpl ON mpl.id = mp.plant_id
+		 WHERE NOT ff.reviewed
+		   AND (fp.plant_id IN (SELECT plant_id FROM plant_manager_assignments WHERE manager_id = $1)
+		     OR mp.plant_id IN (SELECT plant_id FROM plant_manager_assignments WHERE manager_id = $1))
+		 ORDER BY ff.created_at DESC
+		 LIMIT 100`,
+		[locals.user!.id]
+	);
 	const items = rows.map((row) => ({
 		...row,
 		reason: locationIssueText(row.location_issue, row.location_distance_m, row.pump_gps_at)
 	}));
 	return {
 		pending: items.filter((item) => item.location_status === 'pending'),
-		decided: items.filter((item) => item.location_status !== 'pending')
+		decided: items.filter((item) => item.location_status !== 'pending'),
+		fraud
 	};
 };

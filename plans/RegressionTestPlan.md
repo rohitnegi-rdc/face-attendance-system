@@ -346,6 +346,9 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | LOG-02 | An unhandled app error (500) | Stored as an app error with its path and errorId; search finds it under errors, not under warnings | 1 | P1 | Covered (logs.spec) |
 | LOG-03 | Pump or plant manager opens /admin/logs | 403 | 1 | P1 | Covered (logs.spec) |
 | LOG-04 | Lines older than LOG_RETENTION_DAYS | Removed by the worker's hourly sweep (not covered: the sweep runs hourly) | 1 | P2 | Missing |
+| NAV-01 | A pump sends a shift photo (added 2026-10-22) | Attendance badge in the side navigation for the admin, the owning vendor and the plant manager; opening Attendance clears it for that user only | 1 | P1 | Covered (nav-badges.spec) |
+| NAV-02 | Same person at two pumps in one Area | Red badge on admin Fraud flags and plant manager Approvals; the case listed on Approvals; both session-log rows red, each naming the other pump, refused face shown inline | 1 | P1 | Covered (nav-badges.spec) |
+| NAV-03 | Admin clears a fraud case as not fraud | Badges drop it; rows no longer red; the face stays as a grey Cleared tile | 1 | P1 | Covered (nav-badges.spec) |
 
 ### PATH: sub-path hosting (BASE_PATH)
 
@@ -384,6 +387,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | UI-06 | Accessibility (axe) on login, pump and admin home | No serious violations | 2 | P1 | Covered |
 | UI-07 | Session expires while a page is open, then the user clicks an action | Sent to login, no silent failure | 2 | P2 | Missing |
 | UI-08 | Pump screen language (added 2026-10-22) | Hindi (Devanagari, everyday English work words kept) by default; one EN / हिंदी toggle switches to English and is remembered after reload; only the pump screens | 1 | P1 | Covered (pump-language.spec) |
+| UI-09 | Session log with five workers (added 2026-10-22) | Every worker shown inline as a face tile next to View group, in a fixed-height scroll area; no fold-out list | 1 | P1 | Covered (nav-badges.spec) |
 
 ### ACC: model accuracy (Tier 3, existing gate)
 

@@ -1,5 +1,5 @@
 import type { Actions, PageServerLoad } from './$types';
-import { resolve } from '$app/paths';
+import { attachSessionEvidence } from '$lib/server/sessionEvidence';
 import type { PoolClient } from 'pg';
 import { pool, query, queryOne } from '$lib/server/db';
 import { error, fail } from '@sveltejs/kit';
@@ -126,43 +126,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		[pump.id, from, to, sessionPaging.pageSize, (sessionPaging.page - 1) * sessionPaging.pageSize]
 	);
 
-	const sessionIds = sessionLog.map((s: any) => s.id);
-	const faceEvidence = sessionIds.length
-		? await query<any>(
-				`SELECT afe.session_id, afe.person_id, afe.face_crop_url, p.display_seq, p.is_operator,
-			        EXISTS (
-			          SELECT 1 FROM attendance_review_flags arf
-			          WHERE arf.session_id = afe.session_id
-			            AND arf.person_id = afe.person_id AND arf.status = 'open'
-			        ) AS flagged
-			 FROM attendance_face_evidence afe
-			 JOIN persons p ON p.id = afe.person_id
-			 WHERE afe.session_id = ANY($1)
-			 ORDER BY p.display_seq`,
-				[sessionIds]
-			)
-		: [];
-	const evidenceBySession = new Map<string, any[]>();
-	for (const face of faceEvidence) {
-		const people = evidenceBySession.get(face.session_id) ?? [];
-		people.push({
-			personId: face.person_id,
-			label: `Worker ${face.display_seq}${face.is_operator ? ' (Operator)' : ''}`,
-			cropUrl: face.face_crop_url,
-			flagged: face.flagged
-		});
-		evidenceBySession.set(face.session_id, people);
-	}
-	const sessions = sessionLog.map((session: any) => ({
-		...session,
-		evidence: {
-			id: session.id,
-			sessionType: session.session_type,
-			groupPhotoUrl: session.photo_url ? resolve(`/api/attendance/photo/${session.id}`) : null,
-			groupFlagged: session.group_flagged,
-			people: evidenceBySession.get(session.id) ?? []
-		}
-	}));
+	const sessions = await attachSessionEvidence(sessionLog);
 
 	// Rejection counts are computed from the full range, not just the current session-log
 	// page, so they need their own unpaginated read of the relevant fields.

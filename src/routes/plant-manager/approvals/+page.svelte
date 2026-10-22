@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { formatDate } from '$lib/date';
 
 	let { data } = $props();
@@ -12,13 +13,43 @@
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Plant manager</p>
-			<h1>Location approvals</h1>
+			<h1>Approvals</h1>
 			<p>
 				Shift starts where the operator was more than 100 m from the pump, or the location could not
 				be checked. They are not counted in reports until you approve them.
 			</p>
 		</div>
 	</header>
+
+	{#if data.fraud.length}
+		<section class="panel fraud-panel" data-testid="pm-fraud">
+			<h2><TriangleAlert size={20} /> Same person at two pumps ({data.fraud.length})</h2>
+			<p class="muted">
+				The fraud check found a face already counted at another pump in this Area. That face is not
+				counted again. An admin decides whether it is fraud; you can see it here and on Attendance.
+			</p>
+			<ul class="fraud-list scroll-box">
+				{#each data.fraud as item (item.id)}
+					<li>
+						{#if item.face_crop_url}<img
+								src={item.face_crop_url}
+								alt="Face found at two pumps"
+							/>{/if}
+						<span class="approval-copy">
+							<strong>{item.flagged_pump} · {item.flagged_plant}</strong>
+							<span
+								>Already counted at <strong>{item.matched_pump}</strong> ({item.matched_plant}),
+								face match {Math.round(Number(item.similarity_score) * 100)}%{item.is_operator
+									? ', operator photo'
+									: ''}</span
+							>
+							<small>Found {item.flagged_at} · waiting for admin</small>
+						</span>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
 
 	<section class="panel">
 		<h2>Waiting for you ({data.pending.length})</h2>
@@ -130,6 +161,38 @@
 	.muted {
 		display: block;
 		color: var(--ink-muted);
+	}
+	.fraud-panel {
+		border-left: 4px solid var(--alert);
+	}
+	.fraud-panel h2 {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		color: var(--alert);
+	}
+	.fraud-list {
+		display: grid;
+		gap: var(--space-2);
+		margin: var(--space-3) 0 0;
+		padding: 0;
+		list-style: none;
+	}
+	.fraud-list li {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-3);
+		background: var(--alert-tint);
+		border: 1px solid var(--alert);
+		border-radius: var(--radius-md);
+	}
+	.fraud-list img {
+		flex: none;
+		width: 3rem;
+		height: 3rem;
+		object-fit: cover;
+		border-radius: var(--radius-sm);
 	}
 	.empty {
 		margin: 0;

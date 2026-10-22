@@ -3,6 +3,6 @@
 	let { data, children } = $props();
 </script>
 
-<AppShell role="plant-manager" userEmail={data.user?.email}>
+<AppShell role="plant-manager" userEmail={data.user?.email} navCounts={data.navCounts}>
 	{@render children()}
 </AppShell>

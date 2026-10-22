@@ -149,7 +149,7 @@
 							></tr
 						></thead
 					><tbody>
-						{#each data.sessions as row (row.id)}<tr>
+						{#each data.sessions as row (row.id)}<tr class:row-fraud={row.fraudPumps.length > 0}>
 								<td
 									>{formatDate(row.session_date)}<br /><small class="supporting-text"
 										>sent {formatDate(row.submitted_at)}</small
@@ -169,15 +169,12 @@
 												? 'critical'
 												: 'pending'}
 										label={row.status}
-									/><LocationBadge status={row.location_status} /></td
+									/><LocationBadge status={row.location_status} />{#if row.fraudPumps.length}<span
+											class="fraud-row-badge"
+											data-testid="fraud-row-badge">Same person at {row.fraudPumps.join(', ')}</span
+										>{/if}</td
 								>
-								<td
-									><AttendanceEvidenceButtons
-										session={row.evidence}
-										collapsePeople
-										allowFlag={false}
-									/></td
-								>
+								<td><AttendanceEvidenceButtons session={row.evidence} allowFlag={false} /></td>
 								<td>{row.error_reason ?? ''}</td>
 							</tr>{/each}
 					</tbody>

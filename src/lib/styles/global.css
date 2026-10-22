@@ -757,3 +757,23 @@ textarea::placeholder {
 	align-items: flex-end;
 	gap: var(--space-2);
 }
+
+/* Session logs: a session that shares a person with another pump (cross-pump fraud check). */
+.data-table tbody tr.row-fraud td {
+	background: var(--alert-tint);
+}
+
+.data-table tbody tr.row-fraud td:first-child {
+	box-shadow: inset 4px 0 0 var(--alert);
+}
+
+.fraud-row-badge {
+	display: inline-block;
+	margin-top: var(--space-1);
+	padding: 0.1rem 0.5rem;
+	color: var(--brand-white);
+	background: var(--alert);
+	border-radius: 999px;
+	font-size: var(--text-xs);
+	font-weight: 700;
+}

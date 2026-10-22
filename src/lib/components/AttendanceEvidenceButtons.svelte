@@ -2,6 +2,7 @@
 	import Eye from '@lucide/svelte/icons/eye';
 	import Flag from '@lucide/svelte/icons/flag';
 	import ScanFace from '@lucide/svelte/icons/scan-face';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import X from '@lucide/svelte/icons/x';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { shiftTypeLabel } from '$lib/shiftLabels';
@@ -13,12 +14,26 @@
 		flagged?: boolean;
 	};
 
+	// Cross-pump fraud (src/lib/server/sessionEvidence.ts). flagged: this photo is where the face
+	// was refused; matched: this photo is where the person was already counted.
+	type FraudEvidence = {
+		flagId: string;
+		cropUrl: string | null;
+		side: 'flagged' | 'matched';
+		otherPump: string;
+		otherPlant: string;
+		similarity: number;
+		isOperator: boolean;
+		state: 'open' | 'confirmed' | 'cleared';
+	};
+
 	type SessionEvidence = {
 		id: string;
 		sessionType: 'morning' | 'evening';
 		groupPhotoUrl: string | null;
 		groupFlagged?: boolean;
 		people: PersonEvidence[];
+		fraud?: FraudEvidence[];
 	};
 
 	type SelectedEvidence = {
@@ -28,24 +43,23 @@
 		description: string;
 		url: string;
 		flagged: boolean;
+		fraud?: FraudEvidence;
 	};
 
-	// collapsePeople folds long worker lists behind a disclosure so table rows stay short.
-	// allowFlag shows the "Flag error" form, which posts to the page's ?/flagEvidence action;
-	// turn it off on pages without that action (view-only roles).
+	// Every worker shows as a face tile next to the group photo button, in a fixed-height area
+	// that scrolls when the group is large. allowFlag shows the "Flag error" form, which posts to
+	// the page's ?/flagEvidence action; turn it off on pages without that action (view-only roles).
 	let {
 		session,
 		showUnavailable = true,
-		collapsePeople = false,
 		allowFlag = true
 	}: {
 		session: SessionEvidence;
 		showUnavailable?: boolean;
-		collapsePeople?: boolean;
 		allowFlag?: boolean;
 	} = $props();
 
-	const folded = $derived(collapsePeople && session.people.length > 3);
+	const fraud = $derived(session.fraud ?? []);
 
 	let dialog: HTMLDialogElement;
 	let selected = $state<SelectedEvidence | null>(null);
@@ -58,6 +72,28 @@
 	function close() {
 		dialog.close();
 		selected = null;
+	}
+
+	function fraudTitle(item: FraudEvidence) {
+		return item.side === 'flagged'
+			? `Same person as at ${item.otherPump}`
+			: `Also seen at ${item.otherPump}`;
+	}
+
+	function fraudDescription(item: FraudEvidence) {
+		const where = `${item.otherPump} (${item.otherPlant})`;
+		const how = `face match ${Math.round(item.similarity * 100)}%`;
+		const base =
+			item.side === 'flagged'
+				? `This face was already counted at ${where}, ${how}. It is not counted in this photo.`
+				: `This person, counted in this photo, also turned up in a photo at ${where}, ${how}.`;
+		if (item.state === 'cleared') return `${base} An admin checked it: not fraud.`;
+		if (item.state === 'confirmed') return `${base} An admin confirmed it as fraud.`;
+		return `${base} Waiting for an admin to decide.`;
+	}
+
+	function fraudStateLabel(item: FraudEvidence) {
+		return item.state === 'cleared' ? 'Cleared' : item.state === 'confirmed' ? 'Fraud' : 'Fraud?';
 	}
 </script>
 
@@ -87,37 +123,69 @@
 		<span class="evidence-unavailable">Group photo unavailable</span>
 	{/if}
 
-	{#snippet personButton(person: PersonEvidence)}
-		{#if person.cropUrl}
-			<button
-				class="button button--secondary evidence-button"
-				type="button"
-				onclick={() =>
-					openEvidence({
-						sessionId: session.id,
-						personId: person.personId,
-						title: person.label,
-						description: `${shiftTypeLabel(session.sessionType)} face detected in this group`,
-						url: person.cropUrl!,
-						flagged: Boolean(person.flagged)
-					})}
-			>
-				<ScanFace size={16} /> View {person.label}
-			</button>
-		{:else if showUnavailable}
-			<span class="evidence-unavailable">{person.label} photo unavailable</span>
-		{/if}
-	{/snippet}
-
-	{#if folded}
-		<details class="evidence-people" data-testid="evidence-people">
-			<summary>{session.people.length} workers</summary>
-			<div class="evidence-people__list">
-				{#each session.people as person}{@render personButton(person)}{/each}
-			</div>
-		</details>
-	{:else}
-		{#each session.people as person}{@render personButton(person)}{/each}
+	{#if fraud.length || session.people.length}
+		<div class="evidence-people" data-testid="evidence-people">
+			{#each fraud as item (item.flagId + item.side)}
+				<button
+					class="face-tile face-tile--fraud"
+					class:face-tile--cleared={item.state === 'cleared'}
+					type="button"
+					title={fraudTitle(item)}
+					aria-label="View fraud: {fraudTitle(item)}"
+					data-testid="fraud-face"
+					disabled={!item.cropUrl}
+					onclick={() =>
+						openEvidence({
+							sessionId: session.id,
+							personId: null,
+							title: fraudTitle(item),
+							description: fraudDescription(item),
+							url: item.cropUrl!,
+							flagged: false,
+							fraud: item
+						})}
+				>
+					{#if item.cropUrl}
+						<img src={item.cropUrl} alt="" />
+					{:else}
+						<span class="face-tile__empty"><TriangleAlert size={18} /></span>
+					{/if}
+					<span class="face-tile__label"
+						><strong>{fraudStateLabel(item)}</strong>
+						{item.side === 'flagged' ? 'as' : 'also'}
+						{item.otherPump}</span
+					>
+				</button>
+			{/each}
+			{#each session.people as person}
+				{#if person.cropUrl}
+					<button
+						class="face-tile"
+						class:face-tile--flagged={person.flagged}
+						type="button"
+						title={person.label}
+						aria-label="View {person.label}"
+						onclick={() =>
+							openEvidence({
+								sessionId: session.id,
+								personId: person.personId,
+								title: person.label,
+								description: `${shiftTypeLabel(session.sessionType)} face detected in this group`,
+								url: person.cropUrl!,
+								flagged: Boolean(person.flagged)
+							})}
+					>
+						<img src={person.cropUrl} alt="" />
+						<span class="face-tile__label">{person.label}</span>
+					</button>
+				{:else if showUnavailable}
+					<span class="face-tile face-tile--missing" title="{person.label} photo unavailable">
+						<span class="face-tile__empty"><ScanFace size={18} /></span>
+						<span class="face-tile__label">{person.label}</span>
+					</span>
+				{/if}
+			{/each}
+		</div>
 	{/if}
 </div>
 
@@ -143,7 +211,14 @@
 			<img src={selected.url} alt={selected.title} />
 		</div>
 
-		{#if selected.flagged}
+		{#if selected.fraud}
+			<p class="fraud-note" class:fraud-note--cleared={selected.fraud.state === 'cleared'}>
+				<TriangleAlert size={16} />
+				{selected.fraud.state === 'cleared'
+					? 'Checked by an admin: not fraud.'
+					: 'Fraud check: the same person at two pumps in this Area.'}
+			</p>
+		{:else if selected.flagged}
 			<StatusBadge tone="attention" label="Error flagged for admin review" />
 		{:else if allowFlag}
 			<form class="flag-form" method="POST" action="?/flagEvidence">
@@ -173,29 +248,94 @@
 <style>
 	.evidence-actions {
 		display: flex;
-		flex-wrap: wrap;
+		align-items: flex-start;
 		gap: var(--space-2);
-		min-width: 12rem;
+		min-width: 16rem;
 	}
 	.evidence-button {
+		flex-shrink: 0;
 		min-height: 2.25rem;
 		padding: var(--space-1) var(--space-2);
 		font-size: var(--text-xs);
 	}
+	/* Fixed height: a big group scrolls inside the cell instead of stretching the row. */
 	.evidence-people {
-		flex-basis: 100%;
-	}
-	.evidence-people summary {
-		cursor: pointer;
-		color: var(--ink-muted);
-		font-size: var(--text-xs);
-		font-weight: 700;
-	}
-	.evidence-people__list {
 		display: flex;
+		flex: 1;
 		flex-wrap: wrap;
 		gap: var(--space-2);
-		margin-top: var(--space-2);
+		max-height: 9.5rem;
+		min-width: 0;
+		overflow-y: auto;
+	}
+	.face-tile {
+		display: grid;
+		width: 4.25rem;
+		justify-items: center;
+		align-content: start;
+		gap: 0.15rem;
+		padding: 0.2rem;
+		color: var(--ink-default);
+		background: var(--surface-raised);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+		cursor: pointer;
+		font: inherit;
+	}
+	.face-tile:hover:not(:disabled) {
+		border-color: var(--brand-teal);
+	}
+	.face-tile img,
+	.face-tile__empty {
+		display: grid;
+		width: 2.75rem;
+		height: 2.75rem;
+		place-items: center;
+		object-fit: cover;
+		color: var(--ink-muted);
+		background: var(--surface-muted);
+		border-radius: var(--radius-sm);
+	}
+	.face-tile__label {
+		max-width: 100%;
+		font-size: 0.68rem;
+		line-height: 1.2;
+		text-align: center;
+		overflow-wrap: anywhere;
+	}
+	.face-tile--flagged {
+		border-color: var(--ink-strong);
+		border-style: dashed;
+	}
+	.face-tile--missing {
+		cursor: default;
+	}
+	.face-tile--fraud {
+		color: var(--alert);
+		background: var(--alert-tint);
+		border: 2px solid var(--alert);
+	}
+	.face-tile--cleared {
+		color: var(--ink-muted);
+		background: var(--surface-subtle);
+		border: 1px dashed var(--brand-steel);
+	}
+	.fraud-note {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		margin: var(--space-4);
+		padding: var(--space-2) var(--space-3);
+		color: var(--alert);
+		background: var(--alert-tint);
+		border: 1px solid var(--alert);
+		border-radius: var(--radius-md);
+		font-weight: 700;
+	}
+	.fraud-note--cleared {
+		color: var(--ink-muted);
+		background: var(--surface-subtle);
+		border-color: var(--brand-steel);
 	}
 	.evidence-unavailable {
 		align-self: center;
@@ -276,6 +416,9 @@
 		text-transform: uppercase;
 	}
 	@media (max-width: 44rem) {
+		.evidence-actions {
+			flex-wrap: wrap;
+		}
 		.flag-form {
 			grid-template-columns: 1fr;
 		}

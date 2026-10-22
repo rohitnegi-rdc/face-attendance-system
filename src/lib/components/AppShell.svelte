@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { invalidate } from '$app/navigation';
 	import { page } from '$app/state';
-	import { tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 	import ChartNoAxesCombined from '@lucide/svelte/icons/chart-no-axes-combined';
 	import CalendarCheck from '@lucide/svelte/icons/calendar-check';
@@ -20,15 +21,53 @@
 	import ScrollText from '@lucide/svelte/icons/scroll-text';
 	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 
+	type NavCounts = { attendance: number; fraud: number; approvals: number };
+	type BadgeKey = keyof NavCounts;
+
 	let {
 		role,
 		userEmail = '',
+		navCounts,
 		children
 	} = $props<{
 		role: 'admin' | 'vendor' | 'plant-manager';
 		userEmail?: string;
+		navCounts?: NavCounts;
 		children: import('svelte').Snippet;
 	}>();
+
+	// The layout reloads the counts on every navigation; this timer catches new photos and fraud
+	// flags while the user stays on one page. Skipped while the tab is hidden.
+	const NAV_COUNTS_REFRESH_MS = 60_000;
+	onMount(() => {
+		const timer = setInterval(() => {
+			if (document.visibilityState === 'visible') invalidate('app:nav-counts');
+		}, NAV_COUNTS_REFRESH_MS);
+		return () => clearInterval(timer);
+	});
+
+	function badgeCount(key: BadgeKey | undefined) {
+		return key && navCounts ? navCounts[key] : 0;
+	}
+
+	function badgeTitle(key: BadgeKey) {
+		const n = badgeCount(key);
+		if (key === 'attendance')
+			return `${n} new shift ${n === 1 ? 'photo' : 'photos'} since your last visit`;
+		if (key === 'fraud') return `${n} fraud ${n === 1 ? 'case' : 'cases'} waiting for review`;
+		return navCounts?.fraud
+			? `${n} waiting, ${navCounts.fraud} of them fraud (same person at two pumps)`
+			: `${n} waiting for your decision`;
+	}
+
+	// Red when fraud is involved; teal for plain news.
+	function badgeAlert(key: BadgeKey) {
+		return key === 'fraud' || (key === 'approvals' && Boolean(navCounts?.fraud));
+	}
+
+	const anyBadge = $derived(
+		Boolean(navCounts && (navCounts.attendance || navCounts.fraud || navCounts.approvals))
+	);
 
 	async function signOut(event: SubmitEvent) {
 		event.preventDefault();
@@ -46,11 +85,29 @@
 	let drawer: HTMLElement;
 	let drawerCloseButton: HTMLButtonElement;
 
-	const adminItems = [
+	type NavItem = {
+		href: string;
+		label: string;
+		icon: typeof LayoutDashboard;
+		exact?: boolean;
+		badge?: BadgeKey;
+	};
+
+	const adminItems: NavItem[] = [
 		{ href: resolve('/admin'), label: 'Overview', icon: LayoutDashboard, exact: true },
 		{ href: resolve('/admin/insights'), label: 'Insights', icon: ChartNoAxesCombined },
-		{ href: resolve('/admin/attendance'), label: 'Attendance', icon: CalendarCheck },
-		{ href: resolve('/admin/fraud-flags'), label: 'Fraud flags', icon: TriangleAlert },
+		{
+			href: resolve('/admin/attendance'),
+			label: 'Attendance',
+			icon: CalendarCheck,
+			badge: 'attendance'
+		},
+		{
+			href: resolve('/admin/fraud-flags'),
+			label: 'Fraud flags',
+			icon: TriangleAlert,
+			badge: 'fraud'
+		},
 		{ href: resolve('/admin/flagged-guests'), label: 'Guest review', icon: ScanFace },
 		{ href: resolve('/admin/merge-candidates'), label: 'Merge review', icon: UsersRound },
 		{ href: resolve('/admin/photo-backups'), label: 'Kept photos', icon: ImageOff },
@@ -61,16 +118,31 @@
 		{ href: resolve('/admin/settings'), label: 'Settings', icon: Settings }
 	];
 
-	const vendorItems = [
+	const vendorItems: NavItem[] = [
 		{ href: resolve('/vendor'), label: 'Overview', icon: LayoutDashboard, exact: true },
-		{ href: resolve('/vendor/attendance'), label: 'Attendance', icon: CalendarCheck },
+		{
+			href: resolve('/vendor/attendance'),
+			label: 'Attendance',
+			icon: CalendarCheck,
+			badge: 'attendance'
+		},
 		{ href: resolve('/vendor/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/vendor/people'), label: 'People', icon: UsersRound }
 	];
-	const plantManagerItems = [
+	const plantManagerItems: NavItem[] = [
 		{ href: resolve('/plant-manager'), label: 'Overview', icon: LayoutDashboard, exact: true },
-		{ href: resolve('/plant-manager/attendance'), label: 'Attendance', icon: CalendarCheck },
-		{ href: resolve('/plant-manager/approvals'), label: 'Approvals', icon: MapPin },
+		{
+			href: resolve('/plant-manager/attendance'),
+			label: 'Attendance',
+			icon: CalendarCheck,
+			badge: 'attendance'
+		},
+		{
+			href: resolve('/plant-manager/approvals'),
+			label: 'Approvals',
+			icon: MapPin,
+			badge: 'approvals'
+		},
 		{ href: resolve('/plant-manager/photo-backups'), label: 'Kept photos', icon: ImageOff },
 		{ href: resolve('/plant-manager/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/plant-manager/people'), label: 'People', icon: UsersRound }
@@ -133,6 +205,11 @@
 			onclick={openDrawer}
 		>
 			<Menu size={22} />
+			{#if anyBadge}<span
+					class="menu-dot"
+					class:menu-dot--alert={Boolean(navCounts?.fraud)}
+					data-testid="nav-menu-dot"
+				></span>{/if}
 		</button>
 		<a
 			class="brand"
@@ -199,6 +276,16 @@
 				>
 					<Icon size={18} />
 					<span>{item.label}</span>
+					{#if item.badge && badgeCount(item.badge) > 0}
+						<span
+							class="nav-badge"
+							class:nav-badge--alert={badgeAlert(item.badge)}
+							title={badgeTitle(item.badge)}
+							aria-label={badgeTitle(item.badge)}
+							data-testid="nav-badge-{item.badge}"
+							>{badgeCount(item.badge) > 99 ? '99+' : badgeCount(item.badge)}</span
+						>
+					{/if}
 				</a>
 			{/each}
 		</nav>
@@ -310,6 +397,46 @@
 
 	.sidebar nav a:hover {
 		background: var(--surface-muted);
+	}
+
+	.nav-badge {
+		min-width: 1.4rem;
+		margin-left: auto;
+		padding: 0.05rem 0.4rem;
+		color: var(--primary-on);
+		background: var(--primary-tint);
+		border: 1px solid var(--brand-teal);
+		border-radius: 999px;
+		font-size: var(--text-xs);
+		font-weight: 700;
+		line-height: 1.3;
+		text-align: center;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.nav-badge--alert {
+		color: var(--brand-white);
+		background: var(--alert);
+		border-color: var(--alert);
+	}
+
+	.app-topbar__menu {
+		position: relative;
+	}
+
+	.menu-dot {
+		position: absolute;
+		top: 0.35rem;
+		right: 0.35rem;
+		width: 0.6rem;
+		height: 0.6rem;
+		background: var(--brand-teal);
+		border: 2px solid var(--brand-white);
+		border-radius: 999px;
+	}
+
+	.menu-dot--alert {
+		background: var(--alert);
 	}
 
 	.sidebar nav a.active {

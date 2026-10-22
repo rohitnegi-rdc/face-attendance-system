@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { resolve } from '$app/paths';
+import { attachSessionEvidence } from '$lib/server/sessionEvidence';
 import { query } from '$lib/server/db';
 import { nowIST } from '$lib/server/time';
 import { isDateKey } from '$lib/date';
@@ -68,44 +68,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		)
 	]);
 
-	// Same per-worker evidence the admin pump page shows. Sessions are already limited to this
-	// manager's plants, so the evidence is too.
-	const sessionIds = sessionRows.map((session: any) => session.id);
-	const faces = sessionIds.length
-		? await query<any>(
-				`SELECT afe.session_id, afe.person_id, afe.face_crop_url, p.display_seq, p.is_operator,
-				        EXISTS (
-				          SELECT 1 FROM attendance_review_flags arf
-				          WHERE arf.session_id = afe.session_id
-				            AND arf.person_id = afe.person_id AND arf.status = 'open'
-				        ) AS flagged
-				 FROM attendance_face_evidence afe JOIN persons p ON p.id = afe.person_id
-				 WHERE afe.session_id = ANY($1)
-				 ORDER BY p.display_seq`,
-				[sessionIds]
-			)
-		: [];
-	const peopleBySession = new Map<string, any[]>();
-	for (const face of faces) {
-		const people = peopleBySession.get(face.session_id) ?? [];
-		people.push({
-			personId: face.person_id,
-			label: `Worker ${face.display_seq}${face.is_operator ? ' (Operator)' : ''}`,
-			cropUrl: face.face_crop_url,
-			flagged: face.flagged
-		});
-		peopleBySession.set(face.session_id, people);
-	}
-	const sessions = sessionRows.map(({ photo_url, ...session }: any) => ({
-		...session,
-		evidence: {
-			id: session.id,
-			sessionType: session.session_type,
-			groupPhotoUrl: photo_url ? resolve(`/api/attendance/photo/${session.id}`) : null,
-			groupFlagged: session.group_flagged,
-			people: peopleBySession.get(session.id) ?? []
-		}
-	}));
+	// Same per-worker and fraud evidence the admin pump page shows. Sessions are already limited to
+	// this manager's plants, so the evidence is too.
+	const sessions = await attachSessionEvidence(sessionRows);
 	const sessionTotal = sessionCount[0]?.n ?? 0;
 	return {
 		pumps,

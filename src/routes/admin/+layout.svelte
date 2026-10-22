@@ -5,7 +5,7 @@
 	let { data, children } = $props();
 </script>
 
-<AppShell role="admin" userEmail={data.user?.email}>
+<AppShell role="admin" userEmail={data.user?.email} navCounts={data.navCounts}>
 	{#if data.fraudCheckDisabled}
 		<p class="alert alert--error test-mode-banner" role="status">
 			Test mode: the cross-pump fraud check is off. The same person can be counted at two pumps.

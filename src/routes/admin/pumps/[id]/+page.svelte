@@ -213,7 +213,7 @@
 						><th>Admin</th></tr
 					></thead
 				><tbody
-					>{#each data.sessionLog as session}<tr
+					>{#each data.sessionLog as session}<tr class:row-fraud={session.fraudPumps.length > 0}
 							><td>{formatDate(session.submitted_at)}</td><td
 								>{shiftTypeLabel(session.session_type)}<br /><small class="supporting-text"
 									>for {formatDate(session.session_date)}</small
@@ -226,9 +226,15 @@
 											? 'critical'
 											: 'pending'}
 									label={session.status}
-								/><LocationBadge status={session.location_status} /></td
+								/><LocationBadge
+									status={session.location_status}
+								/>{#if session.fraudPumps.length}<span
+										class="fraud-row-badge"
+										data-testid="fraud-row-badge"
+										>Same person at {session.fraudPumps.join(', ')}</span
+									>{/if}</td
 							><td>{shiftOutcomeLabel(session)}</td><td
-								><AttendanceEvidenceButtons session={session.evidence} collapsePeople /></td
+								><AttendanceEvidenceButtons session={session.evidence} /></td
 							><td
 								>{#if session.status === 'fraud_detected'}<div class="fraud-review">
 										{#if session.fraud_resolution === 'marked_normal'}<span
@@ -369,7 +375,11 @@
 					>{#each data.roster as person}<tr
 							><td
 								><a href={resolve(`/admin/persons/${person.id}`)}
-									>{personDisplayLabel(data.pump.pump_code, person.display_seq, person.is_operator)}</a
+									>{personDisplayLabel(
+										data.pump.pump_code,
+										person.display_seq,
+										person.is_operator
+									)}</a
 								></td
 							><td>{formatDate(person.first_seen_at)}</td><td>{formatDate(person.last_seen_at)}</td
 							><td>{person.days_present}</td><td>{person.days_morning_only}</td><td

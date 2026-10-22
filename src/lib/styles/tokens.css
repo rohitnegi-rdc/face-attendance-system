@@ -15,6 +15,9 @@
 	--primary-on: #102725;
 	--primary-tint: #e4f7f4;
 	--focus-ring: #05ad98;
+	/* Fraud only (same person at two pumps): the one red in the palette, so it stands out. */
+	--alert: #c62828;
+	--alert-tint: #fdecea;
 
 	--space-1: 0.25rem;
 	--space-2: 0.5rem;
