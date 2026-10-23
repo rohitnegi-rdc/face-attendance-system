@@ -20,6 +20,8 @@ import {
 } from './helpers';
 
 const NEW_PASSWORD = 'Brand-New-Pass-456';
+// A form action answers JSON unless the request asks for the page, as a browser does.
+const HTML = { accept: 'text/html' };
 
 async function signIn(email: string, password: string) {
 	const response = await (await anonymous()).post('/api/auth/login', { data: { email, password } });
@@ -33,7 +35,7 @@ async function temporaryPassword(
 	id: string,
 	testId: string
 ) {
-	const response = await context.post(path, { form: { id } });
+	const response = await context.post(path, { form: { id }, headers: HTML });
 	const html = await response.text();
 	const block = html.split(`data-testid="${testId}"`)[1] ?? '';
 	const codes = [...block.matchAll(/<code[^>]*>([^<]+)<\/code>/g)].map((m) => m[1]);
@@ -98,7 +100,7 @@ test('PWD-02 an unknown email gets the same answer and no email', async () => {
 	test.skip(!process.env.REGRESSION_OUTPUT_DIR, 'needs the app log from run-regression');
 	const email = `nobody-${Date.now()}@regression.test`;
 	const html = await (
-		await (await anonymous()).post('/forgot-password', { form: { email } })
+		await (await anonymous()).post('/forgot-password', { form: { email }, headers: HTML })
 	).text();
 	expect(html).toContain('data-testid="reset-sent"');
 	expect(html).toContain('data-testid="reset-help"');
@@ -109,12 +111,12 @@ test('PWD-03 a system login (.rdc) is told who can reset it; no link is made', a
 	const before = await count('SELECT 1 FROM password_reset_tokens');
 	const anon = await anonymous();
 	const vendor = await (
-		await anon.post('/forgot-password', { form: { email: 'vendor01@vendors.rdc' } })
+		await anon.post('/forgot-password', { form: { email: 'vendor01@vendors.rdc' }, headers: HTML })
 	).text();
 	expect(vendor).toContain('data-testid="reset-no-mailbox"');
 	expect(vendor).toContain('your plant manager, or the admin');
 	const pump = await (
-		await anon.post('/forgot-password', { form: { email: 'pump01@pumps.rdc' } })
+		await anon.post('/forgot-password', { form: { email: 'pump01@pumps.rdc' }, headers: HTML })
 	).text();
 	expect(pump).toContain('data-testid="reset-pump"');
 	expect(await count('SELECT 1 FROM password_reset_tokens')).toBe(before);
@@ -127,7 +129,7 @@ test('PWD-07 a pump login is never reset by email, even with a real-looking addr
 	const form = await (await (await anonymous()).get('/forgot-password')).text();
 	expect(form).toContain('data-testid="forgot-pump-note"');
 	const html = await (
-		await (await anonymous()).post('/forgot-password', { form: { email: pump.email } })
+		await (await anonymous()).post('/forgot-password', { form: { email: pump.email }, headers: HTML })
 	).text();
 	expect(html).toContain('data-testid="reset-pump"');
 	expect(html).toContain('plant manager');
