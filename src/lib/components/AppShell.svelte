@@ -8,6 +8,7 @@
 	import CalendarCheck from '@lucide/svelte/icons/calendar-check';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import ScanFace from '@lucide/svelte/icons/scan-face';
+	import Flag from '@lucide/svelte/icons/flag';
 	import UsersRound from '@lucide/svelte/icons/users-round';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import FileUp from '@lucide/svelte/icons/file-up';
@@ -110,6 +111,7 @@
 			icon: TriangleAlert,
 			badge: 'fraud'
 		},
+		{ href: resolve('/admin/review-flags'), label: 'Flagged errors', icon: Flag },
 		{ href: resolve('/admin/flagged-guests'), label: 'Guest review', icon: ScanFace },
 		{ href: resolve('/admin/merge-candidates'), label: 'Merge review', icon: UsersRound },
 		{ href: resolve('/admin/photo-backups'), label: 'Kept photos', icon: ImageOff },

@@ -186,8 +186,13 @@ export async function deleteSession(
 			   AND morning_matched = false AND evening_matched = false`,
 			[session.session_date, personIds]
 		);
+		// Only new workers this session alone knows. A start can match a new worker from an earlier
+		// shift end the pump has not completed; retrying the start must keep that worker.
 		const pending = await client.query<{ id: string }>(
-			`SELECT id FROM persons WHERE id = ANY($1::uuid[]) AND status = 'pending_review'`,
+			`SELECT p.id FROM persons p
+			 WHERE p.id = ANY($1::uuid[]) AND p.status = 'pending_review'
+			   AND NOT EXISTS (SELECT 1 FROM person_face_vectors v WHERE v.person_id = p.id)
+			   AND NOT EXISTS (SELECT 1 FROM attendance_face_evidence e WHERE e.person_id = p.id)`,
 			[personIds]
 		);
 		const pendingIds = pending.rows.map((row) => row.id);

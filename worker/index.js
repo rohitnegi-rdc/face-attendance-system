@@ -8,6 +8,14 @@ import path from 'node:path';
 import { sendFraudAlertEmail } from './mailer.js';
 import { checkRecapture } from './recaptureCheck.js';
 import { pollPumpGps } from './gpsFeed.js';
+import {
+	assignFaces,
+	findCrossPumpMatch,
+	findLocalCandidates,
+	galleryRules,
+	keepsInGallery,
+	saveFace
+} from './faceQueries.js';
 
 const { Pool } = pg;
 const WORKER_ID = process.env.HOSTNAME || `worker-${process.pid}`;
@@ -27,7 +35,8 @@ const FACE_MATCH_THRESHOLD = (() => {
 	return value > 0 && value < 1 ? value : 0.28;
 })();
 const POLL_INTERVAL_MS = 1500;
-const GALLERY_SIZE = 5;
+// When a matched face may join the person's gallery (faceQueries.js, GALLERY).
+const GALLERY_RULES = galleryRules(FACE_MATCH_THRESHOLD);
 const CLAIM_TIMEOUT_MINUTES = Number(process.env.JOB_CLAIM_TIMEOUT_MINUTES ?? 10);
 const MAX_JOB_ATTEMPTS = Number(process.env.MAX_JOB_ATTEMPTS ?? 3);
 const AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS ?? 30000);
@@ -563,34 +572,22 @@ async function processJob(job) {
 				matchedPersons = [];
 				newPersons = [];
 				fraudFlags = [];
+				/** @type {{ face: any, vec: string, candidates: { person_id: string, similarity: number }[] }[]} */
+				const localFaces = [];
 
 				for (const face of faces) {
 					const vec = toVectorLiteral(face.embedding);
 
-					// CROSS-PUMP CHECK — Area-scoped, symmetric for every vendor account (§2).
-					// New workers (pending_review) and sessions still awaiting the pump's review count
-					// too. Comparing only against active people in completed sessions let the same new
-					// worker attend two pumps on day one, and made detection depend on which pump
-					// finished its review first (order-dependent, which §2 forbids).
+					// CROSS-PUMP CHECK (faceQueries.js): Area-scoped, same-shift-date faces only.
 					// Skipped only when an admin switched it off in test mode (fraudCheckDisabled).
-					const { rows: crossMatches } = skipFraudCheck
-						? { rows: [] }
-						: await client.query(
-								`SELECT pfv.person_id, p.pump_id, 1 - (pfv.embedding <=> $1::vector) AS similarity,
-				        dpa.session_date, ats.id AS matched_session_id
-					 FROM person_face_vectors pfv
-					 JOIN persons p ON p.id = pfv.person_id
-					 JOIN daily_person_attendance dpa ON dpa.person_id = p.id AND dpa.session_date = $2
-					 JOIN attendance_sessions ats ON ats.pump_id = p.pump_id AND ats.session_date = $2
-					 JOIN pumps pu2 ON pu2.id = p.pump_id
-					 JOIN plants pl2 ON pl2.id = pu2.plant_id
-					 WHERE pl2.area_id = $3 AND p.pump_id != $4
-					   AND p.status IN ('active', 'pending_review')
-					   AND ats.status IN ('completed', 'review')
-				 ORDER BY similarity DESC LIMIT 1`,
-								[vec, session.session_date, areaId, session.pump_id]
-							);
-					const crossMatch = crossMatches[0];
+					const crossMatch = skipFraudCheck
+						? undefined
+						: await findCrossPumpMatch(client, {
+								vector: vec,
+								sessionDate: session.session_date,
+								areaId,
+								pumpId: session.pump_id
+							});
 
 					if (crossMatch && crossMatch.similarity >= FACE_MATCH_THRESHOLD) {
 						await client.query(
@@ -624,19 +621,35 @@ async function processJob(job) {
 						continue;
 					}
 
-					// LOCAL MATCH — best similarity across this pump's own person gallery.
-					const { rows: localMatches } = await client.query(
-						`SELECT pfv.person_id, 1 - (pfv.embedding <=> $1::vector) AS similarity
-				 FROM person_face_vectors pfv
-				 JOIN persons p ON p.id = pfv.person_id
-				 WHERE p.pump_id = $2 AND p.status = 'active'
-				 ORDER BY similarity DESC LIMIT 1`,
-						[vec, session.pump_id]
-					);
-					const localMatch = localMatches[0];
+					// LOCAL MATCH (faceQueries.js): this pump's own gallery, new workers included.
+					// Enough candidates for a face to fall back past every other face in the photo.
+					localFaces.push({
+						face,
+						vec,
+						candidates: await findLocalCandidates(client, {
+							vector: vec,
+							pumpId: session.pump_id,
+							limit: faces.length + 1
+						})
+					});
+				}
 
+				// One face per person, strongest match first (faceQueries.js assignFaces). People are
+				// created only after every face is matched, so no face can match a worker this
+				// photo creates.
+				const assigned = assignFaces(
+					localFaces.map((local) => local.candidates),
+					FACE_MATCH_THRESHOLD
+				);
+				for (const [index, { face, vec }] of localFaces.entries()) {
+					const localMatch = assigned[index];
 					let personId;
-					if (localMatch && localMatch.similarity >= FACE_MATCH_THRESHOLD) {
+					// A new person's face is their anchor; a matched face joins the gallery only
+					// when the match is clear, so a wrong match cannot teach the matcher.
+					let inGallery = true;
+					let isAnchor = false;
+					if (localMatch) {
+						inGallery = keepsInGallery(localMatch, GALLERY_RULES);
 						personId = localMatch.person_id;
 						await client.query(
 							`UPDATE persons SET last_seen_at = now(), is_operator = is_operator OR $2 WHERE id = $1`,
@@ -651,20 +664,19 @@ async function processJob(job) {
 							[session.pump_id, Boolean(face.is_operator)]
 						);
 						personId = created[0].id;
+						isAnchor = true;
 						newPersons.push({ person_id: personId });
 						log('info', { requestId, sessionId: session.id, personId }, 'auto-created new person');
 					}
 
-					await client.query(
-						`INSERT INTO person_face_vectors (person_id, session_id, embedding, source_photo_crop_url)
-				 VALUES ($1, $2, $3::vector, $4)`,
-						[
-							personId,
-							session.id,
-							vec,
-							face.crop_base64 ? `data:image/jpeg;base64,${face.crop_base64}` : null
-						]
-					);
+					await saveFace(client, {
+						personId,
+						sessionId: session.id,
+						vector: vec,
+						cropUrl: face.crop_base64 ? `data:image/jpeg;base64,${face.crop_base64}` : null,
+						inGallery,
+						isAnchor
+					});
 					await client.query(
 						`INSERT INTO attendance_face_evidence
 				   (session_id, person_id, face_crop_url, match_confidence, liveness_status,
@@ -697,15 +709,6 @@ async function processJob(job) {
 							Boolean(face.is_operator)
 						]
 					);
-					// Keep gallery capped at GALLERY_SIZE (drop oldest beyond it).
-					await client.query(
-						`DELETE FROM person_face_vectors WHERE id IN (
-				   SELECT id FROM person_face_vectors WHERE person_id = $1
-				   ORDER BY created_at DESC OFFSET $2
-				 )`,
-						[personId, GALLERY_SIZE]
-					);
-
 					const confidenceCol =
 						session.session_type === 'morning' ? 'morning_confidence' : 'evening_confidence';
 					const matchedCol =

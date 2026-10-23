@@ -79,7 +79,7 @@ erDiagram
     VENDORS ||--o{ PUMPS : operates
     AREAS ||--o| VENDORS : "scopes (area-split accounts only)"
     PUMPS ||--o{ PERSONS : "auto-discovers"
-    PERSONS ||--o{ PERSON_FACE_VECTORS : "gallery (~5 most recent)"
+    PERSONS ||--o{ PERSON_FACE_VECTORS : "gallery (anchor + ~5 most recent clear matches)"
     PUMPS ||--o{ ATTENDANCE_SESSIONS : receives
     ATTENDANCE_SESSIONS ||--o| ATTENDANCE_SESSIONS : "paired_session_id (morning<->evening)"
     PERSONS ||--o{ DAILY_PERSON_ATTENDANCE : has
@@ -261,17 +261,17 @@ sequenceDiagram
     deactivate AI
 
     loop for each detected face
-        W->>DB: CROSS-PUMP CHECK - cosine similarity vs other pumps in SAME AREA (symmetric, any vendor)
+        W->>DB: CROSS-PUMP CHECK - cosine similarity vs faces from other pumps' sessions of the same shift date in SAME AREA (symmetric, any vendor; older gallery faces not compared)
         alt match >= FACE_MATCH_THRESHOLD in Area
             W->>DB: INSERT fraud_flags (person_id, matched_pump, similarity)
             Note over W: face skipped, no attendance write, continue to next face
         else no cross-pump match
-            W->>DB: LOCAL MATCH - best similarity vs this pump's person gallery
+            W->>DB: LOCAL MATCH - closest people in this pump's gallery for every face, then one face per person, strongest match first
             alt match >= FACE_MATCH_THRESHOLD at this pump
                 W->>DB: upsert daily_person_attendance (morning_matched or evening_matched = true)
-                W->>DB: append embedding to gallery (drop oldest beyond ~5)
+                W->>DB: save face; joins gallery only if >= GALLERY_ADD_THRESHOLD and clear of next worker (drop oldest beyond ~5, never the anchor)
             else no match anywhere
-                W->>DB: AUTO-CREATE new persons row + first gallery embedding
+                W->>DB: AUTO-CREATE new persons row + first gallery embedding (anchor)
                 W->>DB: create daily_person_attendance row for this session_date
             end
         end
@@ -341,7 +341,7 @@ flowchart LR
     Face["New face embedding\nfrom pump P in Area X"]
     ResolveArea["Resolve Area of pump P\n(via plant.area_id)"]
     Scope["Comparison scope =\nALL other pumps in Area X\n(any vendor - symmetric for every account)"]
-    Search["pgvector cosine similarity search\nWHERE session_date = today\nAND pump_id != P\nAND pump_id IN (pumps in Area X)"]
+    Search["pgvector cosine similarity search\nonly faces saved from sessions\nof the same shift date\nAND pump_id != P\nAND pump_id IN (pumps in Area X)"]
     Match{"best similarity >=\nFACE_MATCH_THRESHOLD?"}
     Flag["Write fraud_flags\n(person_id, matched pump, similarity)\nNO attendance write for this face"]
     Local["Proceed to LOCAL MATCH\n(within pump P's own person gallery)"]

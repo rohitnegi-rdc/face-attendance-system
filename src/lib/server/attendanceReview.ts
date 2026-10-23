@@ -1,4 +1,5 @@
-import { queryOne } from '$lib/server/db';
+import { pool, queryOne } from '$lib/server/db';
+import { dropFromGallery } from '../../../worker/faceQueries.js';
 
 const REVIEW_REASONS = new Set([
 	'incorrect_match',
@@ -50,5 +51,9 @@ export async function createAttendanceReviewFlag(input: CreateReviewFlagInput): 
 		 RETURNING id`,
 		[input.sessionId, input.personId || null, input.reason, note, input.adminId]
 	);
+	// A face matched to the wrong person must not keep teaching the matcher that it is them.
+	if (input.reason === 'incorrect_match' && input.personId) {
+		await dropFromGallery(pool, input.personId, input.sessionId);
+	}
 	return true;
 }

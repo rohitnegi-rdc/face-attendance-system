@@ -284,9 +284,11 @@ export const actions: Actions = {
 			});
 			return {
 				success: true,
-				message: created
-					? 'Attendance evidence flagged for review.'
-					: 'This attendance evidence is already flagged.'
+				message: !created
+					? 'This attendance evidence is already flagged.'
+					: form.get('reason') === 'incorrect_match'
+						? 'Flagged for review. This face no longer helps recognise this worker.'
+						: 'Attendance evidence flagged for review.'
 			};
 		} catch (actionError) {
 			return fail(400, {

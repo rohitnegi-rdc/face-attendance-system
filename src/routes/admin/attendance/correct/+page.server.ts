@@ -6,6 +6,8 @@ import { isDateKey } from '$lib/date';
 import { shiftStillOpen } from '$lib/server/shiftSessions';
 import { saveCorrection } from '$lib/server/attendanceCorrection';
 import { logger } from '$lib/server/log';
+import { markPresent } from '$lib/server/faceFixes';
+import { formText, runFaceFix } from '$lib/server/faceFixActions';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -72,12 +74,32 @@ export const actions: Actions = {
 				{ role: 'admin', id: locals.user.id },
 				await request.formData()
 			);
-			if (result.error) return fail(result.status, { error: result.error, personId: result.personId });
+			if (result.error)
+				return fail(result.status, { error: result.error, personId: result.personId });
 			return { success: true, personId: result.personId, message: result.message };
 		} catch (err) {
 			logger.error({ error: String((err as any)?.message || err) }, 'attendance correction failed');
 			return fail(500, { error: 'Could not save the attendance correction' });
 		}
+	},
+	// A worker the camera never detected on this day: a new worker, counted for one shift photo.
+	addMissedWorker: async ({ request, locals }) => {
+		if (!locals.user || locals.user.role !== 'admin') return fail(403, { error: 'Forbidden' });
+		const form = await request.formData();
+		const sessionId = formText(form, 'session_id');
+		if (!UUID_PATTERN.test(sessionId))
+			return fail(400, { error: 'Choose shift start or shift end' });
+		const adminId = locals.user.id;
+		const result = await runFaceFix('add_missed_worker', adminId, async (client) => {
+			await markPresent(client, {
+				sessionId,
+				personId: null,
+				name: formText(form, 'name'),
+				adminId
+			});
+			return `${formText(form, 'name')} added and marked present.`;
+		});
+		return 'status' in result ? fail(result.status, { error: result.data.message }) : result;
 	},
 	markDuplicate: async ({ request, locals }) => {
 		if (!locals.user || locals.user.role !== 'admin') return fail(403, { error: 'Forbidden' });

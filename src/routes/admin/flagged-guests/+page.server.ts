@@ -32,7 +32,9 @@ export const actions: Actions = {
 			[guest.pump_id]
 		);
 		await query(
-			`INSERT INTO person_face_vectors (person_id, embedding, source_photo_crop_url) VALUES ($1, $2, $3)`,
+			// The face the person is created from is their anchor (worker/faceQueries.js, GALLERY).
+			`INSERT INTO person_face_vectors (person_id, embedding, source_photo_crop_url, is_anchor)
+			 VALUES ($1, $2, $3, true)`,
 			[person.id, guest.embedding, guest.face_crop_url]
 		);
 		await query('UPDATE flagged_guests SET reviewed = true WHERE id = $1', [id]);

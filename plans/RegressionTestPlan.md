@@ -181,6 +181,9 @@ reference that is also in the server log (`handleError` in `hooks.server.ts`). E
 | MATCH-06 | Threshold comes from env | Changing `FACE_MATCH_THRESHOLD` changes the MATCH-02/03 outcome | 1 | P1 | Covered (fraud-review-admin.spec, default 0.28 from env, fixed 2026-10-08) |
 | MATCH-07 | Gallery: a match against any of the ~5 recent vectors counts | As stated | 1 | P2 | Missing |
 | MATCH-08 | `display_seq` stays unique and gap-free under concurrency | As stated | 4 | P1 | Missing |
+| MATCH-09 | New worker first seen at a shift end the pump has not completed, same face at the next day's start | Same person (local match includes `pending_review`, like the fraud check); retrying the start keeps the worker found by the end | 1 | P0 | Covered (fraud-review-admin.spec; unit: tests/unit/faceQueries.test.ts, fixed 2026-10-23) |
+| MATCH-10 | Weak match (0.30) at the shift end | Counts attendance for the same person, but the face is kept out of the gallery (`in_gallery` false); the start face is the anchor. Close calls, anchor trimming, "Incorrect person match" and Not fraud in unit tests | 1 | P0 | Covered (fraud-review-admin.spec; unit: tests/unit/gallery.test.ts, fixed 2026-10-23) |
+| MATCH-11 | Two faces in one photo both closest to the same worker (weaker face listed first) | Two people: the stronger face keeps the worker, the other takes its next-best worker or becomes a new one; nothing for the operator to decide | 1 | P0 | Covered (fraud-review-admin.spec; unit: assignFaces in tests/unit/faceQueries.test.ts, fixed 2026-10-23) |
 
 ### FRD: cross-pump fraud (falsified-photo check is off for v1)
 
@@ -199,6 +202,7 @@ reference that is also in the server log (`handleError` in `hooks.server.ts`). E
 | FRD-11 | Admin confirms fraud; a resolved flag cannot be resolved again | Worker stays absent; second decision refused | 1 | P1 | Covered (fraud-review-admin.spec) |
 | FRD-12 | Pump review of a photo with a face already marked at another pump (bug 2026-10-21: "Needs review" row had no face) | Status API gives the held face crop from this photo (`fraud_flags.face_crop_url`), the pump page shows it as a face row with preview; guest faces get rows too | 1 | P1 | Covered (fraud-review-admin.spec) |
 | FRD-13 | Test mode (`TEST_MODE=true`): admin switches the cross-pump fraud check off, then on | Off: same person at two pumps gives no flag and a worker at each, every admin page warns; on: flagged again; both audited (`set_fraud_check`). Without TEST_MODE the switch is hidden, the action is refused and the worker ignores a stored value (not covered: the gate runs with TEST_MODE=true) | 1 | P1 | Covered (fraud-review-admin.spec) |
+| FRD-14 | Worker at pump B yesterday (sharp face) and today (worse face); at pump A a face close only to yesterday's photo | No flag: the check compares only faces saved from B's sessions of the same shift date, never older gallery faces | 1 | P0 | Covered (fraud-review-admin.spec, fixed 2026-10-23) |
 
 ### REV: pump review, approve, retry
 

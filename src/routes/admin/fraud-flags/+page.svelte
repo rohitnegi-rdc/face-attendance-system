@@ -5,6 +5,7 @@
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import WorkerPicker from '$lib/components/WorkerPicker.svelte';
 	import { formatDate } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
@@ -39,7 +40,9 @@
 				<article class="review-item">
 					<div class="review-item__header">
 						<div>
-							<h2>{personDisplayLabel(flag.matched_at_pump, flag.display_seq, false, flag.name)}</h2>
+							<h2>
+								{personDisplayLabel(flag.matched_at_pump, flag.display_seq, false, flag.name)}
+							</h2>
 							<p>{formatDate(flag.created_at)}</p>
 						</div>
 						<StatusBadge tone={flag.reviewed ? 'neutral' : 'attention'}>
@@ -136,19 +139,28 @@
 										><Check size={17} /> Confirm fraud</button
 									>
 								</form>
-								<form method="POST" action="?/notFraud">
+								{#if flag.can_restore}
+									<form method="POST" action="?/notFraud">
+										<input type="hidden" name="id" value={flag.id} />
+										<button class="button button--secondary" type="submit"
+											><UserCheck size={17} /> Not fraud, mark present</button
+										>
+									</form>
+								{/if}
+							</div>
+							{#if !flag.can_restore}
+								<form method="POST" action="?/notFraud" class="faceless-fix">
 									<input type="hidden" name="id" value={flag.id} />
-									<button
-										class="button button--secondary"
-										type="submit"
-										disabled={!flag.can_restore}
-										title={flag.can_restore
-											? undefined
-											: 'Raised before faces were stored on flags. Use Attendance > Correct.'}
+									<p>
+										This flag was raised before faces were stored on flags. If it is not fraud,
+										choose the worker at {flag.flagged_at_pump}:
+									</p>
+									<WorkerPicker workers={flag.candidates} allowNew={false} />
+									<button class="button button--secondary" type="submit"
 										><UserCheck size={17} /> Not fraud, mark present</button
 									>
 								</form>
-							</div>
+							{/if}
 						</div>
 					{:else}
 						<p class="resolution-note">
@@ -325,5 +337,16 @@
 		.review-actions .button {
 			width: 100%;
 		}
+	}
+	.faceless-fix {
+		display: grid;
+		gap: var(--space-2);
+		margin-top: var(--space-3);
+	}
+	.faceless-fix p {
+		margin: 0;
+	}
+	.faceless-fix .button {
+		justify-self: start;
 	}
 </style>

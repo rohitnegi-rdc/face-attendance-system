@@ -4,6 +4,12 @@ import { error, fail } from '@sveltejs/kit';
 import { createAttendanceReviewFlag } from '$lib/server/attendanceReview';
 import { shiftStillOpen } from '$lib/server/shiftSessions';
 import { renamePerson } from '$lib/server/personNames';
+import { moveFace, undoMerge } from '$lib/server/faceFixes';
+import { formText, runFaceFix } from '$lib/server/faceFixActions';
+import { pumpWorkers } from '$lib/server/pumpWorkers';
+import { personDisplayLabel } from '$lib/personLabel';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const load: PageServerLoad = async ({ params }) => {
 	const person = await queryOne<any>(
@@ -20,8 +26,10 @@ export const load: PageServerLoad = async ({ params }) => {
 		        dpa.morning_confidence, dpa.evening_confidence,
 		        morning.id AS morning_session_id, morning.photo_url AS morning_photo_url,
 		        morning_evidence.face_crop_url AS morning_crop_url,
+		        morning_evidence.person_id IS NOT NULL AS morning_in_photo,
 		        evening.id AS evening_session_id, evening.photo_url AS evening_photo_url,
 		        evening_evidence.face_crop_url AS evening_crop_url,
+		        evening_evidence.person_id IS NOT NULL AS evening_in_photo,
 		        EXISTS (
 		          SELECT 1 FROM attendance_review_flags arf
 		          WHERE arf.session_id = morning.id AND arf.person_id IS NULL AND arf.status = 'open'
@@ -71,7 +79,52 @@ export const load: PageServerLoad = async ({ params }) => {
 		[params.id]
 	);
 
-	return { person, history, yearly };
+	// Merges into or of this worker, newest first, so a wrong one can be undone (faceFixes.ts).
+	const merges = await query<any>(
+		`SELECT l.id, l.kept_person_id, l.merged_person_id, l.merged_at, l.reversed_at,
+		        adm.email AS merged_by, other.display_seq, other.name, other.is_operator,
+		        merged.status AS merged_status, merged.merged_into_person_id
+		 FROM person_merge_log l
+		 JOIN persons other
+		   ON other.id = CASE WHEN l.kept_person_id = $1 THEN l.merged_person_id ELSE l.kept_person_id END
+		 JOIN persons merged ON merged.id = l.merged_person_id
+		 LEFT JOIN admins adm ON adm.id = l.admin_id
+		 WHERE l.kept_person_id = $1 OR l.merged_person_id = $1
+		 ORDER BY l.merged_at DESC LIMIT 20`,
+		[params.id]
+	);
+
+	// The workers each of this worker's faces could be moved to.
+	const workers = await pumpWorkers(
+		[person.pump_id],
+		history.flatMap((row: any) => [row.morning_session_id, row.evening_session_id]).filter(Boolean)
+	);
+	const moveTargets: Record<string, ReturnType<typeof workers.forSession>> = {};
+	for (const row of history) {
+		for (const [sessionId, inPhoto] of [
+			[row.morning_session_id, row.morning_in_photo],
+			[row.evening_session_id, row.evening_in_photo]
+		]) {
+			if (sessionId && inPhoto)
+				moveTargets[sessionId] = workers.forSession(person.pump_id, sessionId);
+		}
+	}
+
+	return {
+		person,
+		history,
+		yearly,
+		moveTargets,
+		merges: merges.map((merge) => ({
+			...merge,
+			intoThis: merge.kept_person_id === params.id,
+			other: personDisplayLabel(person.pump_code, merge.display_seq, merge.is_operator, merge.name),
+			canUndo:
+				!merge.reversed_at &&
+				merge.merged_status === 'merged' &&
+				merge.merged_into_person_id === merge.kept_person_id
+		}))
+	};
 };
 
 export const actions: Actions = {
@@ -85,6 +138,36 @@ export const actions: Actions = {
 		);
 		if (result.error) return fail(result.status, { success: false, message: result.error });
 		return { success: true, message: 'Name saved' };
+	},
+	// This worker's face in one photo is someone else's: move it to that worker or a new one.
+	moveFace: async ({ request, params, locals }) => {
+		const form = await request.formData();
+		const sessionId = formText(form, 'session_id');
+		const toPersonId = formText(form, 'person_id') || null;
+		if (!UUID_PATTERN.test(sessionId) || (toPersonId && !UUID_PATTERN.test(toPersonId))) {
+			return fail(400, { success: false, message: 'Invalid request.' });
+		}
+		return runFaceFix('move_face', locals.user!.id, async (client) => {
+			const result = await moveFace(client, {
+				sessionId,
+				fromPersonId: params.id,
+				toPersonId,
+				name: formText(form, 'name'),
+				adminId: locals.user!.id
+			});
+			return result.createdPerson
+				? 'Face moved to a new worker, who is marked present for that photo.'
+				: 'Face moved. The other worker is marked present for that photo.';
+		});
+	},
+	undoMerge: async ({ request, locals }) => {
+		const mergeId = formText(await request.formData(), 'merge_id');
+		if (!UUID_PATTERN.test(mergeId))
+			return fail(400, { success: false, message: 'Invalid request.' });
+		return runFaceFix('undo_merge', locals.user!.id, async (client) => {
+			const result = await undoMerge(client, mergeId, locals.user!.id);
+			return `Merge undone. The two workers are separate again; ${result.photos} photo(s) went back.`;
+		});
 	},
 	flagEvidence: async ({ params, request, locals }) => {
 		const form = await request.formData();
@@ -106,9 +189,11 @@ export const actions: Actions = {
 			});
 			return {
 				success: true,
-				message: created
-					? 'Attendance evidence flagged for review.'
-					: 'This attendance evidence is already flagged.'
+				message: !created
+					? 'This attendance evidence is already flagged.'
+					: form.get('reason') === 'incorrect_match'
+						? 'Flagged for review. This face no longer helps recognise this worker.'
+						: 'Attendance evidence flagged for review.'
 			};
 		} catch (actionError) {
 			return fail(400, {

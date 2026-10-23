@@ -4,7 +4,8 @@
 	import AttendanceEvidenceButtons from '$lib/components/AttendanceEvidenceButtons.svelte';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { formatDate } from '$lib/date';
+	import WorkerPicker from '$lib/components/WorkerPicker.svelte';
+	import { formatDate, formatTime } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
 	let { data, form } = $props();
@@ -28,7 +29,12 @@
 
 <svelte:head
 	><title
-		>{personDisplayLabel(data.person.pump_code, data.person.display_seq, data.person.is_operator, data.person.name)} | Face Attendance</title
+		>{personDisplayLabel(
+			data.person.pump_code,
+			data.person.display_seq,
+			data.person.is_operator,
+			data.person.name
+		)} | Face Attendance</title
 	></svelte:head
 >
 
@@ -39,7 +45,14 @@
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Worker</p>
-			<h1>{personDisplayLabel(data.person.pump_code, data.person.display_seq, data.person.is_operator, data.person.name)}</h1>
+			<h1>
+				{personDisplayLabel(
+					data.person.pump_code,
+					data.person.display_seq,
+					data.person.is_operator,
+					data.person.name
+				)}
+			</h1>
 			<p>
 				First seen {formatDate(data.person.first_seen_at)} · Last seen {formatDate(
 					data.person.last_seen_at
@@ -67,8 +80,7 @@
 		<div class="table-wrap">
 			<table class="data-table">
 				<thead
-					><tr><th>Year</th><th>Days present</th><th>Start only</th><th>End only</th></tr
-					></thead
+					><tr><th>Year</th><th>Days present</th><th>Start only</th><th>End only</th></tr></thead
 				><tbody
 					>{#each data.yearly as year}<tr
 							><td><strong>{year.year}</strong></td><td>{year.days_present}</td><td
@@ -79,15 +91,46 @@
 			</table>
 		</div>
 	</section>
+	{#if data.merges.length}
+		<section class="section">
+			<div class="section-header"><h2>Merges</h2></div>
+			<ul class="merge-list">
+				{#each data.merges as merge (merge.id)}
+					<li>
+						<div>
+							<strong
+								>{merge.intoThis
+									? `${merge.other} was merged into this worker`
+									: `Merged into ${merge.other}`}</strong
+							>
+							<span
+								>{[
+									`${formatDate(merge.merged_at)}, ${formatTime(merge.merged_at)}`,
+									merge.merged_by && `by ${merge.merged_by}`,
+									merge.reversed_at && `undone ${formatDate(merge.reversed_at)}`
+								]
+									.filter(Boolean)
+									.join(' · ')}</span
+							>
+						</div>
+						{#if merge.canUndo}
+							<form method="POST" action="?/undoMerge">
+								<input type="hidden" name="merge_id" value={merge.id} />
+								<button class="button button--secondary" type="submit">Undo merge</button>
+							</form>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
 	<section class="section">
 		<div class="section-header"><h2>Attendance history</h2></div>
 		<div class="table-wrap">
 			<table class="data-table">
 				<thead
 					><tr
-						><th>Date</th><th>Start</th><th>End</th><th>Daily status</th><th
-							>Photo evidence</th
-						></tr
+						><th>Date</th><th>Start</th><th>End</th><th>Daily status</th><th>Photo evidence</th></tr
 					></thead
 				><tbody
 					>{#each data.history as history}<tr
@@ -128,6 +171,20 @@
 												]
 											}}
 										/>
+										{#if data.moveTargets[history.morning_session_id]}
+											<details class="move-face">
+												<summary>Not this worker? Move this face</summary>
+												<form method="POST" action="?/moveFace">
+													<input
+														type="hidden"
+														name="session_id"
+														value={history.morning_session_id}
+													/>
+													<WorkerPicker workers={data.moveTargets[history.morning_session_id]} />
+													<button class="button button--primary" type="submit">Move face</button>
+												</form>
+											</details>
+										{/if}
 									</div>
 								{/if}
 								{#if history.evening_session_id}
@@ -151,6 +208,20 @@
 												]
 											}}
 										/>
+										{#if data.moveTargets[history.evening_session_id]}
+											<details class="move-face">
+												<summary>Not this worker? Move this face</summary>
+												<form method="POST" action="?/moveFace">
+													<input
+														type="hidden"
+														name="session_id"
+														value={history.evening_session_id}
+													/>
+													<WorkerPicker workers={data.moveTargets[history.evening_session_id]} />
+													<button class="button button--primary" type="submit">Move face</button>
+												</form>
+											</details>
+										{/if}
 									</div>
 								{/if}
 							</td></tr
@@ -196,6 +267,45 @@
 	.history-evidence strong {
 		font-size: var(--text-xs);
 		text-transform: uppercase;
+	}
+	.move-face summary {
+		font-size: var(--text-sm);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.move-face form {
+		display: grid;
+		gap: var(--space-2);
+		margin-top: var(--space-2);
+	}
+	.move-face .button {
+		justify-self: start;
+	}
+	.merge-list {
+		display: grid;
+		gap: var(--space-2);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.merge-list li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
+		background: var(--brand-white);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+	}
+	.merge-list li div {
+		display: grid;
+		gap: 2px;
+	}
+	.merge-list span {
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
 	}
 	.rename-form {
 		display: flex;

@@ -56,6 +56,69 @@ test('MATCH-01/04 new face becomes a worker; same face in the evening is the sam
 	expect(rows).toEqual([{ morning_matched: true, evening_matched: true }]);
 });
 
+test('MATCH-09 a worker first seen at an uncompleted shift end is the same person next day', async () => {
+	const [pump] = await sameAreaPumps(1);
+	const startId = await recordSession(pump.context, ['MATCH09op']);
+	await shiftBack(startId, 541);
+	// A shift end must wait for a completed start, but the next day's start does not wait for a
+	// completed end: this end stays in review, so its new worker is still pending_review.
+	const endId = await submitAndWait(pump.context, ['MATCH09op', 'MATCH09']);
+	await shiftBack(startId, 24 * 60, true);
+	await shiftBack(endId, 24 * 60, true);
+	await submitAndWait(pump.context, [{ identity: 'MATCH09', similarity: 0.9 }]);
+
+	expect(await count('SELECT 1 FROM persons WHERE pump_id = $1', [pump.id])).toBe(2);
+});
+
+test('MATCH-10 a weak match counts attendance but does not join the gallery', async () => {
+	const [pump] = await sameAreaPumps(1);
+	const morningId = await recordSession(pump.context, ['MATCH10']);
+	await shiftBack(morningId, 541);
+	await recordSession(pump.context, [{ identity: 'MATCH10', similarity: 0.3 }]);
+
+	expect(await count('SELECT 1 FROM persons WHERE pump_id = $1', [pump.id])).toBe(1);
+	const { rows } = await db.query(
+		`SELECT s.session_type, v.in_gallery, v.is_anchor
+		 FROM person_face_vectors v JOIN attendance_sessions s ON s.id = v.session_id
+		 WHERE s.pump_id = $1 ORDER BY v.created_at`,
+		[pump.id]
+	);
+	expect(rows).toEqual([
+		{ session_type: 'morning', in_gallery: true, is_anchor: true },
+		{ session_type: 'evening', in_gallery: false, is_anchor: false }
+	]);
+	const attendance = await db.query(
+		'SELECT morning_matched, evening_matched FROM daily_person_attendance WHERE pump_id = $1',
+		[pump.id]
+	);
+	expect(attendance.rows).toEqual([{ morning_matched: true, evening_matched: true }]);
+});
+
+test('MATCH-11 two faces near the same worker are two people; the stronger keeps the worker', async () => {
+	const [pump] = await sameAreaPumps(1);
+	const morningId = await recordSession(pump.context, ['MATCH11']);
+	await shiftBack(morningId, 541);
+	// The weaker face comes first from the AI, so order alone would give it the worker.
+	const eveningId = await recordSession(pump.context, [
+		{ identity: 'MATCH11', similarity: 0.5 },
+		{ identity: 'MATCH11', similarity: 0.9 }
+	]);
+
+	expect(await count('SELECT 1 FROM persons WHERE pump_id = $1', [pump.id])).toBe(2);
+	const { rows } = await db.query(
+		`SELECT p.first_seen_at < s.submitted_at AS known, round(e.match_confidence::numeric, 2)::float AS score
+		 FROM attendance_face_evidence e
+		 JOIN persons p ON p.id = e.person_id
+		 JOIN attendance_sessions s ON s.id = e.session_id
+		 WHERE e.session_id = $1 ORDER BY known DESC`,
+		[eveningId]
+	);
+	expect(rows).toEqual([
+		{ known: true, score: 0.9 },
+		{ known: false, score: null }
+	]);
+});
+
 test('MATCH-03 a face below the threshold becomes a new person', async () => {
 	const [pump] = await sameAreaPumps(1);
 	const morningId = await recordSession(pump.context, ['MATCH03']);
@@ -81,6 +144,19 @@ test('FRD-01 an approved worker at pump A is flagged at pump B in the same Area'
 	const sessionB = await submitAndWait(b.context, ['FRD01']);
 	expect(await fraudFlagsOn(sessionB)).toBe(1);
 	expect(await count('SELECT 1 FROM daily_person_attendance WHERE pump_id = $1', [b.id])).toBe(0);
+});
+
+test('FRD-14 the fraud check compares only faces from the other pump today, not older ones', async () => {
+	const [a, b] = await sameAreaPumps(2);
+	// Yesterday at B: the worker's sharp face. Past the pairing window, so today's photo is a start.
+	const yesterday = await recordSession(b.context, ['FRD14']);
+	await shiftBack(yesterday, 25 * 60, true);
+	// Today at B: a worse photo of the same worker, still matched to them (0.4 >= threshold).
+	await recordSession(b.context, [{ identity: 'FRD14', similarity: 0.4 }]);
+	expect(await count('SELECT 1 FROM persons WHERE pump_id = $1', [b.id])).toBe(1);
+	// At A, a face close to yesterday's photo (0.3) but not to today's (about 0.12).
+	const sessionA = await submitAndWait(a.context, [{ identity: 'FRD14', similarity: 0.3 }]);
+	expect(await fraudFlagsOn(sessionA)).toBe(0);
 });
 
 test('FRD-02 the same face in a different Area is not fraud', async () => {

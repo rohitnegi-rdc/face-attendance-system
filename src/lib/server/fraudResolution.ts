@@ -1,12 +1,17 @@
 import type { PoolClient } from 'pg';
 import { faceMatchThreshold } from './matching';
+import {
+	findLocalMatch,
+	galleryRules,
+	keepsInGallery,
+	saveFace
+} from '../../../worker/faceQueries.js';
 
 // Admin decisions on cross-pump fraud flags (/admin/fraud-flags).
 // "Not fraud" gives the worker the attendance the worker withheld: the face stored on the flag is
 // matched against the flagged pump's own workers (or becomes a new worker there), then marked
 // present for that session. Same matching rules as worker/index.js, local gallery only.
 
-const GALLERY_SIZE = 5;
 type RollupColumn = 'days_present' | 'days_morning_only' | 'days_evening_only';
 
 export class ResolutionError extends Error {}
@@ -49,29 +54,36 @@ export async function confirmFraud(client: PoolClient, flagId: string, adminId: 
 export async function markNotFraud(
 	client: PoolClient,
 	flagId: string,
-	adminId: string
+	adminId: string,
+	// Flags raised before faces were stored on flags have no face to match: the admin picks the
+	// worker of the flagged pump instead (/admin/fraud-flags).
+	chosenPersonId?: string | null
 ): Promise<{ personId: string; createdPerson: boolean }> {
 	const flag = await lockOpenFlag(client, flagId);
-	if (!flag.face_embedding) {
+	if (!flag.face_embedding && !chosenPersonId) {
 		throw new ResolutionError(
-			'This flag was raised before faces were stored on flags, so it cannot be restored automatically. Use Attendance > Correct instead.'
+			'This flag has no stored face. Choose the worker at this pump, then press Not fraud.'
 		);
 	}
 
-	// Best match among the flagged pump's own active workers.
-	const { rows: matches } = await client.query<{ person_id: string; similarity: number }>(
-		`SELECT pfv.person_id, 1 - (pfv.embedding <=> $1::vector) AS similarity
-		 FROM person_face_vectors pfv
-		 JOIN persons p ON p.id = pfv.person_id
-		 WHERE p.pump_id = $2 AND p.status = 'active'
-		 ORDER BY similarity DESC LIMIT 1`,
-		[flag.face_embedding, flag.pump_id]
-	);
-	const match = matches[0];
+	// Best match among the flagged pump's own workers, the same lookup and gallery rules as the
+	// worker (worker/faceQueries.js).
+	const match = flag.face_embedding
+		? await findLocalMatch(client, { vector: flag.face_embedding, pumpId: flag.pump_id })
+		: undefined;
 	let personId: string;
 	let createdPerson = false;
-	if (match && match.similarity >= faceMatchThreshold()) {
+	let inGallery = true;
+	if (!flag.face_embedding) {
+		const { rowCount } = await client.query(
+			`SELECT 1 FROM persons WHERE id = $1 AND pump_id = $2 AND status IN ('active', 'pending_review')`,
+			[chosenPersonId, flag.pump_id]
+		);
+		if (!rowCount) throw new ResolutionError('Choose a worker of the flagged pump.');
+		personId = chosenPersonId!;
+	} else if (match && match.similarity >= faceMatchThreshold()) {
 		personId = match.person_id;
+		inGallery = keepsInGallery(match, galleryRules(faceMatchThreshold()));
 		await client.query('UPDATE persons SET last_seen_at = now() WHERE id = $1', [personId]);
 	} else {
 		// The admin has looked at this face, so the new worker starts active, not pending review.
@@ -85,18 +97,16 @@ export async function markNotFraud(
 		createdPerson = true;
 	}
 
-	await client.query(
-		`INSERT INTO person_face_vectors (person_id, session_id, embedding, source_photo_crop_url)
-		 VALUES ($1, $2, $3::vector, $4)`,
-		[personId, flag.session_id, flag.face_embedding, flag.face_crop_url]
-	);
-	await client.query(
-		`DELETE FROM person_face_vectors WHERE id IN (
-		   SELECT id FROM person_face_vectors WHERE person_id = $1
-		   ORDER BY created_at DESC OFFSET $2
-		 )`,
-		[personId, GALLERY_SIZE]
-	);
+	if (flag.face_embedding) {
+		await saveFace(client, {
+			personId,
+			sessionId: flag.session_id,
+			vector: flag.face_embedding,
+			cropUrl: flag.face_crop_url,
+			inGallery,
+			isAnchor: createdPerson
+		});
+	}
 	await client.query(
 		`INSERT INTO attendance_face_evidence (session_id, person_id, face_crop_url, match_confidence)
 		 VALUES ($1, $2, $3, $4)

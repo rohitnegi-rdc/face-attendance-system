@@ -3,6 +3,7 @@ import { fail } from '@sveltejs/kit';
 import { pool, query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
 import { ResolutionError, confirmFraud, markNotFraud } from '$lib/server/fraudResolution';
+import { pumpWorkers } from '$lib/server/pumpWorkers';
 
 export const load: PageServerLoad = async () => {
 	const flags = await query<any>(
@@ -18,7 +19,7 @@ export const load: PageServerLoad = async () => {
 		        (s.photo_url IS NOT NULL) AS flagged_photo_available,
 		        (matched_session.photo_url IS NOT NULL) AS matched_photo_available,
 		        pfv.source_photo_crop_url, (ff.face_embedding IS NOT NULL) AS can_restore,
-		        resolver.email AS resolved_by_email
+		        resolver.email AS resolved_by_email, s.pump_id AS flagged_pump_id
 		 FROM fraud_flags ff
 		 JOIN persons p ON p.id = ff.person_id
 		 JOIN attendance_sessions s ON s.id = ff.session_id
@@ -38,7 +39,21 @@ export const load: PageServerLoad = async () => {
 		 LEFT JOIN admins resolver ON resolver.id = ff.resolved_by_admin_id
 		 ORDER BY ff.reviewed ASC, ff.created_at DESC LIMIT 200`
 	);
-	return { flags };
+	// Open flags raised before faces were stored on flags: the admin picks the worker instead.
+	const faceless = flags.filter((flag) => !flag.reviewed && !flag.can_restore);
+	const workers = await pumpWorkers(
+		faceless.map((flag) => flag.flagged_pump_id),
+		faceless.map((flag) => flag.session_id)
+	);
+	return {
+		flags: flags.map((flag) => ({
+			...flag,
+			candidates:
+				!flag.reviewed && !flag.can_restore
+					? workers.forSession(flag.flagged_pump_id, flag.session_id)
+					: []
+		}))
+	};
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,14 +63,18 @@ async function resolveFlag(
 	adminId: string,
 	decision: 'confirmed_fraud' | 'not_fraud'
 ) {
-	const flagId = String((await request.formData()).get('id') || '');
-	if (!UUID_PATTERN.test(flagId)) return fail(400, { message: 'Invalid request.' });
+	const form = await request.formData();
+	const flagId = String(form.get('id') || '');
+	const personId = String(form.get('person_id') || '') || null;
+	if (!UUID_PATTERN.test(flagId) || (personId && !UUID_PATTERN.test(personId))) {
+		return fail(400, { message: 'Invalid request.' });
+	}
 	const client = await pool.connect();
 	try {
 		await client.query('BEGIN');
 		const outcome =
 			decision === 'not_fraud'
-				? await markNotFraud(client, flagId, adminId)
+				? await markNotFraud(client, flagId, adminId, personId)
 				: (await confirmFraud(client, flagId, adminId), null);
 		await client.query(
 			`INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)

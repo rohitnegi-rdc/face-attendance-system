@@ -120,6 +120,29 @@
 		</div>
 	</section>
 
+	{#if data.sessions.length}
+		<section class="section" aria-labelledby="missed-heading">
+			<div class="section-header">
+				<div>
+					<h2 id="missed-heading">Add a worker the camera never detected</h2>
+					<p class="supporting-text">
+						For someone in the photo who is not in the roster above. They are added to {data.pump.pump_code}
+						and marked present for the photo you choose.
+					</p>
+				</div>
+			</div>
+			<form class="missed-form" method="POST" action={`?/addMissedWorker&pump=${data.pump.id}&day=${data.day}`}>
+				<label class="field"><span>Name</span><input name="name" maxlength="60" required autocomplete="off" /></label>
+				<label class="field"
+					><span>Photo</span><select name="session_id" required
+						>{#each data.sessions as session (session.id)}<option value={session.id}>{shiftTypeLabel(session.session_type)}</option>{/each}</select
+					></label
+				>
+				<button class="button button--primary" type="submit">Add and mark present</button>
+			</form>
+		</section>
+	{/if}
+
 	{#if data.corrections.length}
 		<section class="section" aria-labelledby="history-heading">
 			<div class="section-header">
@@ -227,4 +250,13 @@
 	.duplicate-history form { margin-top: var(--space-2); }
 	@media (max-width: 70rem) { .correction-row { grid-template-columns: 1fr; gap: var(--space-4); } .worker-identity { padding-bottom: var(--space-3); border-bottom: 1px solid var(--brand-mist); } .duplicate-controls { grid-template-columns: 1fr 1fr; } }
 	@media (max-width: 44rem) { .correction-page { padding: var(--space-4); } .evidence-grid { grid-template-columns: 1fr; } .evidence-item a { height: 17rem; } .correction-row { padding: var(--space-4); } .attendance-fields, .correction-action, .duplicate-controls { grid-template-columns: 1fr; } .correction-row .button { width: 100%; } .duplicate-state { align-items: flex-start; } .history-table { display: none; } .history-list, .duplicate-history { display: grid; grid-template-columns: 1fr; gap: var(--space-2); } }
+	.missed-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: end;
+		gap: var(--space-3);
+	}
+	.missed-form .field {
+		flex: 1 1 12rem;
+	}
 </style>

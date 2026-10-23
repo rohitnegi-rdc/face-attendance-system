@@ -27,11 +27,17 @@ Person records never merge across pumps — same human at two pumps = two Person
 - Single-button shift flow (UI words: Shift start / Shift end / Full shift / Start only; DB keeps morning/evening): no open shift → photo is a start (any time of day); open shift → photo is the end once the gap passed. An open start closes as "start only" by the pump's **End session** button (after the gap), by admin fix, or after the pairing window (default **24h**, same settings precedence; `worker/index.js` reads it the same way), checked lazily on submit/today and by the hourly sweep — never let "most recent open X" pairing run unbounded. `closed_by` records which. One shift per pump per date. Logic: `src/lib/server/shiftSessions.ts`. Admin fixes (End session, Split end into new start, Move to date) on `/admin/pumps/[id]`, audited. State machine: `docs/Architecture.md` §5.
 - Cross-pump fraud check is Area-scoped and symmetric for every vendor, including RDC's Area-split accounts — never narrow the scope per-vendor, it makes fraud detection order-dependent. The only off switch is the admin test-mode toggle at /admin/settings, which works only while the server env `TEST_MODE=true` (otherwise it is hidden and ignored by the app and worker).
 - Same-pump re-match (morning+evening) is expected, never a fraud flag — only a different-pump match is.
-- Match threshold is `FACE_MATCH_THRESHOLD` (default **0.28**, from the golden small-group evaluation; see `src/lib/server/matching.ts` and the same parsing in `worker/index.js`) via pgvector cosine similarity, gallery-based (~5 most recent embeddings per person) — never hardcode the threshold.
+- Match threshold is `FACE_MATCH_THRESHOLD` (default **0.28**, from the golden small-group evaluation; see `src/lib/server/matching.ts` and the same parsing in `worker/index.js`) via pgvector cosine similarity, gallery-based (~5 embeddings per person: the anchor face it was created from plus the newest clear matches) — never hardcode the threshold. A weak or close-call match counts attendance but stays out of the gallery (`in_gallery`, `GALLERY_ADD_THRESHOLD` 0.40 / `GALLERY_ADD_MARGIN` 0.10 in `worker/faceQueries.js`), so a wrong match cannot teach the matcher. One face per person per photo: workers are handed out strongest match first (`assignFaces`); a face whose worker is taken takes its next-best one or becomes a new worker, never merged into another face. Operators make no matching decisions.
 - All date/time logic is explicit `Asia/Kolkata`, computed in code — never rely on container/DB default TZ.
 - Matching + fraud-check + person upsert for one session run inside one Postgres `SERIALIZABLE`-isolation transaction (optimistic concurrency — no blocking Area lock; conflicting concurrent writes abort with `40001`/`40P01` and are retried) — never remove this without understanding the race it prevents (`docs/Architecture.md` §9).
 - Duplicate photo (same sha256 hash) is rejected, never double-counted.
 - Every shift photo comes with a required operator photo (`operator_photo`, migration 030). The worker takes its largest face; if it matches a group face (>= threshold) that face is tagged `is_operator`, otherwise it is added as one more face. Never count the operator twice. No face in it fails the session at once (`OperatorPhotoError`, no retries).
+
+## Secrets (env file)
+
+- The env file lives outside the repo at `../.env` (loaded by `scripts/lib/load-env.mjs`). Never open, read, print, paste, log or quote it, and never show a value from it: no `cat`/`type`/Read on it, no unfiltered `docker compose config`, no `printenv`/`env` dumps.
+- Refer to settings by variable name only. Need to know what a variable holds, whether it is set, or what it should be? Ask the user. Don't look it up.
+- Code may load it (`load-env.mjs`, `npm run stack`, `migrate`, `seed`). When checking that it loaded, print only the file path and the number of variables.
 
 ## Where things live
 
@@ -45,6 +51,7 @@ Person records never merge across pumps — same human at two pumps = two Person
 | Forgot password (one-use email link, 30 min) and temporary passwords by admin / plant manager, all logged in `password_reset_log`; SMTP shared in `mail.ts` | `src/lib/server/passwordReset.ts`, `src/lib/server/mail.ts` |
 | CSV vendor/pump/plant import | `src/lib/server/csvImport.ts` |
 | Attendance evidence/review (flagged guests, merge, fraud) | `src/lib/server/attendanceReview.ts` |
+| Admin face fixes (move face, mark present, undo merge, close flagged errors at `/admin/review-flags`) | `src/lib/server/faceFixes.ts` |
 | Background worker (job claiming, fraud check, matching) | `worker/index.js` — see Architecture.md §9 before touching this |
 | AI microservice (face detection + embeddings) | `ai-service/main.py` (FastAPI, insightface `buffalo_l`, ONNX CPU, no `--workers` set yet — single process today) |
 | DB schema | `db/init.sql` (base) + `db/migrations/00N_*.sql` (incremental, applied via `npm run migrate`) |
@@ -53,7 +60,7 @@ Person records never merge across pumps — same human at two pumps = two Person
 ## Commands
 
 **Dev**
-- `npm run stack -- up -d --build` — local Docker stack. Secrets come from an env file outside the repo (`FACE_ATTENDANCE_ENV`, else `../face-attendance.env`, else `./.env`) via `scripts/lib/load-env.mjs`, which prints names only, never values. `npm run migrate` / `seed` load it the same way.
+- `npm run stack -- up -d --build` — local Docker stack. Secrets come from an env file outside the repo (`FACE_ATTENDANCE_ENV`, else `../face-attendance.env`, else `../.env`, else `./.env`) via `scripts/lib/load-env.mjs`, which prints names only, never values. `npm run migrate` / `seed` load it the same way.
 - Email is sent only where `MAIL_ENABLED=true` (production server `.env` only). Local stack, regression and host scripts force it off and log the mail instead (`src/lib/server/mail.ts`, `worker/mailer.js`).
 - `npm run dev` — vite dev server
 - `npm run check` — svelte-kit sync + svelte-check
@@ -89,6 +96,7 @@ Full spec: [plans/FaceAttendanceEvaluationApprovalSystem.md](plans/FaceAttendanc
 
 ## Testing gate
 
+- `npm run test:unit` (`scripts/run-unit.mjs`): fast unit tests in `tests/unit` (face lookups in `worker/faceQueries.js`, fraud resolution, session cleanup) against a throwaway pgvector Postgres; no build, app or worker. Needs Docker. Runs separately from the regression gate.
 - `npm run test:regression` (`scripts/run-regression.mjs`): svelte-check, throwaway Postgres, migrations, build, stub AI service (`tests/regression/stub-ai.mjs`, fixed face vectors), app + worker, then the API scenarios in `tests/regression/*.spec.ts`. Needs Docker. Run it before every push: the server does not run tests.
 - Deploy is GitHub-only: on the server, inside the clone, `bash scripts/deploy.sh` fetches and fast-forwards to `origin/main`, backs up DB + photos, rebuilds, health-checks and rolls back on failure. Only the user deploys. Scenario IDs and coverage: [plans/RegressionTestPlan.md](plans/RegressionTestPlan.md). Every bug fix adds or flips a scenario.
 - Pump Retry only works on `failed`/`review` sessions with no fraud evidence; deleting anything else is admin-only (`src/lib/server/sessionCleanup.ts`, audited in `admin_audit_log`).
