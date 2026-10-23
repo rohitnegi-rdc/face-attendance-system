@@ -3,7 +3,8 @@
 	import X from '@lucide/svelte/icons/x';
 
 	// A "Face" button that opens the worker's face in a dialog. The image is requested only when
-	// opened, so a long list of workers does not load every face (crops are ~17 KB each).
+	// opened, so a long list of workers does not load every face (~30 KB each since the larger face
+	// pictures of 2026-10-23, ai-service face_preview; older ones ~17 KB).
 	let { url, label }: { url: string; label: string } = $props();
 
 	let dialog: HTMLDialogElement;

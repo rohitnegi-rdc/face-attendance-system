@@ -1,7 +1,7 @@
 """Face AI Microservice — insightface (buffalo_l) on ONNX Runtime CPU.
 
 POST /internal/face/extract: accepts an image, returns bbox + 512-dim ArcFace
-embedding + base64 crop per detected face. Internal-only (Docker network).
+embedding + base64 face picture (for people only, see face_preview) per detected face. Internal-only (Docker network).
 See plans/MasterPlan.md §5 / Prompt A "AI MICROSERVICE".
 """
 import base64
@@ -17,7 +17,6 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from insightface.app import FaceAnalysis
-from insightface.utils import face_align
 from PIL import Image, ImageOps
 
 from anti_spoofing import AntiSpoofingEngine
@@ -27,6 +26,11 @@ MAX_IMAGE_LONG_SIDE = max(640, int(os.getenv("AI_MAX_IMAGE_LONG_SIDE", "1920")))
 RESIZE_JPEG_QUALITY = min(100, max(50, int(os.getenv("AI_RESIZE_JPEG_QUALITY", "90"))))
 MAX_UPLOAD_BYTES = max(1, int(os.getenv("AI_MAX_UPLOAD_BYTES", str(18 * 1024 * 1024))))
 MAX_IMAGE_PIXELS = 20_000_000
+# The face picture for people (face_preview): largest side in pixels, how much of the head and
+# surroundings it shows (side = face box x this), and its JPEG quality.
+FACE_PREVIEW_SIZE = min(1024, max(224, int(os.getenv("AI_FACE_PREVIEW_SIZE", "480"))))
+FACE_PREVIEW_CONTEXT = 1.4  # head and hair; 1.8 pulled neighbours' faces into group photos
+FACE_PREVIEW_JPEG_QUALITY = 90
 
 # Structured JSON logging (plans/MasterPlan.md §7a): the same line shape as the app and the worker
 # (src/lib/server/log.ts), ISO timestamp in Asia/Kolkata. json.dumps keeps quotes in a message
@@ -102,28 +106,28 @@ def detect_with_orientation_fallback(image: np.ndarray):
     return max(candidates, key=lambda candidate: face_detection_quality(candidate[1]))
 
 
-def upright_face_crop(image: np.ndarray, bbox, landmarks) -> np.ndarray:
-    """Align a detected face to canonical upright eye, nose, and mouth landmarks."""
-    if landmarks is not None and len(landmarks) >= 5:
-        try:
-            return face_align.norm_crop(
-                image,
-                landmark=np.asarray(landmarks, dtype=np.float32),
-                image_size=224,
-                mode="arcface",
-            )
-        except (cv2.error, ValueError):
-            logger.warning("face landmark alignment failed; using the original crop")
+def face_preview(image: np.ndarray, bbox, landmarks, scale: float) -> np.ndarray:
+    """The face picture people look at (crop_base64), never used for matching.
 
-    x1, y1, x2, y2 = bbox
-    width = x2 - x1
-    height = y2 - y1
-    padding = int(max(width, height) * 0.28)
-    left = max(0, x1 - padding)
-    top = max(0, y1 - padding)
-    right = min(image.shape[1], x2 + padding)
-    bottom = min(image.shape[0], y2 + padding)
-    return image[top:bottom, left:right]
+    Cut from the full-size photo, not the smaller copy faces are found in (`scale` maps the
+    copy's coordinates onto it), with room around the head and turned so the eyes are level.
+    Up to FACE_PREVIEW_SIZE pixels square; a small face is not enlarged past its own detail.
+    It used to be a tight 224 px cut from the smaller copy, too blurry to judge a match by.
+    """
+    x1, y1, x2, y2 = (value * scale for value in bbox)
+    center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
+    side = max(x2 - x1, y2 - y1) * FACE_PREVIEW_CONTEXT
+    angle = 0.0
+    if landmarks is not None and len(landmarks) >= 2:
+        (left_x, left_y), (right_x, right_y) = np.asarray(landmarks[:2], dtype=np.float32) * scale
+        angle = float(np.degrees(np.arctan2(right_y - left_y, right_x - left_x)))
+    size = max(1, min(FACE_PREVIEW_SIZE, round(side)))
+    matrix = cv2.getRotationMatrix2D((center_x, center_y), angle, size / side)
+    matrix[0, 2] += size / 2 - center_x
+    matrix[1, 2] += size / 2 - center_y
+    return cv2.warpAffine(
+        image, matrix, (size, size), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
+    )
 
 
 @app.on_event("startup")
@@ -197,16 +201,18 @@ async def extract_faces(file: UploadFile = File(...), x_request_id: str | None =
     ok, encoded = cv2.imencode(".jpg", arr, [cv2.IMWRITE_JPEG_QUALITY, RESIZE_JPEG_QUALITY])
     processed_bytes = int(encoded.size) if ok else original_bytes
 
+    # The full-size photo is turned the same way as arr, so one factor maps arr onto it.
+    preview_scale = evidence_arr.shape[1] / arr.shape[1]
     results = []
     for f in faces:
         x1 = min(arr.shape[1], max(0, int(f.bbox[0])))
         y1 = min(arr.shape[0], max(0, int(f.bbox[1])))
         x2 = min(arr.shape[1], max(0, int(f.bbox[2])))
         y2 = min(arr.shape[0], max(0, int(f.bbox[3])))
-        crop = upright_face_crop(arr, (x1, y1, x2, y2), getattr(f, "kps", None))
+        crop = face_preview(evidence_arr, (x1, y1, x2, y2), getattr(f, "kps", None), preview_scale)
         crop_b64 = ""
         if crop.size > 0:
-            ok, buf = cv2.imencode(".jpg", crop)
+            ok, buf = cv2.imencode(".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, FACE_PREVIEW_JPEG_QUALITY])
             if ok:
                 crop_b64 = base64.b64encode(buf.tobytes()).decode("ascii")
         results.append(
