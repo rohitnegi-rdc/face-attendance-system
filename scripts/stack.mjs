@@ -9,7 +9,7 @@ import { loadEnv } from './lib/load-env.mjs';
 
 const { file, names } = loadEnv();
 if (!file) {
-	console.error('No env file found. Put it at ../face-attendance.env or set FACE_ATTENDANCE_ENV.');
+	console.error('No env file found. Put it at ../.env or ../face-attendance.env, or set FACE_ATTENDANCE_ENV.');
 	process.exit(1);
 }
 console.log(`[stack] env file ${file} (${names.length} variables), mail off`);

@@ -4,7 +4,8 @@
 // Where it looks, first match wins:
 //   1. FACE_ATTENDANCE_ENV=<path>
 //   2. ../face-attendance.env (next to the repo folder)
-//   3. ./.env (the old place, until it is moved)
+//   3. ../.env (next to the repo folder)
+//   4. ./.env (the old place, until it is moved)
 // No file found: nothing is loaded (inside Docker, Compose already passed the environment).
 //
 // Values already in the environment win over the file. MAIL_ENABLED is always forced to false:
@@ -22,6 +23,7 @@ export function envFile() {
 	const candidates = [
 		process.env.FACE_ATTENDANCE_ENV,
 		path.resolve(repo, '..', 'face-attendance.env'),
+		path.resolve(repo, '..', '.env'),
 		path.join(repo, '.env')
 	].filter(Boolean);
 	return candidates.find((file) => existsSync(file)) ?? null;
