@@ -105,6 +105,8 @@ services:
       SMTP_PASS: '${SMTP_PASS:-}'
       SMTP_FROM: '${SMTP_FROM:-}'
       FRAUD_ALERT_CC_EMAIL: '${FRAUD_ALERT_CC_EMAIL:-}'
+      # Only the production server sets MAIL_ENABLED=true; anywhere else mails are only logged.
+      MAIL_ENABLED: '${MAIL_ENABLED:-false}'
       # Unset in production: nginx sends x-forwarded-proto. Set it in .env (e.g.
       # http://localhost:6100) only for plain-http access without a proxy; otherwise every photo
       # upload fails the CSRF origin check. Passed through only when set, since an empty ORIGIN
@@ -167,6 +169,7 @@ services:
       SMTP_PASS: '${SMTP_PASS:-}'
       SMTP_FROM: '${SMTP_FROM:-}'
       FRAUD_ALERT_CC_EMAIL: '${FRAUD_ALERT_CC_EMAIL:-}'
+      MAIL_ENABLED: '${MAIL_ENABLED:-false}'
       # Pump GPS for the shift start location check (worker/gpsFeed.js), read only from the
       # optimizer database (dump.pump_events) through its published host port. Off when the
       # *_PUMPDB credentials are not in .env.

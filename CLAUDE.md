@@ -53,6 +53,8 @@ Person records never merge across pumps — same human at two pumps = two Person
 ## Commands
 
 **Dev**
+- `npm run stack -- up -d --build` — local Docker stack. Secrets come from an env file outside the repo (`FACE_ATTENDANCE_ENV`, else `../face-attendance.env`, else `./.env`) via `scripts/lib/load-env.mjs`, which prints names only, never values. `npm run migrate` / `seed` load it the same way.
+- Email is sent only where `MAIL_ENABLED=true` (production server `.env` only). Local stack, regression and host scripts force it off and log the mail instead (`src/lib/server/mail.ts`, `worker/mailer.js`).
 - `npm run dev` — vite dev server
 - `npm run check` — svelte-kit sync + svelte-check
 - `npm run lint` / `npm run format` — prettier + eslint

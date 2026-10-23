@@ -18,8 +18,10 @@ export function mailer() {
 
 export const mailFrom = () => process.env.SMTP_FROM || process.env.SMTP_USER;
 
-// Testing (regression, LAN): log exactly what would be mailed, send nothing.
-export const mailLogOnly = () => process.env.MAIL_LOG_ONLY === 'true';
+// Email goes out only where MAIL_ENABLED=true, which is set on the production server alone.
+// Everywhere else (local Docker, regression, scripts) callers log exactly what would be mailed and
+// send nothing, so local testing never mails a real person, even with real SMTP settings loaded.
+export const mailEnabled = () => process.env.MAIL_ENABLED === 'true';
 
 export const escapeHtml = (value: string) =>
 	value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);

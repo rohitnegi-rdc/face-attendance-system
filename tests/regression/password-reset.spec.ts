@@ -107,12 +107,36 @@ test('PWD-02 an unknown email gets the same answer and no email', async () => {
 
 test('PWD-03 a system login (.rdc) is told who can reset it; no link is made', async () => {
 	const before = await count('SELECT 1 FROM password_reset_tokens');
-	const html = await (
-		await (await anonymous()).post('/forgot-password', { form: { email: 'pump01@pumps.rdc' } })
+	const anon = await anonymous();
+	const vendor = await (
+		await anon.post('/forgot-password', { form: { email: 'vendor01@vendors.rdc' } })
 	).text();
-	expect(html).toContain('data-testid="reset-no-mailbox"');
-	expect(html).toContain('your plant manager, or the admin');
+	expect(vendor).toContain('data-testid="reset-no-mailbox"');
+	expect(vendor).toContain('your plant manager, or the admin');
+	const pump = await (
+		await anon.post('/forgot-password', { form: { email: 'pump01@pumps.rdc' } })
+	).text();
+	expect(pump).toContain('data-testid="reset-pump"');
 	expect(await count('SELECT 1 FROM password_reset_tokens')).toBe(before);
+});
+
+test('PWD-07 a pump login is never reset by email, even with a real-looking address', async () => {
+	const { plantId } = await createArea();
+	const pump = await createPump(plantId);
+	expect(pump.email).not.toMatch(/\.rdc$/);
+	const form = await (await (await anonymous()).get('/forgot-password')).text();
+	expect(form).toContain('data-testid="forgot-pump-note"');
+	const html = await (
+		await (await anonymous()).post('/forgot-password', { form: { email: pump.email } })
+	).text();
+	expect(html).toContain('data-testid="reset-pump"');
+	expect(html).toContain('plant manager');
+	expect(
+		await count('SELECT 1 FROM password_reset_tokens WHERE role = $1 AND account_id = $2', [
+			'pump',
+			pump.id
+		])
+	).toBe(0);
 });
 
 test('PWD-04 an expired or made-up link shows "no longer works"', async () => {

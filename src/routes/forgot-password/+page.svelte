@@ -40,6 +40,14 @@
 			<button class="button button--secondary auth-submit" type="submit">Send the link again</button
 			>
 		</form>
+	{:else if done?.result === 'pump'}
+		<div class="auth-heading">
+			<h1 id="forgot-title">Ask your plant manager</h1>
+			<p data-testid="reset-pump">
+				<strong>{done.email}</strong> is a pump login. Pump passwords are not reset by email: your plant
+				manager sets a temporary password from their Pumps page, and you choose your own at the next sign-in.
+			</p>
+		</div>
 	{:else if done?.result === 'no_mailbox'}
 		<div class="auth-heading">
 			<h1 id="forgot-title">Ask for a reset</h1>
@@ -54,6 +62,10 @@
 			<h1 id="forgot-title">Forgot password</h1>
 			<p>Enter the email you sign in with. We will email you a link to set a new password.</p>
 		</div>
+		<p class="pump-note" data-testid="forgot-pump-note">
+			<strong>Pump login?</strong> Ask your plant manager to reset it. Pump passwords are not reset by
+			email.
+		</p>
 		<form
 			class="auth-form"
 			method="POST"
@@ -133,6 +145,14 @@
 		margin: 0;
 		color: var(--ink-muted);
 		font-size: var(--text-sm);
+	}
+	.pump-note {
+		margin: 0 0 var(--space-4);
+		padding: var(--space-3) var(--space-4);
+		font-size: var(--text-sm);
+		background: var(--surface-subtle);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
 	}
 	.again {
 		margin-top: var(--space-5);

@@ -316,7 +316,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | LOC-04 | Plant manager approves | Day missing from the report while pending, present after approval; second decision 409 | 1 | P0 | Covered |
 | LOC-05 | Plant manager rejects | Note required (400 without); the day stays out of the report | 1 | P0 | Covered |
 | LOC-06 | Another plant's manager, anonymous email link | 404 for the other manager (page and action); anonymous gets 302 to login with `next=` | 1 | P0 | Covered |
-| LOC-07 | Approval email for a held shift (`MAIL_LOG_ONLY`, nothing sent) | Logged to the plant's manager with the pump code and an absolute link `<origin>/plant-manager/approvals/<id>` (bug: was `<origin>../../plant-manager/...`) | 2 | P1 | Covered (added 2026-10-20) |
+| LOC-07 | Approval email for a held shift (mail off: `MAIL_ENABLED` not true, nothing sent) | Logged to the plant's manager with the pump code and an absolute link `<origin>/plant-manager/approvals/<id>` (bug: was `<origin>../../plant-manager/...`) | 2 | P1 | Covered (added 2026-10-20) |
 | LOC-08 | Worker copies pump GPS from the optimizer feed (`dump.pump_events`, stand-in table in the test DB) | Matched by pump code (any case) or `gps_device_id`; blank coordinates and rows older than 2 h skipped; unknown ids logged; the copied reading lets a nearby shift start `ok` | 2 | P1 | Covered (added 2026-10-20) |
 
 ### BAK: kept copy of failed and fraud photos (photo-backup.spec)
@@ -410,12 +410,13 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 
 | ID | Scenario | Expected | Tier | Pri | Status |
 |---|---|---|---|---|---|
-| PWD-01 | Forgot password by email link (`MAIL_LOG_ONLY`) | Link `<origin>/reset-password?token=` logged to the account email; a typo in the confirmation keeps the link; saving signs in with the new password only; the link then shows "no longer works" and refuses a second use (410); logged in `password_reset_log` | 1 | P0 | Covered (password-reset.spec) |
+| PWD-01 | Forgot password by email link (mail off, link read from the log) | Link `<origin>/reset-password?token=` logged to the account email; a typo in the confirmation keeps the link; saving signs in with the new password only; the link then shows "no longer works" and refuses a second use (410); logged in `password_reset_log` | 1 | P0 | Covered (password-reset.spec) |
 | PWD-02 | Unknown email | Same "Check your email" answer and help, no email | 1 | P0 | Covered (password-reset.spec) |
-| PWD-03 | System login ending in `.rdc` (no mailbox) | "Ask for a reset": plant manager or admin; no link created | 1 | P1 | Covered (password-reset.spec) |
+| PWD-03 | System login ending in `.rdc` (no mailbox) | Vendor `.rdc`: "Ask for a reset", plant manager or admin; `@pumps.rdc`: "Ask your plant manager"; no link created | 1 | P1 | Covered (password-reset.spec) |
 | PWD-04 | Expired or made-up link | "This link no longer works", reset refused, old password still works | 1 | P0 | Covered (password-reset.spec) |
 | PWD-05 | Plant manager resets a pump password | Own plant: temporary password shown once, the pump must change it at sign-in, logged; another plant's pump: 404, unchanged | 1 | P0 | Covered (password-reset.spec) |
 | PWD-06 | Admin resets a plant manager password | Temporary password, change forced at sign-in; any open email link stops working | 1 | P1 | Covered (password-reset.spec) |
+| PWD-07 | Pump login with a real-looking address (added 2026-10-23) | The form says pump logins are reset by the plant manager; submitting the pump's address answers "Ask your plant manager", no link is created or logged | 1 | P0 | Covered (password-reset.spec) |
 
 ### ACC: model accuracy (Tier 3, existing gate)
 

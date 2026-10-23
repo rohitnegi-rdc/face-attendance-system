@@ -40,6 +40,11 @@ export async function sendFraudAlertEmail(
 	const cc = [process.env.FRAUD_ALERT_CC_EMAIL].filter(Boolean);
 	const client = getTransporter();
 
+	// Same rule as src/lib/server/mail.ts: only the production server sets MAIL_ENABLED=true.
+	if (process.env.MAIL_ENABLED !== 'true') {
+		log('info', { pumpCode, to, cc }, 'fraud alert email NOT sent (mail off)');
+		return;
+	}
 	if (!client) {
 		log('warn', { pumpCode, plantManagerEmail }, 'fraud alert email skipped — SMTP not configured');
 		return;

@@ -1,7 +1,8 @@
 // Forgot password and password resets by someone else.
 // - Email link: /forgot-password mails a one-use link (30 minutes) to the account's address;
 //   /reset-password sets the new password. The page answers the same whether or not the address
-//   has an account, so it cannot be used to find out who has one.
+//   has an account, so it cannot be used to find out who has one. Not for pump logins: crews
+//   have no official mailbox, so their plant manager resets them.
 // - Temporary password: the admin (any account) or a plant manager (pumps of their plants)
 //   issues one; the user must replace it at the next sign-in (/change-password).
 // Every reset is written to password_reset_log.
@@ -11,7 +12,7 @@ import { resolve } from '$app/paths';
 import { findAccountByEmail, hashPassword, type Role } from '$lib/server/auth';
 import { pool, query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
-import { escapeHtml, mailer, mailFrom, mailLogOnly } from '$lib/server/mail';
+import { escapeHtml, mailEnabled, mailer, mailFrom } from '$lib/server/mail';
 
 export const RESET_LINK_MINUTES = 30;
 const MAX_LINKS_PER_HOUR = 3;
@@ -43,9 +44,12 @@ const sha256 = (value: string) => createHash('sha256').update(value).digest('hex
 export async function requestPasswordReset(
 	email: string,
 	origin: URL
-): Promise<'sent' | 'no_mailbox'> {
-	if (!hasMailbox(email)) return 'no_mailbox';
+): Promise<'sent' | 'no_mailbox' | 'pump'> {
 	const account = await findAccountByEmail(email.trim());
+	// Pump crews have no official mailbox, so a pump login is never reset by email, whatever
+	// address it uses: its plant manager issues a temporary password instead.
+	if (account?.role === 'pump' || /@pumps\.rdc$/i.test(email.trim())) return 'pump';
+	if (!hasMailbox(email)) return 'no_mailbox';
 	if (!account) {
 		logger.info({ email }, 'password reset asked for an unknown email');
 		return 'sent';
@@ -74,8 +78,8 @@ export async function requestPasswordReset(
 async function sendResetEmail(to: string, link: string) {
 	const subject = 'Reset your Face Attendance password';
 	try {
-		if (mailLogOnly()) {
-			logger.info({ to, subject, link }, 'password reset email NOT sent (MAIL_LOG_ONLY)');
+		if (!mailEnabled()) {
+			logger.info({ to, subject, link }, 'password reset email NOT sent (mail off)');
 			return;
 		}
 		const client = mailer();

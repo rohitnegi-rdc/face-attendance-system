@@ -154,8 +154,8 @@ const serviceEnv = {
 	TEST_MODE: 'true',
 	GEMINI_API_KEY: '',
 	SMTP_HOST: '',
-	// Approval emails are logged, never sent; LOC-07 reads the log line (link and recipients).
-	MAIL_LOG_ONLY: 'true',
+	// Emails are logged, never sent; LOC-07 and PWD-01 read the log line (link and recipients).
+	MAIL_ENABLED: 'false',
 	// The pump GPS feed reads a stand-in dump.pump_events in the test database (LOC-08).
 	PUMP_GPS_DB_HOST: '127.0.0.1',
 	PUMP_GPS_DB_PORT: DB_PORT,

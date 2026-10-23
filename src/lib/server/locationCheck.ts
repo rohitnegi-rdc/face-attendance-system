@@ -3,7 +3,7 @@
 // pump_locations).
 // Within range the shift starts normally; otherwise it starts on hold and the plant manager is
 // emailed to approve or reject it. Only areas with location_check_enabled are checked.
-import { escapeHtml, mailer, mailFrom, mailLogOnly } from '$lib/server/mail';
+import { escapeHtml, mailEnabled, mailer, mailFrom } from '$lib/server/mail';
 import type { PoolClient } from 'pg';
 import { query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
@@ -148,8 +148,7 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 		);
 		const to = managers.map((m) => m.email).filter(Boolean);
 		if (!info) return;
-		// Testing: log exactly what would be mailed, send nothing.
-		if (mailLogOnly()) {
+		if (!mailEnabled()) {
 			logger.info(
 				{
 					sessionId,
@@ -162,7 +161,7 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 					reason: locationIssueText(info.issue, info.distance_m, info.pump_gps_at),
 					approvalUrl
 				},
-				'location approval email NOT sent (MAIL_LOG_ONLY)'
+				'location approval email NOT sent (mail off)'
 			);
 			return;
 		}

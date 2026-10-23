@@ -58,6 +58,10 @@ main() {
 	app_image="$(env_value APP_IMAGE)"
 	app_image="${app_image:-face-attendance/app:local}"
 	ai_image="$(basename "$PWD")-ai-service"
+	if [[ -n "$(env_value SMTP_HOST)" && "$(env_value MAIL_ENABLED)" != true ]]; then
+		log 'Note: SMTP is set but MAIL_ENABLED is not true, so no email will be sent (reset links,'
+		log 'location approvals, fraud alerts are only logged). Add MAIL_ENABLED=true to .env to send.'
+	fi
 
 	local has_previous=false
 	if [[ -n "$(docker compose ps --status running -q app 2>/dev/null || true)" ]]; then

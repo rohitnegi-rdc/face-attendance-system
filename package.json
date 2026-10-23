@@ -13,6 +13,7 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"deploy": "bash scripts/deploy.sh",
+		"stack": "node scripts/stack.mjs",
 		"test:e2e": "playwright install && playwright test",
 		"test:e2e:attendance": "playwright test --config=playwright.attendance.config.ts",
 		"test:e2e:anti-spoof": "playwright test --config=playwright.anti-spoof.config.ts",
@@ -51,8 +52,8 @@
 		"eval:golden:explain:camera": "python scripts/explain-golden-small-group-eval.py --dataset-dir datasets/golden-camera-attendance-v1",
 		"test": "npm run test:e2e",
 		"test:regression": "node scripts/run-regression.mjs",
-		"seed": "tsx scripts/seed.ts",
-		"migrate": "tsx scripts/migrate.ts",
+		"seed": "tsx --import ./scripts/lib/load-env.mjs scripts/seed.ts",
+		"migrate": "tsx --import ./scripts/lib/load-env.mjs scripts/migrate.ts",
 		"worker": "node worker/index.js",
 		"autoscale": "tsx scripts/autoscale-workers.ts"
 	},

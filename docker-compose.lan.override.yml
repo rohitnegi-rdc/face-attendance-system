@@ -1,8 +1,11 @@
 services:
-  # Local testing never sends real email: approval mails are written to the app log instead.
+  # Local testing never sends real email, whatever the env file says: mails go to the log instead.
   app:
     environment:
-      MAIL_LOG_ONLY: 'true'
+      MAIL_ENABLED: 'false'
+  worker:
+    environment:
+      MAIL_ENABLED: 'false'
 
   lan-https:
     build: .
