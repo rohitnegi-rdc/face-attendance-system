@@ -1,6 +1,7 @@
 // AUTH and RBAC scenarios from plans/RegressionTestPlan.md.
 import { expect, test } from '@playwright/test';
 import {
+	BASE_URL,
 	PASSWORD,
 	anonymous,
 	createAdmin,
@@ -256,4 +257,42 @@ test('RBAC-09 a vendor cannot run admin actions', async () => {
 		form: { evening_min_gap_minutes: '1', evening_pairing_window_hours: '2' }
 	});
 	expect(settings.status()).toBe(403);
+});
+
+// Every page where a password is typed has an eye that shows and hides it (both boxes on the
+// set-password pages).
+test('AUTH-18 the eye shows and hides the password on sign-in and first sign-in', async ({
+	browser
+}) => {
+	const { plantId } = await createArea();
+	const pump = await createPump(plantId);
+	await db.query('UPDATE pumps SET must_change_password = TRUE WHERE id = $1', [pump.id]);
+	const context = await browser.newContext({ baseURL: BASE_URL });
+	const page = await context.newPage();
+
+	await page.goto('/login');
+	const password = page.getByTestId('login-password');
+	await password.fill(PASSWORD);
+	await expect(password).toHaveAttribute('type', 'password');
+	await page.getByRole('button', { name: 'Show password' }).click();
+	await expect(password).toHaveAttribute('type', 'text');
+	await expect(password).toHaveValue(PASSWORD);
+	await page.getByRole('button', { name: 'Hide password' }).click();
+	await expect(password).toHaveAttribute('type', 'password');
+
+	await page.getByTestId('login-email').fill(pump.email);
+	await page.getByRole('button', { name: 'Sign in' }).click();
+	await page.waitForURL('**/change-password');
+	const fresh = page.getByTestId('new-password');
+	const confirm = page.getByTestId('confirm-password');
+	await fresh.fill('Long-enough-pass-1');
+	await expect(fresh).toHaveAttribute('type', 'password');
+	await expect(confirm).toHaveAttribute('type', 'password');
+	await page.getByRole('button', { name: 'Show password' }).click();
+	await expect(fresh).toHaveAttribute('type', 'text');
+	await expect(confirm).toHaveAttribute('type', 'text');
+	await expect(fresh).toHaveValue('Long-enough-pass-1');
+	await page.getByRole('button', { name: 'Hide password' }).click();
+	await expect(fresh).toHaveAttribute('type', 'password');
+	await context.close();
 });
