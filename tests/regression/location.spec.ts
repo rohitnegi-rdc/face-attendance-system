@@ -1,7 +1,7 @@
 // LOC: shift start location check. In an area with the check on, the operator's phone must be
 // within 100 m of the pump's latest GPS reading (at most 30 minutes old). Otherwise the shift
-// starts on hold, the plant manager approves or rejects it on /plant-manager/approvals, and the
-// reports leave the day out until it is approved.
+// starts on hold, the plant manager approves or rejects it on /plant-manager/approvals. The
+// reports show a held day, marked, and leave it out of their counts until it is approved.
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import {
@@ -66,19 +66,52 @@ async function startShift(
 	return { body, session };
 }
 
-async function dailyRowsFor(context: APIRequestContext, pumpCode: string) {
-	const response = await context.get('/plant-manager/attendance/export');
-	expect(response.status()).toBe(200);
-	const book = new ExcelJS.Workbook();
-	await book.xlsx.load((await response.body()) as any);
-	const ws = book.getWorksheet('Daily')!;
+// The pump's Daily sheet results and its headcount cells: the day's count, its fill and note,
+// and the month average (null while every day is held).
+async function reportFor(context: APIRequestContext, pumpCode: string) {
+	const load = async (url: string) => {
+		const response = await context.get(url);
+		expect(response.status()).toBe(200);
+		const book = new ExcelJS.Workbook();
+		await book.xlsx.load((await response.body()) as any);
+		return book;
+	};
+	const ws = (await load('/plant-manager/attendance/export')).getWorksheet('Daily')!;
 	const header = (ws.getRow(1).values as any[]).slice(1);
 	const pumpCol = header.indexOf('Pump') + 1;
-	let n = 0;
+	const resultCol = header.indexOf('Day result') + 1;
+	const results: string[] = [];
 	ws.eachRow((row, i) => {
-		if (i > 1 && row.getCell(pumpCol).value === pumpCode) n += 1;
+		if (i > 1 && row.getCell(pumpCol).value === pumpCode)
+			results.push(String(row.getCell(resultCol).value));
 	});
-	return n;
+
+	const sheet = (await load('/plant-manager/attendance/export?report=headcount')).getWorksheet(
+		'Headcount'
+	)!;
+	const columns = sheet.getRow(5).cellCount;
+	type Cells = { count: unknown; fill: unknown; note: string | null; avgMtd: unknown };
+	// Assigned inside the eachRow callback, so the cast keeps TypeScript from narrowing to null.
+	let headcount = null as Cells | null;
+	sheet.eachRow((row) => {
+		if (row.getCell(1).value !== pumpCode) return;
+		for (let c = 4; c <= columns - 2; c++) {
+			const cell = row.getCell(c);
+			if (typeof cell.value === 'number') {
+				const avg = row.getCell(columns - 1).value;
+				headcount = {
+					count: cell.value,
+					fill: (cell.fill as any)?.fgColor?.argb ?? null,
+					note:
+						typeof cell.note === 'object'
+							? (cell.note.texts ?? []).map((t) => t.text).join('')
+							: (cell.note ?? null),
+					avgMtd: avg === '-' ? null : avg
+				};
+			}
+		}
+	});
+	return { results, headcount };
 }
 
 test('LOC-01 area without the check: no location status at all', async () => {
@@ -123,7 +156,7 @@ test('LOC-03 each missing or failed check is held with its own reason', async ()
 	}
 });
 
-test('LOC-04 plant manager approves; held day is left out of the report until then', async () => {
+test('LOC-04 plant manager approves; held day is shown marked and counted only after', async () => {
 	const { plantId } = await checkedArea();
 	const pump = await createPump(plantId);
 	await setPumpGps(pump);
@@ -136,7 +169,12 @@ test('LOC-04 plant manager approves; held day is left out of the report until th
 	const page = await pm.get(`/plant-manager/approvals/${session.id}`);
 	expect(page.status()).toBe(200);
 
-	expect(await dailyRowsFor(pm, pump.code)).toBe(0);
+	// Bug: the held day vanished from both Excel files ("-" = no photo sent), although the
+	// screen grid showed it. It is shown, marked, and left out of counts until approved.
+	const held = await reportFor(pm, pump.code);
+	expect(held.results).toEqual(['Location pending', 'Location pending']);
+	expect(held.headcount).toMatchObject({ count: 2, fill: 'FFFFE3A3', avgMtd: null });
+	expect(held.headcount!.note).toContain('waiting for the plant manager');
 	const approved = await action(pm, `/plant-manager/approvals/${session.id}?/approve`, {
 		note: 'Called operator, new site'
 	});
@@ -144,14 +182,16 @@ test('LOC-04 plant manager approves; held day is left out of the report until th
 	const { rows } = await db.query('SELECT * FROM attendance_sessions WHERE id = $1', [session.id]);
 	expect(rows[0].location_status).toBe('approved');
 	expect(rows[0].location_decided_by).toBe(manager.id);
-	expect(await dailyRowsFor(pm, pump.code)).toBe(2);
+	const after = await reportFor(pm, pump.code);
+	expect(after.results).toEqual(['Shift still open', 'Shift still open']);
+	expect(after.headcount).toMatchObject({ count: 2, note: null, avgMtd: 2 });
 
 	// A second decision is refused, not silently overwritten.
 	const again = await action(pm, `/plant-manager/approvals/${session.id}?/reject`, { note: 'x' });
 	expect(again.status).toBe(409);
 });
 
-test('LOC-05 reject needs a note and keeps the day out of the report', async () => {
+test('LOC-05 reject needs a note; the day is shown as rejected and not counted', async () => {
 	const { plantId } = await checkedArea();
 	const pump = await createPump(plantId);
 	const manager = await createPlantManager(plantId);
@@ -164,7 +204,9 @@ test('LOC-05 reject needs a note and keeps the day out of the report', async () 
 		note: 'Operator was at home'
 	});
 	expect(rejected.type).toBe('success');
-	expect(await dailyRowsFor(pm, pump.code)).toBe(0);
+	const report = await reportFor(pm, pump.code);
+	expect(report.results).toEqual(['Location rejected']);
+	expect(report.headcount).toMatchObject({ count: 1, fill: 'FFF8C4C4', avgMtd: null });
 });
 
 test('LOC-06 only the plant manager of that plant sees it; login returns to the link', async () => {

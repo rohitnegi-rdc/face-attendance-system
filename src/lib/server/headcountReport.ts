@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import { query } from '$lib/server/db';
 import { addDaysStr, formatDayLabel } from '$lib/date';
 import { todayIST } from '$lib/server/time';
-import { heldShiftDay } from '$lib/server/locationCheck';
+import { heldShiftStatus } from '$lib/server/locationCheck';
 import type { ReportScope } from '$lib/server/attendanceReport';
 
 const BRAND = 'FF0B6E69';
@@ -14,13 +14,26 @@ const MUTED = 'FF5B6B73';
 const GRID = 'FFD5DEE2';
 const thin = { style: 'thin' as const, color: { argb: GRID } };
 const BORDER = { top: thin, left: thin, bottom: thin, right: thin };
+const HELD_FILL = { pending: 'FFFFE3A3', rejected: 'FFF8C4C4' };
+const HELD_NOTE = {
+	pending:
+		'Shift start is waiting for the plant manager to approve its location. Not in totals or averages yet.',
+	rejected:
+		'The plant manager rejected the location of this shift start. Not in totals or averages.'
+};
 const fill = (argb: string): ExcelJS.Fill => ({
 	type: 'pattern',
 	pattern: 'solid',
 	fgColor: { argb }
 });
 
-type DayRow = { pump_id: string; session_date: string; people: number; new_people: number };
+type DayRow = {
+	pump_id: string;
+	session_date: string;
+	people: number;
+	new_people: number;
+	held: 'pending' | 'rejected' | null;
+};
 type Totals = { people: number; newPeople: number; days: number };
 
 // month is YYYY-MM; anything else (or a future month) falls back to the current month.
@@ -59,13 +72,14 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 	}>(`WITH ${scopeCte} SELECT * FROM scope ORDER BY plant_name, pump_code`, scope.params);
 
 	// A day counts when the pump sent a processed photo. People = workers matched in the start or
-	// end photo; New = that day is the worker's first ever matched day at the pump.
+	// end photo; New = that day is the worker's first ever matched day at the pump. A day whose
+	// shift start waits for location approval (or was rejected) keeps its count but is marked
+	// `held` and left out of totals and averages, so the sheet shows what the screen grid shows.
 	const rows = await query<DayRow>(
 		`WITH ${scopeCte},
 		photo_days AS (
 			SELECT s.pump_id, s.session_date FROM attendance_sessions s JOIN scope ON scope.id = s.pump_id
 			WHERE s.session_date BETWEEN ${FROM} AND ${TO} AND s.status IN ('review', 'completed')
-			  AND NOT ${heldShiftDay('s.pump_id', 's.session_date')}
 			GROUP BY 1, 2
 		),
 		firsts AS (
@@ -81,19 +95,23 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 			JOIN persons p ON p.id = d.person_id AND p.status <> 'merged'
 			JOIN firsts f ON f.person_id = d.person_id
 			WHERE d.session_date BETWEEN ${FROM} AND ${TO} AND (d.morning_matched OR d.evening_matched)
-			  AND NOT ${heldShiftDay('d.pump_id', 'd.session_date')}
 			  AND NOT EXISTS (
 			    SELECT 1 FROM attendance_duplicate_resolutions r
 			    WHERE r.duplicate_person_id = d.person_id AND r.session_date = d.session_date
 			      AND r.reversed_at IS NULL
 			  )
 			GROUP BY 1, 2
+		),
+		pump_days AS (
+			SELECT coalesce(pd.pump_id, pr.pump_id) AS pump_id,
+			       coalesce(pd.session_date, pr.session_date) AS session_date,
+			       coalesce(pr.people, 0) AS people, coalesce(pr.new_people, 0) AS new_people
+			FROM photo_days pd FULL JOIN present pr
+			  ON pr.pump_id = pd.pump_id AND pr.session_date = pd.session_date
 		)
-		SELECT coalesce(pd.pump_id, pr.pump_id) AS pump_id,
-		       coalesce(pd.session_date, pr.session_date)::text AS session_date,
-		       coalesce(pr.people, 0) AS people, coalesce(pr.new_people, 0) AS new_people
-		FROM photo_days pd FULL JOIN present pr
-		  ON pr.pump_id = pd.pump_id AND pr.session_date = pd.session_date`,
+		SELECT day.pump_id, day.session_date::text AS session_date, day.people, day.new_people,
+		       ${heldShiftStatus('day.pump_id', 'day.session_date')} AS held
+		FROM pump_days day`,
 		params
 	);
 
@@ -107,7 +125,7 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 	const totals = (map: Map<string, DayRow> | undefined, from: string): Totals => {
 		const t = { people: 0, newPeople: 0, days: 0 };
 		for (const row of map?.values() ?? []) {
-			if (row.session_date < from || row.session_date > to) continue;
+			if (row.held || row.session_date < from || row.session_date > to) continue;
 			t.people += row.people;
 			t.newPeople += row.new_people;
 			t.days += 1;
@@ -138,7 +156,9 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 	sheet.getCell('A3').value =
 		'Number = people matched in the start or end photo that day. "-" = no photo sent. ' +
 		'Click + on the left of a pump to see Old (seen before) and New (first day at this pump). ' +
-		'Averages count only days with a photo.';
+		'Averages count only days with a photo. Amber = shift start waiting for location approval, ' +
+		'red = location rejected (hover for the note): the number is shown, but the day is left out ' +
+		'of totals and averages until the plant manager approves it.';
 	sheet.getCell('A3').font = { italic: true, color: { argb: MUTED } };
 
 	const header = sheet.getRow(5);
@@ -165,7 +185,8 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 	let r = 6;
 	const writeRow = (
 		values: (string | number | null)[],
-		style: { bold?: boolean; tint?: string; muted?: boolean; level?: number; groupHead?: boolean }
+		style: { bold?: boolean; tint?: string; muted?: boolean; level?: number; groupHead?: boolean },
+		held: (DayRow['held'] | undefined)[] = []
 	) => {
 		const row = sheet.getRow(r++);
 		values.forEach((value, i) => {
@@ -175,6 +196,11 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 			cell.alignment = { vertical: 'middle', horizontal: i < 3 ? 'left' : 'center' };
 			cell.font = { bold: style.bold, color: style.muted ? { argb: MUTED } : undefined };
 			if (style.tint) cell.fill = fill(style.tint);
+			const dayHeld = i >= 3 ? held[i - 3] : null;
+			if (dayHeld) {
+				cell.fill = fill(HELD_FILL[dayHeld]);
+				if (style.groupHead) cell.note = HELD_NOTE[dayHeld];
+			}
 			if (i >= lastCol - 2 && typeof value === 'number') cell.numFmt = '0.0';
 		});
 		// Excel's + button needs collapsed="1" on the pump row above the hidden group, not on the
@@ -195,9 +221,10 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 		const ytd = totals(map, fyStart);
 		const cells = (pick: (row: DayRow) => number) =>
 			days.map((d) => (map?.has(d) ? pick(map.get(d)!) : null));
+		const held = days.map((d) => map?.get(d)?.held);
 		for (const d of days) {
 			const row = map?.get(d);
-			if (!row) continue;
+			if (!row || row.held) continue;
 			const t = dayTotals.get(d) ?? { people: 0, newPeople: 0 };
 			t.people += row.people;
 			t.newPeople += row.new_people;
@@ -212,7 +239,8 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 				avg(mtd.people, mtd.days),
 				avg(ytd.people, ytd.days)
 			],
-			{ bold: true, groupHead: true }
+			{ bold: true, groupHead: true },
+			held
 		);
 		writeRow(
 			[
@@ -223,7 +251,8 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 				avg(mtd.people - mtd.newPeople, mtd.days),
 				avg(ytd.people - ytd.newPeople, ytd.days)
 			],
-			{ muted: true, level: 1 }
+			{ muted: true, level: 1 },
+			held
 		);
 		writeRow(
 			[
@@ -234,7 +263,8 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 				avg(mtd.newPeople, mtd.days),
 				avg(ytd.newPeople, ytd.days)
 			],
-			{ muted: true, level: 1, tint: 'FFFFF6DD' }
+			{ muted: true, level: 1, tint: 'FFFFF6DD' },
+			held
 		);
 	}
 

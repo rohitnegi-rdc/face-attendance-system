@@ -8,7 +8,7 @@ import { personDisplayLabel } from '$lib/personLabel';
 import { addDaysStr, dateKey, formatDate, isDateKey } from '$lib/date';
 import { shiftOutcomeLabel } from '$lib/shiftLabels';
 import { todayIST } from '$lib/server/time';
-import { heldShiftDay } from '$lib/server/locationCheck';
+import { heldShiftStatus } from '$lib/server/locationCheck';
 
 // A worker is expected on a day their pump took attendance, from their first photo until this
 // many days after their last one. Without the cut-off, a worker who left would show as absent
@@ -52,6 +52,7 @@ type DailyRow = {
 	still_open: boolean;
 	corrections: string | null;
 	duplicate_of: number | null;
+	held: 'pending' | 'rejected' | null;
 };
 
 export function reportRange(filters: ReportFilters): { from: string; to: string } {
@@ -64,6 +65,9 @@ export function reportRange(filters: ReportFilters): { from: string; to: string 
 
 function dayResult(row: DailyRow): string {
 	if (row.duplicate_of !== null) return 'Duplicate';
+	// Shown, not dropped: the photos exist, the day just is not counted until approved.
+	if (row.held === 'pending') return 'Location pending';
+	if (row.held === 'rejected') return 'Location rejected';
 	if (row.morning && row.evening) return 'Full shift';
 	if (row.morning) return row.still_open ? 'Shift still open' : 'Start only';
 	if (row.evening) return 'End only';
@@ -76,8 +80,11 @@ const RESULT_FILL: Record<string, string> = {
 	'End only': 'FFFFEFC2',
 	'Shift still open': 'FFDCEBFF',
 	Absent: 'FFF9D6D6',
-	Duplicate: 'FFE9E9E9'
+	Duplicate: 'FFE9E9E9',
+	'Location pending': 'FFFFE3A3',
+	'Location rejected': 'FFF8C4C4'
 };
+const UNCOUNTED = new Set(['Duplicate', 'Location pending', 'Location rejected']);
 
 const BRAND = 'FF0B6E69';
 const BRAND_LIGHT = 'FFE6F2F1';
@@ -201,7 +208,6 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 			       bool_or(s.session_type = 'morning' AND s.pairing_status = 'open') AS still_open
 			FROM attendance_sessions s JOIN scope ON scope.id = s.pump_id
 			WHERE s.session_date BETWEEN ${FROM} AND ${TO} AND s.status IN ('review', 'completed')
-			  AND NOT ${heldShiftDay('s.pump_id', 's.session_date')}
 			GROUP BY s.pump_id, s.session_date
 		)
 		SELECT w.session_date::text AS session_date, p.id AS person_id, p.display_seq, p.name, p.is_operator,
@@ -219,6 +225,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		       to_char(w.end_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS end_time,
 		       round(extract(epoch FROM (w.end_at - w.start_at)) / 60)::int AS shift_minutes,
 		       coalesce(w.still_open, false) AS still_open,
+		       ${heldShiftStatus('w.pump_id', 'w.session_date')} AS held,
 		       (SELECT string_agg(c.reason, ' | ' ORDER BY c.corrected_at)
 		          FROM attendance_corrections c
 		          WHERE c.person_id = p.id AND c.session_date = w.session_date) AS corrections,
@@ -336,7 +343,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 	});
 	function add(totals: Totals, row: DailyRow) {
 		const result = dayResult(row);
-		if (result !== 'Duplicate') totals.expected++;
+		if (!UNCOUNTED.has(result)) totals.expected++;
 		if (result === 'Full shift') totals.full++;
 		if (result === 'Start only') totals.startOnly++;
 		if (result === 'End only') totals.endOnly++;
@@ -710,6 +717,14 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 			'In the start photo; the end photo has not been taken yet. Export again after the shift ends.'
 		],
 		['Absent', 'Not in either photo on a day their pump took attendance.'],
+		[
+			'Location pending',
+			'The shift start photo was taken away from the pump. The plant manager has not approved its location yet, so the day is not counted.'
+		],
+		[
+			'Location rejected',
+			'The plant manager rejected the location of the shift start photo, so the day is not counted.'
+		],
 		[
 			'Duplicate',
 			'An admin marked this worker as the same person as another worker that day, so it is not counted twice.'

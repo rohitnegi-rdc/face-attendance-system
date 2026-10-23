@@ -13,12 +13,14 @@ export const LOCATION_RADIUS_M = 100;
 // report before the reading counts as stale.
 export const PUMP_GPS_MAX_AGE_MINUTES = 30;
 
-// SQL condition: the pump's shift on that date started on hold or was rejected, so reports leave
-// the whole day out until the plant manager approves it.
-export const heldShiftDay = (pumpColumn: string, dateColumn: string) =>
-	`EXISTS (SELECT 1 FROM attendance_sessions held
-	         WHERE held.pump_id = ${pumpColumn} AND held.session_date = ${dateColumn}
-	           AND held.session_type = 'morning' AND held.location_status IN ('pending', 'rejected'))`;
+// SQL value: 'pending' or 'rejected' when the pump's shift start on that date waits for the plant
+// manager's location approval or was rejected, else NULL. Reports show such a day, marked, and
+// leave it out of their counts until it is approved ('rejected' sorts after 'pending', so max()
+// reports a rejection first).
+export const heldShiftStatus = (pumpColumn: string, dateColumn: string) =>
+	`(SELECT max(held.location_status) FROM attendance_sessions held
+	  WHERE held.pump_id = ${pumpColumn} AND held.session_date = ${dateColumn}
+	    AND held.session_type = 'morning' AND held.location_status IN ('pending', 'rejected'))`;
 
 export type LocationIssue = 'too_far' | 'no_phone_location' | 'no_pump_gps' | 'stale_pump_gps';
 

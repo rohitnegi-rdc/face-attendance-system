@@ -74,6 +74,7 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 | AUTH-15 | Fresh database (migration 026) | `admin@attendance.rdc` / `Admin1234!` exists, logs in with `mustChangePassword: true`. A database that already has an admin gets none | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-16 | Fresh database (migration 027) | Pumps, plants, areas and vendors from `027_pump_vendors.csv` exist; `aslpwwi2@pumps.rdc` / `Test1234!` logs in as a pump with `mustChangePassword: true`. A database that already has pumps gets no import | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-17 | Fresh database (migrations 028, 029) | Plant managers from `028_plant_managers.csv` are assigned to their plants (e.g. MUM-Deonar) as Google-only accounts: no password, no forced change, password login refused. The Mumbai area has the location check on, so a held shift start emails its plant manager | 1 | P0 | Covered (auth-rbac.spec) |
+| AUTH-18 | Eye button on sign-in and first sign-in (`/change-password`) | Shows the typed password, hides it again; on first sign-in it shows both boxes | 1 | P1 | Covered (auth-rbac.spec, browser) |
 
 ### RBAC: who can see what
 
@@ -317,8 +318,8 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | LOC-01 | Area without the check | `location_status` NULL, no hold message | 1 | P0 | Covered (added 2026-10-19) |
 | LOC-02 | Phone within 100 m of a fresh pump GPS reading | `ok`, distance stored, shift starts normally | 1 | P0 | Covered |
 | LOC-03 | Too far / phone location not shared / no pump GPS / pump GPS older than 30 min | Each `pending` with its own `location_issue` and a hold message naming it; the shift still starts (open) | 1 | P0 | Covered |
-| LOC-04 | Plant manager approves | Day missing from the report while pending, present after approval; second decision 409 | 1 | P0 | Covered |
-| LOC-05 | Plant manager rejects | Note required (400 without); the day stays out of the report | 1 | P0 | Covered |
+| LOC-04 | Plant manager approves | While pending, both Excel files show the day marked (headcount: real count, amber, note, not in the average; attendance report: "Location pending", not counted); counted after approval; second decision 409 (bug 2026-10-23: the day was dropped and showed "-" = no photo) | 1 | P0 | Covered |
+| LOC-05 | Plant manager rejects | Note required (400 without); the day is shown as rejected (headcount red, attendance report "Location rejected") and never counted | 1 | P0 | Covered |
 | LOC-06 | Another plant's manager, anonymous email link | 404 for the other manager (page and action); anonymous gets 302 to login with `next=` | 1 | P0 | Covered |
 | LOC-07 | Approval email for a held shift (mail off: `MAIL_ENABLED` not true, nothing sent) | Logged to the plant's manager with the pump code and an absolute link `<origin>/plant-manager/approvals/<id>` (bug: was `<origin>../../plant-manager/...`) | 2 | P1 | Covered (added 2026-10-20) |
 | LOC-08 | Worker copies pump GPS from the optimizer feed (`dump.pump_events`, stand-in table in the test DB) | Matched by pump code (any case) or `gps_device_id`; blank coordinates and rows older than 2 h skipped; unknown ids logged; the copied reading lets a nearby shift start `ok` | 2 | P1 | Covered (added 2026-10-20) |
