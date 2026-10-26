@@ -321,7 +321,7 @@ test('UI-10 session logs show fraud faces inline and load other faces on click',
 	expect(log).toContain(fraudCrop);
 	// Each fraud tile names the worker it matched, so several tiles can be told apart.
 	expect(log).toMatch(
-		/data-testid="fraud-face"[\s\S]*?class="face-tile__who[^"]*">Test Worker \d+</
+		/data-testid="fraud-face"[\s\S]*?class="face-tile__who[^"]*">Test Worker \d+ \(#\d+\)</
 	);
 	expect(log).toContain('data-testid="worker-chip"');
 	expect(log).not.toContain(workerCrop);
