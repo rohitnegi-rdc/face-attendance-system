@@ -1,14 +1,14 @@
 import type { LayoutServerLoad } from './$types';
 import { resolve } from '$app/paths';
-import { isFraudCheckDisabled } from '$lib/server/settings';
+import { getTestMode } from '$lib/server/settings';
 import { loadNavCounts, sectionForPath } from '$lib/server/navCounts';
 
-// Every admin page warns while the cross-pump fraud check is off (test mode only).
+// Every admin page warns while test mode is on (fraud check off, alert emails not sent).
 // navCounts: the side navigation badges, refreshed on every navigation and by AppShell's timer.
 export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
 	depends('app:nav-counts');
 	return {
-		fraudCheckDisabled: await isFraudCheckDisabled(),
+		testMode: await getTestMode(),
 		navCounts: await loadNavCounts(
 			'admin',
 			locals.user!.id,

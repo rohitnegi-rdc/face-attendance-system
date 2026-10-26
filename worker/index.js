@@ -326,14 +326,10 @@ async function pairingWindowHours(db) {
 	return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 24;
 }
 
-// Same rule as isFraudCheckDisabled in src/lib/server/settings.ts: an admin can switch the
-// cross-pump check off only while TEST_MODE=true; otherwise a stored value is ignored.
-const TEST_MODE = process.env.TEST_MODE?.trim() === 'true';
-async function fraudCheckDisabled(db) {
-	if (!TEST_MODE) return false;
-	const { rows } = await db.query(
-		`SELECT value FROM app_settings WHERE key = 'fraud_check_disabled'`
-	);
+// Same switch as getTestMode in src/lib/server/settings.ts (admin, /admin/settings): while on,
+// the cross-pump fraud check is off and the fraud alert email is logged instead of sent.
+async function testModeOn(db) {
+	const { rows } = await db.query(`SELECT value FROM app_settings WHERE key = 'test_mode'`);
 	return rows[0]?.value === 'true';
 }
 
@@ -541,6 +537,14 @@ async function processJob(job) {
 				[pump.plant_id]
 			);
 			const plantInfo = plantRows[0] || {};
+			if (await testModeOn(pool)) {
+				log(
+					'info',
+					{ requestId, sessionId: session.id, pumpCode: pump.pump_code },
+					'fraud alert email NOT sent (test mode)'
+				);
+				return;
+			}
 			await sendFraudAlertEmail(
 				{
 					plantManagerEmail: plantInfo.manager_email,
@@ -558,7 +562,7 @@ async function processJob(job) {
 			return;
 		}
 
-		const skipFraudCheck = await fraudCheckDisabled(pool);
+		const skipFraudCheck = await testModeOn(pool);
 		if (skipFraudCheck) {
 			log('warn', { requestId, sessionId: session.id }, 'cross-pump fraud check off (test mode)');
 		}
@@ -579,7 +583,7 @@ async function processJob(job) {
 					const vec = toVectorLiteral(face.embedding);
 
 					// CROSS-PUMP CHECK (faceQueries.js): Area-scoped, same-shift-date faces only.
-					// Skipped only when an admin switched it off in test mode (fraudCheckDisabled).
+					// Skipped only while an admin has test mode on (testModeOn).
 					const crossMatch = skipFraudCheck
 						? undefined
 						: await findCrossPumpMatch(client, {

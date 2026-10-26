@@ -202,7 +202,7 @@ reference that is also in the server log (`handleError` in `hooks.server.ts`). E
 | FRD-10 | `fraud_detected` session marked normal by admin | Reprocessed once; pump re-enabled; never re-flagged | 1 | P1 | Partial |
 | FRD-11 | Admin confirms fraud; a resolved flag cannot be resolved again | Worker stays absent; second decision refused | 1 | P1 | Covered (fraud-review-admin.spec) |
 | FRD-12 | Pump review of a photo with a face already marked at another pump (bug 2026-10-21: "Needs review" row had no face) | Status API gives the held face crop from this photo (`fraud_flags.face_crop_url`), the pump page shows it as a face row with preview; guest faces get rows too | 1 | P1 | Covered (fraud-review-admin.spec) |
-| FRD-13 | Test mode (`TEST_MODE=true`): admin switches the cross-pump fraud check off, then on | Off: same person at two pumps gives no flag and a worker at each, every admin page warns; on: flagged again; both audited (`set_fraud_check`). Without TEST_MODE the switch is hidden, the action is refused and the worker ignores a stored value (not covered: the gate runs with TEST_MODE=true) | 1 | P1 | Covered (fraud-review-admin.spec) |
+| FRD-13 | Test mode, an admin switch at /admin/settings with no server env (changed 2026-10-26) | Always shown on the settings page; on: same person at two pumps gives no flag and a worker at each, every admin page shows a red banner with since when and by whom; off: flagged again, and the old `fraud_check_disabled` key (removed by migration 038) never switches the check off; Reset to production defaults turns it off; audited (`set_test_mode`) | 1 | P1 | Covered (fraud-review-admin.spec) |
 | FRD-14 | Worker at pump B yesterday (sharp face) and today (worse face); at pump A a face close only to yesterday's photo | No flag: the check compares only faces saved from B's sessions of the same shift date, never older gallery faces | 1 | P0 | Covered (fraud-review-admin.spec, fixed 2026-10-23) |
 
 ### REV: pump review, approve, retry
@@ -323,6 +323,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | LOC-06 | Another plant's manager, anonymous email link | 404 for the other manager (page and action); anonymous gets 302 to login with `next=` | 1 | P0 | Covered |
 | LOC-07 | Approval email for a held shift (mail off: `MAIL_ENABLED` not true, nothing sent) | Logged to the plant's manager with the pump code and an absolute link `<origin>/plant-manager/approvals/<id>` (bug: was `<origin>../../plant-manager/...`) | 2 | P1 | Covered (added 2026-10-20) |
 | LOC-08 | Worker copies pump GPS from the optimizer feed (`dump.pump_events`, stand-in table in the test DB) | Matched by pump code (any case) or `gps_device_id`; blank coordinates and rows older than 2 h skipped; unknown ids logged; the copied reading lets a nearby shift start `ok` | 2 | P1 | Covered (added 2026-10-20) |
+| LOC-11 | Test mode on, a shift start held for location (added 2026-10-26) | The approval email is logged as not sent (test mode), with the plant manager as recipient; the plant manager still sees the approval in the app. The fraud alert email for a fake photo is held back the same way in the worker (not covered: the spoof check is off in the gate) | 2 | P1 | Covered (location.spec) |
 
 ### BAK: kept copy of failed and fraud photos (photo-backup.spec)
 

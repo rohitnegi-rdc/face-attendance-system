@@ -9,6 +9,7 @@ import {
 	action,
 	anonymous,
 	BASE_URL,
+	createAdmin,
 	createArea,
 	createPlantManager,
 	createPump,
@@ -244,6 +245,28 @@ test('LOC-07 held shift emails the plant manager an absolute approval link', asy
 	expect(mail.subject).toContain(pump.code);
 	// Regression: the link was once built as "<origin>../../plant-manager/...".
 	expect(mail.approvalUrl).toBe(`${BASE_URL}/plant-manager/approvals/${session.id}`);
+});
+
+test('LOC-11 in test mode a held shift is logged, not emailed, and still waits for approval', async () => {
+	test.skip(!process.env.REGRESSION_OUTPUT_DIR, 'needs the app log from run-regression');
+	const admin = await login((await createAdmin()).email);
+	expect((await action(admin, '/admin/settings?/testMode', { on: 'true' })).type).toBe('success');
+	try {
+		const { plantId } = await checkedArea();
+		const pump = await createPump(plantId);
+		const manager = await createPlantManager(plantId);
+		const { session } = await startShift(await login(pump.email), null);
+
+		const mails = await logLines('app', [session.id, 'location approval email']);
+		expect(mails).toHaveLength(1);
+		expect(mails[0].message).toBe('location approval email NOT sent (test mode)');
+		expect(mails[0].to).toEqual([manager.email]);
+		// The plant manager still has it to approve in the app.
+		const approvals = await (await login(manager.email)).get('/plant-manager/approvals');
+		expect(await approvals.text()).toContain(pump.code);
+	} finally {
+		await db.query(`DELETE FROM app_settings WHERE key = 'test_mode'`);
+	}
 });
 
 test('LOC-08 worker copies pump GPS from the feed, by pump code or GPS device id', async () => {

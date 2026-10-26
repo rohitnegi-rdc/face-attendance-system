@@ -7,6 +7,7 @@ import { escapeHtml, mailEnabled, mailer, mailFrom } from '$lib/server/mail';
 import type { PoolClient } from 'pg';
 import { query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
+import { isTestModeOn } from '$lib/server/settings';
 
 export const LOCATION_RADIUS_M = 100;
 // Pumps report about every 10 minutes and the worker copies every 5; 30 minutes allows a missed
@@ -150,6 +151,11 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 		);
 		const to = managers.map((m) => m.email).filter(Boolean);
 		if (!info) return;
+		// Test mode (admin switch): the plant manager still sees the approval in the app, no email.
+		if (await isTestModeOn()) {
+			logger.info({ sessionId, to }, 'location approval email NOT sent (test mode)');
+			return;
+		}
 		if (!mailEnabled()) {
 			logger.info(
 				{

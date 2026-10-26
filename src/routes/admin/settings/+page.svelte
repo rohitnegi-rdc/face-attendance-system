@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { formatDate } from '$lib/date';
+	import { formatDate, formatDateTime } from '$lib/date';
 	let { data, form } = $props();
 
 	const sourceLabel = { admin: 'Set here', env: 'From server env', default: 'Default' } as const;
@@ -7,6 +7,7 @@
 		update_settings: 'Changed settings',
 		reset_settings: 'Reset settings',
 		set_fraud_check: 'Switched fraud check',
+		set_test_mode: 'Switched test mode',
 		delete_session: 'Deleted a session',
 		clear_pump_attendance: 'Cleared pump data'
 	};
@@ -92,29 +93,51 @@
 		{/if}
 	</section>
 
-	{#if data.testMode}
-		<section class="surface surface--padded section" aria-labelledby="test-mode-heading">
-			<h2 id="test-mode-heading">Test mode</h2>
-			<p class="supporting-text">
-				The server runs in test mode (TEST_MODE=true), so the cross-pump fraud check can be switched
-				off to test with the same people at several pumps. Turn it back on, and set TEST_MODE=false
-				on the server, before real attendance starts.
+	<section
+		class="surface surface--padded section"
+		aria-labelledby="test-mode-heading"
+		data-testid="test-mode-section"
+	>
+		<h2 id="test-mode-heading">Test mode</h2>
+		<p class="supporting-text">
+			For testing with the same few people at several pumps. While test mode is on, the cross-pump
+			fraud check is off (the same person can be counted at two pumps) and fraud alert and location
+			approval emails are not sent, only logged. Password reset emails still go out. Every admin
+			page shows a red banner until it is turned off. Turn it off before real attendance starts.
+		</p>
+		<form
+			method="POST"
+			action="?/testMode"
+			class="test-mode-form"
+			onsubmit={(event) => {
+				if (
+					!data.testMode.on &&
+					!confirm(
+						'Turn test mode on? The fraud check stops and alert emails are not sent until it is turned off.'
+					)
+				)
+					event.preventDefault();
+			}}
+		>
+			<p>
+				Test mode:
+				<strong data-testid="test-mode-state">{data.testMode.on ? 'On' : 'Off'}</strong>
+				{#if data.testMode.on && data.testMode.since}
+					<span class="test-mode-since"
+						>since {formatDateTime(data.testMode.since)}{#if data.testMode.by}
+							by {data.testMode.by}{/if}</span
+					>
+				{/if}
 			</p>
-			<form method="POST" action="?/fraudCheck" class="test-mode-form">
-				<p>
-					Cross-pump fraud check:
-					<strong data-testid="fraud-check-state">{data.fraudCheckDisabled ? 'Off' : 'On'}</strong>
-				</p>
-				<input type="hidden" name="enabled" value={data.fraudCheckDisabled ? 'true' : 'false'} />
-				<button
-					type="submit"
-					class={data.fraudCheckDisabled ? 'button button--primary' : 'button button--secondary'}
-				>
-					{data.fraudCheckDisabled ? 'Turn fraud check on' : 'Turn fraud check off'}
-				</button>
-			</form>
-		</section>
-	{/if}
+			<input type="hidden" name="on" value={data.testMode.on ? 'false' : 'true'} />
+			<button
+				type="submit"
+				class={data.testMode.on ? 'button button--primary' : 'button button--secondary'}
+			>
+				{data.testMode.on ? 'Turn test mode off' : 'Turn test mode on'}
+			</button>
+		</form>
+	</section>
 
 	<section class="surface surface--padded section" aria-labelledby="audit-heading">
 		<h2 id="audit-heading">Admin audit log</h2>
@@ -164,6 +187,9 @@
 		margin: 0;
 	}
 	.reset-form {
+	.test-mode-since {
+		color: var(--ink-muted);
+	}
 		margin-top: var(--space-3);
 	}
 	code {

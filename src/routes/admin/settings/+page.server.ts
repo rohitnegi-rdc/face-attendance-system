@@ -5,18 +5,17 @@ import { logger } from '$lib/server/log';
 import {
 	ATTENDANCE_SETTING_DEFAULTS,
 	ATTENDANCE_SETTING_LIMITS,
-	FRAUD_CHECK_DISABLED_KEY,
+	TEST_MODE_KEY,
 	getAttendanceSettingsWithSource,
-	isFraudCheckDisabled,
-	isTestMode,
+	getTestMode,
 	validateAttendanceSettings,
 	type AttendanceSettings
 } from '$lib/server/settings';
 
 export const load: PageServerLoad = async () => {
-	const [settings, fraudCheckDisabled, auditLog] = await Promise.all([
+	const [settings, testMode, auditLog] = await Promise.all([
 		getAttendanceSettingsWithSource(),
-		isFraudCheckDisabled(),
+		getTestMode(),
 		query<any>(
 			`SELECT l.id, l.action, l.target_type, l.target_id, l.details, l.created_at, ad.email AS admin_email
 			 FROM admin_audit_log l LEFT JOIN admins ad ON ad.id = l.admin_id
@@ -27,8 +26,7 @@ export const load: PageServerLoad = async () => {
 		settings,
 		defaults: ATTENDANCE_SETTING_DEFAULTS,
 		limits: ATTENDANCE_SETTING_LIMITS,
-		testMode: isTestMode(),
-		fraudCheckDisabled,
+		testMode,
 		auditLog
 	};
 };
@@ -83,57 +81,57 @@ export const actions: Actions = {
 		logger.warn({ adminId, settings: next }, 'attendance settings changed');
 		return { success: true, message: 'Settings saved. They apply to the next submission.' };
 	},
-	// Test mode only: switch the cross-pump fraud check off or back on.
-	fraudCheck: async ({ request, locals }) => {
-		if (!isTestMode()) {
-			return fail(403, { message: 'The fraud check can only be switched off in test mode.' });
-		}
-		const enabled = (await request.formData()).get('enabled') === 'true';
+	// Test mode on or off: the cross-pump fraud check and the attendance alert emails.
+	testMode: async ({ request, locals }) => {
+		const on = (await request.formData()).get('on') === 'true';
 		const adminId = locals.user!.id;
 		const client = await pool.connect();
 		try {
 			await client.query('BEGIN');
-			if (enabled) {
-				await client.query('DELETE FROM app_settings WHERE key = $1', [FRAUD_CHECK_DISABLED_KEY]);
-			} else {
+			if (on) {
 				await client.query(
 					`INSERT INTO app_settings (key, value, updated_by_admin_id, updated_at)
 					 VALUES ($1, 'true', $2, now())
 					 ON CONFLICT (key) DO UPDATE
 					 SET value = 'true', updated_by_admin_id = EXCLUDED.updated_by_admin_id, updated_at = now()`,
-					[FRAUD_CHECK_DISABLED_KEY, adminId]
+					[TEST_MODE_KEY, adminId]
 				);
+			} else {
+				await client.query('DELETE FROM app_settings WHERE key = $1', [TEST_MODE_KEY]);
 			}
 			await client.query(
 				`INSERT INTO admin_audit_log (admin_id, action, target_type, details)
-				 VALUES ($1, 'set_fraud_check', 'app_settings', $2)`,
-				[adminId, JSON.stringify({ enabled })]
+				 VALUES ($1, 'set_test_mode', 'app_settings', $2)`,
+				[adminId, JSON.stringify({ on })]
 			);
 			await client.query('COMMIT');
 		} catch (saveError) {
 			await client.query('ROLLBACK').catch(() => {});
-			logger.error({ adminId, error: String(saveError) }, 'fraud check switch failed');
-			return fail(500, { message: 'Could not change the fraud check. Nothing was changed.' });
+			logger.error({ adminId, error: String(saveError) }, 'test mode switch failed');
+			return fail(500, { message: 'Could not change test mode. Nothing was changed.' });
 		} finally {
 			client.release();
 		}
-		logger.warn({ adminId, enabled }, 'cross-pump fraud check switched');
+		logger.warn({ adminId, on }, 'test mode switched');
 		return {
 			success: true,
-			message: enabled
-				? 'Fraud check is on again for the next photo.'
-				: 'Fraud check is off. Photos are not checked against other pumps.'
+			message: on
+				? 'Test mode is on. The fraud check is off and alert emails are not sent.'
+				: 'Test mode is off. The fraud check and alert emails are back on for the next photo.'
 		};
 	},
 	reset: async ({ locals }) => {
 		await pool.query(`DELETE FROM app_settings WHERE key = ANY($1::text[])`, [
-			[...Object.keys(ATTENDANCE_SETTING_DEFAULTS), FRAUD_CHECK_DISABLED_KEY]
+			[...Object.keys(ATTENDANCE_SETTING_DEFAULTS), TEST_MODE_KEY]
 		]);
 		await pool.query(
 			`INSERT INTO admin_audit_log (admin_id, action, target_type, details)
 			 VALUES ($1, 'reset_settings', 'app_settings', '{}'::jsonb)`,
 			[locals.user!.id]
 		);
-		return { success: true, message: 'Settings reset to the production defaults.' };
+		return {
+			success: true,
+			message: 'Settings reset to the production defaults. Test mode is off.'
+		};
 	}
 };

@@ -414,13 +414,21 @@ test('FRD-12 the pump sees the held face from its own photo, not the other pumpâ
 	expect(status.fraud_flags[0].source_photo_crop_url).toBe(ownFace);
 });
 
-test('FRD-13 in test mode an admin can switch the fraud check off and back on, audited', async () => {
+test('FRD-13 the admin turns test mode on and off: fraud check off, banner, audited', async () => {
 	const adminAccount = await createAdmin();
 	const admin = await login(adminAccount.email);
 	try {
-		const off = await action(admin, '/admin/settings?/fraudCheck', { enabled: 'false' });
-		expect(off.type).toBe('success');
-		expect(await (await admin.get('/admin')).text()).toContain('cross-pump fraud check is off');
+		// No server setting needed: the switch is always on the settings page.
+		const settings = await (await admin.get('/admin/settings')).text();
+		expect(settings).toContain('data-testid="test-mode-section"');
+		expect(settings).toMatch(/data-testid="test-mode-state"[^>]*>Off</);
+
+		const on = await action(admin, '/admin/settings?/testMode', { on: 'true' });
+		expect(on.type).toBe('success');
+		const home = await (await admin.get('/admin')).text();
+		expect(home).toContain('data-testid="test-mode-banner"');
+		expect(home).toContain(adminAccount.email);
+		expect(home).toContain('emails are not sent');
 
 		// Same person at two pumps of one Area: no flag, counted as a worker at both.
 		const [a, b] = await sameAreaPumps(2);
@@ -429,19 +437,30 @@ test('FRD-13 in test mode an admin can switch the fraud check off and back on, a
 		expect(await fraudFlagsOn(sessionB)).toBe(0);
 		expect(await count('SELECT 1 FROM persons WHERE pump_id = $1', [b.id])).toBe(1);
 
-		const on = await action(admin, '/admin/settings?/fraudCheck', { enabled: 'true' });
-		expect(on.type).toBe('success');
+		const off = await action(admin, '/admin/settings?/testMode', { on: 'false' });
+		expect(off.type).toBe('success');
+		expect(await (await admin.get('/admin')).text()).not.toContain('test-mode-banner');
+		// The old env-gated key (removed by migration 038) never switches the check off.
+		await db.query(
+			`INSERT INTO app_settings (key, value) VALUES ('fraud_check_disabled', 'true')
+			 ON CONFLICT (key) DO UPDATE SET value = 'true'`
+		);
 		const [c, d] = await sameAreaPumps(2);
 		await recordSession(c.context, ['FRD13on']);
 		expect(await fraudFlagsOn(await submitAndWait(d.context, ['FRD13on']))).toBe(1);
 
 		const audit = await db.query(
-			`SELECT details FROM admin_audit_log WHERE admin_id = $1 AND action = 'set_fraud_check'
+			`SELECT details FROM admin_audit_log WHERE admin_id = $1 AND action = 'set_test_mode'
 			 ORDER BY created_at`,
 			[adminAccount.id]
 		);
-		expect(audit.rows.map((row) => row.details.enabled)).toEqual([false, true]);
+		expect(audit.rows.map((row) => row.details.on)).toEqual([true, false, true]);
 	} finally {
-		await db.query(`DELETE FROM app_settings WHERE key = 'fraud_check_disabled'`);
+		await db.query(`DELETE FROM app_settings WHERE key IN ('test_mode', 'fraud_check_disabled')`);
 	}
 });
+		// Reset to production defaults also turns test mode off.
+		await action(admin, '/admin/settings?/testMode', { on: 'true' });
+		expect((await action(admin, '/admin/settings?/reset', {})).type).toBe('success');
+		expect(await count(`SELECT 1 FROM app_settings WHERE key = 'test_mode'`)).toBe(0);
+

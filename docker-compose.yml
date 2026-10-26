@@ -94,7 +94,6 @@ services:
       EVENING_PAIRING_WINDOW_HOURS: '${EVENING_PAIRING_WINDOW_HOURS:-24}'
       EVENING_MIN_GAP_MINUTES: '${EVENING_MIN_GAP_MINUTES:-540}'
       # true lets an admin switch off the cross-pump fraud check at /admin/settings (testing only).
-      TEST_MODE: '${TEST_MODE:-false}'
       AI_SERVICE_URL: http://ai-service:8000
       PORT: '3000'
       BODY_SIZE_LIMIT: '20000000'
@@ -161,7 +160,6 @@ services:
       WORKER_HEARTBEAT_INTERVAL_MS: '${WORKER_HEARTBEAT_INTERVAL_MS:-5000}'
       WORKER_HEARTBEAT_TIMEOUT_SECONDS: '${WORKER_HEARTBEAT_TIMEOUT_SECONDS:-20}'
       PHOTO_SPOOF_CHECK_ENABLED: '${PHOTO_SPOOF_CHECK_ENABLED:-false}'
-      TEST_MODE: '${TEST_MODE:-false}'
       LOG_RETENTION_DAYS: '${LOG_RETENTION_DAYS:-30}'
       GEMINI_API_KEY: '${GEMINI_API_KEY:-}'
       GEMINI_MODEL: '${GEMINI_MODEL:-gemini-3.5-flash-lite}'

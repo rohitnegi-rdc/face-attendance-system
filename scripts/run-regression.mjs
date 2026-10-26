@@ -340,8 +340,6 @@ function serviceEnv(lane) {
 		EVENING_MIN_GAP_MINUTES: '',
 		EVENING_PAIRING_WINDOW_HOURS: '',
 		PHOTO_SPOOF_CHECK_ENABLED: 'false',
-		// Test mode on, so FRD-13 can switch the fraud check off. It stays on unless a test does that.
-		TEST_MODE: 'true',
 		GEMINI_API_KEY: '',
 		SMTP_HOST: '',
 		// Emails are logged, never sent; LOC-07 and PWD-01 read the log line (link and recipients).

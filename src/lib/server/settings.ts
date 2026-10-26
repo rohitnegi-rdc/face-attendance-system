@@ -84,21 +84,28 @@ export function validateAttendanceSettings(settings: AttendanceSettings): string
 	return null;
 }
 
-// Test mode (server env TEST_MODE=true) lets an admin switch off the cross-pump fraud check at
-// /admin/settings, to test with the same people at several pumps. Outside test mode the switch is
-// hidden and a stored value is ignored, so production always runs the check (§2).
-// worker/index.js applies the same rule (fraudCheckDisabled); keep the key name in sync.
-export const FRAUD_CHECK_DISABLED_KEY = 'fraud_check_disabled';
+// Test mode: one admin switch at /admin/settings, for testing with the same few people at several
+// pumps. While on, the cross-pump fraud check is off and the attendance alert emails (fraud alert,
+// location approval) are logged instead of sent; password reset emails still go, a person asks for
+// those. Off (no row) is production. Every admin page shows a banner while it is on.
+// worker/index.js reads the same key (testModeOn); keep the name in sync.
+export const TEST_MODE_KEY = 'test_mode';
 
-export function isTestMode(): boolean {
-	return process.env.TEST_MODE?.trim() === 'true';
+export type TestModeState = { on: boolean; since: Date | null; by: string | null };
+
+export async function getTestMode(db: Pool | PoolClient = pool): Promise<TestModeState> {
+	const { rows } = await db.query<{ value: string; updated_at: Date; email: string | null }>(
+		`SELECT s.value, s.updated_at, ad.email
+		 FROM app_settings s LEFT JOIN admins ad ON ad.id = s.updated_by_admin_id
+		 WHERE s.key = $1`,
+		[TEST_MODE_KEY]
+	);
+	const row = rows[0];
+	return row?.value === 'true'
+		? { on: true, since: row.updated_at, by: row.email }
+		: { on: false, since: null, by: null };
 }
 
-export async function isFraudCheckDisabled(db: Pool | PoolClient = pool): Promise<boolean> {
-	if (!isTestMode()) return false;
-	const { rows } = await db.query<{ value: string }>(
-		'SELECT value FROM app_settings WHERE key = $1',
-		[FRAUD_CHECK_DISABLED_KEY]
-	);
-	return rows[0]?.value === 'true';
+export async function isTestModeOn(db: Pool | PoolClient = pool): Promise<boolean> {
+	return (await getTestMode(db)).on;
 }
