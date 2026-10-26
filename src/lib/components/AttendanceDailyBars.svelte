@@ -20,11 +20,15 @@
 	const padding = 16;
 	const barAreaHeight = 220;
 	const labelAreaHeight = 56;
+	// The day total sits above its bar in its own row, so it never overlaps a segment number.
+	const totalAreaHeight = 22;
+	// A segment thinner than this has no room for its number (the hover title still has it).
+	const minLabelHeight = 16;
 
 	const chartWidth = $derived(
 		orderedData.length ? padding * 2 + orderedData.length * (barWidth + gap) - gap : padding * 2
 	);
-	const chartHeight = barAreaHeight + labelAreaHeight;
+	const chartHeight = totalAreaHeight + barAreaHeight + labelAreaHeight;
 
 	const maxTotal = $derived(
 		Math.max(...orderedData.map((d: any) => d.present + d.morningOnly + d.eveningOnly + d.absent), 1)
@@ -78,14 +82,14 @@
 		{@const x = barX(i)}
 		{@const label = formatDayLabel(d.day)}
 		{@const total = d.present + d.morningOnly + d.eveningOnly + d.absent}
-		<g>
+		<g transform={`translate(0 ${totalAreaHeight})`}>
 			{#each segments(d) as seg}
 				{#if seg.value > 0}
 					<rect class={seg.cls} {x} y={seg.y} width={barWidth} height={seg.height}>
 						<title>{seg.key}: {seg.value}</title>
 					</rect>
 				{/if}
-				{#if seg.value > 0 && seg.key !== 'absent'}
+				{#if seg.value > 0 && seg.key !== 'absent' && seg.height >= minLabelHeight}
 					<text
 						class="seg-label {seg.cls}-label"
 						x={x + barWidth / 2}
@@ -96,7 +100,7 @@
 				{/if}
 			{/each}
 			<rect class="bar-outline" {x} y={0} width={barWidth} height={barAreaHeight} fill="none" />
-			<text class="total-label" x={x + barWidth / 2} y={12} text-anchor="middle">{total}</text>
+			<text class="total-label" x={x + barWidth / 2} y={-8} text-anchor="middle">{total}</text>
 			<text class="day-label" x={x + barWidth / 2} y={barAreaHeight + 16} text-anchor="middle"
 				>{label.weekday}</text
 			>
