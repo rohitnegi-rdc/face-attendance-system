@@ -5,7 +5,7 @@
 import ExcelJS from 'exceljs';
 import { query } from '$lib/server/db';
 import { personDisplayLabel } from '$lib/personLabel';
-import { addDaysStr, dateKey, formatDate, isDateKey } from '$lib/date';
+import { addDaysStr, dateKey, formatDate, formatDateTime, isDateKey } from '$lib/date';
 import { shiftOutcomeLabel } from '$lib/shiftLabels';
 import { todayIST } from '$lib/server/time';
 import { heldShiftStatus } from '$lib/server/locationCheck';
@@ -181,7 +181,7 @@ function dataSheet(
 	return sheet;
 }
 
-const DATE_FMT = 'ddd dd mmm yyyy';
+const DATE_FMT = 'dd-mm-yyyy';
 
 export async function buildAttendanceReport(scope: ReportScope, filters: ReportFilters) {
 	const { from, to } = reportRange(filters);
@@ -261,7 +261,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		`WITH ${scopeCte}
 		SELECT s.session_date::text AS session_date, s.session_type, s.status, s.pairing_status,
 		       s.closed_by, s.error_reason, sc.pump_code, sc.vendor_name, sc.plant_name, sc.area_name,
-		       to_char(s.submitted_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY HH24:MI') AS sent_at,
+		       to_char(s.submitted_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY HH24:MI') AS sent_at,
 		       (SELECT count(*)::int FROM attendance_face_evidence e WHERE e.session_id = s.id) AS people
 		FROM attendance_sessions s JOIN scope sc ON sc.id = s.pump_id
 		WHERE s.session_date BETWEEN ${FROM} AND ${TO}
@@ -385,11 +385,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 	workbook.views = [
 		{ x: 0, y: 0, width: 20000, height: 12000, firstSheet: 0, activeTab: 0, visibility: 'visible' }
 	];
-	const generated = new Date().toLocaleString('en-IN', {
-		timeZone: 'Asia/Kolkata',
-		dateStyle: 'medium',
-		timeStyle: 'short'
-	});
+	const generated = formatDateTime(new Date());
 	const period = from === to ? formatDate(from) : `${formatDate(from)} to ${formatDate(to)}`;
 
 	// --- Summary: what a manager reads first ------------------------------------------------
@@ -690,13 +686,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 			detail: c.detail,
 			reason: c.reason ?? '',
 			by: c.by_email ?? '',
-			at: c.at
-				? new Date(c.at).toLocaleString('en-IN', {
-						timeZone: 'Asia/Kolkata',
-						dateStyle: 'medium',
-						timeStyle: 'short'
-					})
-				: ''
+			at: c.at ? formatDateTime(c.at) : ''
 		})),
 		1,
 		'No corrections, duplicate marks or fraud flags in this period.'

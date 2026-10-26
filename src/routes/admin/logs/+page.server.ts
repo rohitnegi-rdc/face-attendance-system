@@ -32,7 +32,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	const lines = await query<LogLine>(
 		`SELECT l.id::text, l.level, l.service, l.message, l.request_id, l.session_id, l.details,
-		        to_char(l.logged_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH24:MI:SS') AS logged_at,
+		        to_char(l.logged_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH24:MI:SS') AS logged_at,
 		        coalesce(pu.pump_code, spu.pump_code) AS pump_code
 		 FROM system_logs l
 		 LEFT JOIN pumps pu ON pu.id::text = l.pump_id

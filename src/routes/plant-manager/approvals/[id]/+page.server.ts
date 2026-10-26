@@ -15,9 +15,9 @@ async function loadSession(id: string, managerId: string) {
 		`SELECT s.id, s.session_date::text AS session_date, s.status, s.location_status,
 		        s.location_issue, s.location_distance_m, s.location_note,
 		        s.gps_lat, s.gps_lng, s.pump_gps_lat, s.pump_gps_lng, s.pump_gps_at,
-		        to_char(s.submitted_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI am') AS sent_at,
-		        to_char(s.pump_gps_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon, HH12:MI am') AS pump_gps_time,
-		        to_char(s.location_decided_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI am') AS decided_at,
+		        to_char(s.submitted_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS sent_at,
+		        to_char(s.pump_gps_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS pump_gps_time,
+		        to_char(s.location_decided_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS decided_at,
 		        pu.pump_code, pl.name AS plant_name, pm.name AS decided_by,
 		        (SELECT count(*)::int FROM attendance_face_evidence e WHERE e.session_id = s.id) AS faces
 		 FROM attendance_sessions s

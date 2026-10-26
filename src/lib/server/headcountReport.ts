@@ -3,7 +3,7 @@
 // Same scope contract as attendanceReport.ts, so admin and plant manager read the same numbers.
 import ExcelJS from 'exceljs';
 import { query } from '$lib/server/db';
-import { addDaysStr, formatDayLabel } from '$lib/date';
+import { addDaysStr, formatDate, formatDayLabel } from '$lib/date';
 import { todayIST } from '$lib/server/time';
 import { heldShiftStatus } from '$lib/server/locationCheck';
 import type { ReportScope } from '$lib/server/attendanceReport';
@@ -142,16 +142,12 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 	});
 	const fixedCols = ['Pump No', 'Plant', 'Vendor'];
 	const lastCol = fixedCols.length + days.length + 2;
-	const monthLabel = new Date(`${monthStart}T00:00:00Z`).toLocaleString('en-IN', {
-		month: 'long',
-		year: 'numeric',
-		timeZone: 'UTC'
-	});
+	const monthLabel = `${formatDate(monthStart)} to ${formatDate(to)}`;
 
 	sheet.getCell('A1').value = `Pump headcount, ${monthLabel}`;
 	sheet.getCell('A1').font = { bold: true, size: 16, color: { argb: BRAND } };
 	sheet.getCell('A2').value =
-		`${scope.description}. Data up to ${to}. Financial year from ${fyStart}.`;
+		`${scope.description}. Data up to ${formatDate(to)}. Financial year from ${formatDate(fyStart)}.`;
 	sheet.getCell('A2').font = { color: { argb: MUTED } };
 	sheet.getCell('A3').value =
 		'Number = people matched in the start or end photo that day. "-" = no photo sent. ' +

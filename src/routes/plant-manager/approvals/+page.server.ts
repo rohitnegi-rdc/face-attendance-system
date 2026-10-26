@@ -9,8 +9,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const rows = await query<any>(
 		`SELECT s.id, s.session_date::text AS session_date, s.location_status, s.location_issue,
 		        s.location_distance_m, s.pump_gps_at, s.location_note,
-		        to_char(s.submitted_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon, HH12:MI am') AS sent_at,
-		        to_char(s.location_decided_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon, HH12:MI am') AS decided_at,
+		        to_char(s.submitted_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS sent_at,
+		        to_char(s.location_decided_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS decided_at,
 		        pu.pump_code, pl.name AS plant_name, pm.name AS decided_by
 		 FROM attendance_sessions s
 		 JOIN pumps pu ON pu.id = s.pump_id JOIN plants pl ON pl.id = pu.plant_id

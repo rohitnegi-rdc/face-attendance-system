@@ -39,7 +39,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		`SELECT pu.id, pu.pump_code, pu.status, pu.disabled_at, pu.disabled_reason, pu.gps_device_id,
 		        a.location_check_enabled,
 		        (SELECT json_build_object('lat', l.lat, 'lng', l.lng, 'source', l.source,
-		                'at', to_char(l.recorded_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI am'))
+		                'at', to_char(l.recorded_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am'))
 		           FROM pump_locations l WHERE l.pump_id = pu.id
 		           ORDER BY l.recorded_at DESC LIMIT 1) AS latest_gps,
 		        pl.name AS plant_name, a.name AS area_name, v.name AS vendor_name, v.id AS vendor_id, a.id AS area_id

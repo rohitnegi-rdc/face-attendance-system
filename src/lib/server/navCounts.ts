@@ -20,7 +20,7 @@ export function pumpScope(role: NavRole, alias: string) {
 export async function listOpenFraud(role: NavRole, userId: string) {
 	return query<any>(
 		`SELECT ff.id, ff.face_crop_url, ff.similarity_score, ff.is_operator,
-		        to_char(ff.created_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon, HH12:MI am') AS flagged_at,
+		        to_char(ff.created_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS flagged_at,
 		        pu.pump_code AS flagged_pump, fpl.name AS flagged_plant,
 		        mp.pump_code AS matched_pump, mpl.name AS matched_plant
 		 FROM fraud_flags ff

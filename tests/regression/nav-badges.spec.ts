@@ -196,9 +196,9 @@ test('NAV-06 a fraud case opens side by side, only for users with a pump in the 
 	const refused = detail.split('data-testid="fraud-sighting-refused"')[1].split('</article>')[0];
 	expect(first).toContain(a.code);
 	expect(refused).toContain(b.code);
-	// IST date and time, formatted: "Thu, 22 Oct 2026" and "12:32 pm".
+	// IST date and time, formatted: "22-10-2026" and "12:32 pm" (UI-14).
 	for (const side of [first, refused]) {
-		expect(side).toMatch(/[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4}/);
+		expect(side).toMatch(/\b\d{2}-\d{2}-\d{4}\b/);
 		expect(side).toMatch(/\d{2}:\d{2} (am|pm)/);
 		// Both pumps are in this manager's plant, so both group photos open.
 		expect(side).toContain('View group photo');

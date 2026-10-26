@@ -15,14 +15,22 @@ export function isDateKey(value: string): boolean {
 	return parsed.isValid() && parsed.format('YYYY-MM-DD') === value;
 }
 
-// Non-breaking spaces keep a date on one line in narrow table cells; a wrapped date is hard to
-// scan. Text matchers that normalise whitespace still see "Thu, 15 Oct 2026".
+// Every date on screen, in reports and in emails is DD-MM-YYYY ("15-10-2026"), India time.
+// The SQL to_char formats and the Excel cell format use the same pattern.
+export const DATE_FORMAT = 'DD-MM-YYYY';
+
+// A non-breaking space keeps a time on one line in narrow table cells.
 const NBSP = '\u00a0';
 
 export function formatDate(value: string | Date): string {
 	const day =
 		typeof value === 'string' && isDateKey(value) ? dayjs.tz(value, IST) : dayjs(value).tz(IST);
-	return day.format('ddd, DD MMM YYYY').replaceAll(' ', NBSP);
+	return day.format(DATE_FORMAT);
+}
+
+// "15-10-2026, 11:16 am", India time.
+export function formatDateTime(value: string | Date): string {
+	return `${formatDate(value)}, ${formatTime(value)}`;
 }
 
 // "11:16 am", India time.
@@ -51,7 +59,7 @@ export function startOfMonthStr(dateStr: string): string {
 
 export function formatDayLabel(value: string): { weekday: string; date: string } {
 	const d = dayjs.tz(value, IST);
-	return { weekday: d.format('ddd'), date: d.format('D MMM') };
+	return { weekday: d.format('ddd'), date: d.format('DD-MM') };
 }
 
 // Every day of a calendar grid: the whole range, and never less than the week ending on `to`,

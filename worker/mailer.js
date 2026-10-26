@@ -6,6 +6,18 @@
 // and DB state are the source of truth; email is a best-effort notification on top of it.
 import nodemailer from 'nodemailer';
 
+// DD-MM-YYYY, the date format used everywhere in the app. A DATE column can arrive as a
+// "YYYY-MM-DD" string or as a Date at local midnight, so both are read by their date parts.
+function formatSessionDate(value) {
+	if (!value) return 'unknown date';
+	if (value instanceof Date) {
+		const pad = (n) => String(n).padStart(2, '0');
+		return `${pad(value.getDate())}-${pad(value.getMonth() + 1)}-${value.getFullYear()}`;
+	}
+	const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+	return m ? `${m[3]}-${m[2]}-${m[1]}` : String(value);
+}
+
 let transporter;
 function getTransporter() {
 	if (!process.env.SMTP_HOST) return null;
@@ -61,7 +73,7 @@ export async function sendFraudAlertEmail(
 	const subject = `Fraud alert: Fake photo detected at pump ${pumpCode}`;
 	const html = `
 		<p>A submitted attendance photo at pump <strong>${pumpCode}</strong>${plantName ? ` (${plantName}${areaName ? `, ${areaName}` : ''})` : ''} was flagged as a fake/screen-replay image by the automated anti-spoofing check.</p>
-		<p><strong>Session:</strong> ${sessionType ?? 'unknown'} &middot; ${sessionDate ?? 'unknown date'}</p>
+		<p><strong>Session:</strong> ${sessionType ?? 'unknown'} &middot; ${formatSessionDate(sessionDate)}</p>
 		<p>The pump's login has been disabled and no attendance was recorded from this photo. The flagged photo is attached.</p>
 		<p>If this was not actually fraud, an admin can review it from the admin panel and mark it normal, which restores the pump's login and reprocesses this photo for real attendance.</p>
 		${plantManagerName ? `<p>Sent to: ${plantManagerName}</p>` : ''}

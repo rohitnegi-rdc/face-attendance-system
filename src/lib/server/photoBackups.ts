@@ -27,7 +27,7 @@ export async function listPhotoBackups(managerId: string | null): Promise<PhotoB
 	return query<PhotoBackup>(
 		`SELECT b.id, b.session_id, b.pump_id, pu.pump_code, pl.name AS plant_name, a.name AS area_name,
 		        b.session_date::text AS session_date, b.session_type, b.status, b.reason, b.error_detail,
-		        to_char(b.uploaded_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI am') AS uploaded_at
+		        to_char(b.uploaded_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS uploaded_at
 		 FROM attendance_photo_backups b
 		 JOIN pumps pu ON pu.id = b.pump_id
 		 JOIN plants pl ON pl.id = pu.plant_id

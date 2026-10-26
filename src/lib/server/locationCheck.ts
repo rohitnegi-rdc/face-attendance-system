@@ -137,7 +137,7 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 		}>(
 			`SELECT pu.pump_code, pl.name AS plant_name, s.location_issue AS issue,
 			        s.location_distance_m AS distance_m, s.pump_gps_at,
-			        to_char(s.submitted_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI am') AS sent_at
+			        to_char(s.submitted_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS sent_at
 			 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
 			 JOIN plants pl ON pl.id = pu.plant_id WHERE s.id = $1`,
 			[sessionId]

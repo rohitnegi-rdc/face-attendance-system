@@ -51,7 +51,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		query<any>(
 			`SELECT ac.id, p.display_seq, p.name, ac.reason, ac.corrected_morning_matched,
 			        ac.corrected_evening_matched, coalesce(adm.email, pm.name) AS corrected_by,
-			        to_char(ac.corrected_at AT TIME ZONE 'Asia/Kolkata', 'Dy, DD Mon YYYY, HH12:MI am') AS corrected_at
+			        to_char(ac.corrected_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS corrected_at
 			 FROM attendance_corrections ac JOIN persons p ON p.id = ac.person_id
 			 LEFT JOIN admins adm ON adm.id = ac.corrected_by_admin_id
 			 LEFT JOIN plant_managers pm ON pm.id = ac.corrected_by_manager_id

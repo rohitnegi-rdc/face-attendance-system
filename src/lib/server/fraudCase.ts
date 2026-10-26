@@ -10,7 +10,7 @@ import { personShortLabel } from '$lib/personLabel';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Dates and times in IST, computed in SQL from timestamptz (never the server's zone).
-const DAY = `'Dy, DD Mon YYYY'`;
+const DAY = `'DD-MM-YYYY'`;
 const TIME = `'HH12:MI am'`;
 
 function sighting(prefix: 's' | 'm') {
