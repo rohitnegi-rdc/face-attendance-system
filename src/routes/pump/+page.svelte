@@ -105,8 +105,6 @@
 	let currentSessionId = $state('');
 	let retryingSession = $state(false);
 	let approvingReview = $state(false);
-	let endingSession = $state(false);
-	let endSessionError = $state('');
 	let selectedWorkerPreview = $state<WorkerPreview | null>(null);
 	let workerPreviewDialog = $state<HTMLElement>();
 	let workerPreviewCloseButton = $state<HTMLButtonElement>();
@@ -654,31 +652,6 @@
 		if (today?.state === 'evening') return 'End shift';
 		return 'Start shift';
 	});
-
-	async function endSession() {
-		if (endingSession) return;
-		if (
-			!confirm(
-				'End this shift without a photo? Workers keep start-only attendance. Your next photo will start a new shift.'
-			)
-		)
-			return;
-		endingSession = true;
-		endSessionError = '';
-		try {
-			const res = await fetch(resolve('/api/attendance/end'), { method: 'POST' });
-			if (!res.ok) {
-				endSessionError = await failureMessage(res, 'Could not end the session.');
-				return;
-			}
-			await loadToday();
-		} catch {
-			toastConnectionLost();
-			endSessionError = 'Could not connect. Please try again.';
-		} finally {
-			endingSession = false;
-		}
-	}
 
 	function formatIST(value: string | null | undefined) {
 		if (!value) return '';
@@ -1299,23 +1272,6 @@
 							</dd>
 						</div>
 					</dl>
-					{#if today?.can_end_session}
-						<div class="end-session">
-							<p>
-								{t('Missed the end photo? End the shift here so your next photo starts a new one.')}
-							</p>
-							<button
-								class="button button--secondary full-button"
-								type="button"
-								onclick={endSession}
-								disabled={endingSession}
-								data-testid="end-session"
-							>
-								{endingSession ? t('Ending session') : t('End session')}
-							</button>
-							{#if endSessionError}<p class="capture-error">{t(endSessionError)}</p>{/if}
-						</div>
-					{/if}
 				</div>
 			{/if}
 		</aside>
@@ -2050,18 +2006,6 @@
 		column-gap: var(--space-4);
 		padding: var(--space-3) 0;
 		border-top: 1px solid var(--brand-mist);
-	}
-	.end-session {
-		display: grid;
-		gap: var(--space-3);
-		margin-top: 0;
-		padding-top: var(--space-4);
-		border-top: 1px solid var(--brand-mist);
-	}
-	.end-session p {
-		margin: 0;
-		color: var(--ink-muted);
-		font-size: var(--text-sm);
 	}
 	.session-details dt {
 		color: var(--ink-muted);

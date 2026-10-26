@@ -246,10 +246,6 @@ const HI: Record<string, string> = {
 	'Shift end opens {time}': 'शिफ्ट एंड {time} पर खुलेगा',
 	'Send the photos to end the shift': 'शिफ्ट एंड करने के लिए फोटो भेजें',
 	'Send the photos to start the shift': 'शिफ्ट स्टार्ट करने के लिए फोटो भेजें',
-	'Missed the end photo? End the shift here so your next photo starts a new one.':
-		'एंड फोटो छूट गई? शिफ्ट यहाँ खत्म करें ताकि अगली फोटो से नई शिफ्ट शुरू हो।',
-	'Ending session': 'सेशन खत्म हो रहा है',
-	'End session': 'सेशन खत्म करें',
 
 	// Worker preview
 	'No face crop was returned for this worker.': 'इस वर्कर का चेहरा नहीं मिला।',

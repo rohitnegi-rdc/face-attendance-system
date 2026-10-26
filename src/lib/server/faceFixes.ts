@@ -291,6 +291,63 @@ export async function undoMerge(client: PoolClient, mergeLogId: string, adminId:
 	return { keptPersonId: kept, mergedPersonId: merged, photos: sessions.length };
 }
 
+// Removes one worker for good (e.g. someone photographed only to test): their faces, days, totals,
+// flags and merge history go, along with any worker merged into them (the same person). The shift
+// photos stay; they hold other workers too. The removal is audited with what it deleted.
+export async function removeWorker(client: PoolClient, personId: string, adminId: string) {
+	const { rows: people } = await client.query<{ id: string; pump_id: string; name: string | null }>(
+		`WITH RECURSIVE gone AS (
+		   SELECT id FROM persons WHERE id = $1
+		   UNION SELECT p.id FROM persons p JOIN gone g ON p.merged_into_person_id = g.id
+		 )
+		 SELECT p.id, p.pump_id, p.name FROM persons p JOIN gone USING (id) FOR UPDATE OF p`,
+		[personId]
+	);
+	if (!people.length) throw new FaceFixError('Worker not found.');
+	const ids = people.map((person) => person.id);
+	const counts: Record<string, number> = {};
+	const remove = async (table: string, where: string) => {
+		const result = await client.query(`DELETE FROM ${table} WHERE ${where}`, [ids]);
+		counts[table] = result.rowCount ?? 0;
+	};
+	await client.query(
+		`UPDATE fraud_flags SET resolved_person_id = NULL WHERE resolved_person_id = ANY($1)`,
+		[ids]
+	);
+	await client.query(
+		`UPDATE attendance_review_flags SET resolved_person_id = NULL WHERE resolved_person_id = ANY($1)`,
+		[ids]
+	);
+	await remove('person_face_vectors', 'person_id = ANY($1)');
+	await remove('attendance_face_evidence', 'person_id = ANY($1)');
+	await remove('daily_person_attendance', 'person_id = ANY($1)');
+	await remove('person_attendance_yearly', 'person_id = ANY($1)');
+	await remove('fraud_flags', 'person_id = ANY($1)');
+	await remove('attendance_review_flags', 'person_id = ANY($1)');
+	await remove('attendance_corrections', 'person_id = ANY($1)');
+	await remove(
+		'attendance_duplicate_resolutions',
+		'kept_person_id = ANY($1) OR duplicate_person_id = ANY($1)'
+	);
+	await remove('person_merge_log', 'kept_person_id = ANY($1) OR merged_person_id = ANY($1)');
+	await remove('merge_review_decisions', 'lower_person_id = ANY($1) OR higher_person_id = ANY($1)');
+	await client.query(
+		`UPDATE persons SET merged_into_person_id = NULL WHERE merged_into_person_id = ANY($1)`,
+		[ids]
+	);
+	await remove('persons', 'id = ANY($1)');
+	await client.query(
+		`INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+		 VALUES ($1, 'remove_worker', 'person', $2, $3)`,
+		[
+			adminId,
+			personId,
+			JSON.stringify({ pump_id: people[0].pump_id, name: people[0].name, removed: ids, counts })
+		]
+	);
+	return { pumpId: people[0].pump_id, removed: ids.length, days: counts.daily_person_attendance };
+}
+
 export type FlagFix =
 	| { action: 'move'; personId: string }
 	| { action: 'new_worker'; name?: unknown }

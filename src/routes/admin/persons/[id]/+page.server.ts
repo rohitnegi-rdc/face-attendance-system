@@ -1,13 +1,14 @@
 import type { Actions, PageServerLoad } from './$types';
 import { query, queryOne } from '$lib/server/db';
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { createAttendanceReviewFlag } from '$lib/server/attendanceReview';
 import { shiftStillOpen } from '$lib/server/shiftSessions';
 import { renamePerson } from '$lib/server/personNames';
-import { moveFace, undoMerge } from '$lib/server/faceFixes';
+import { moveFace, removeWorker, undoMerge } from '$lib/server/faceFixes';
 import { formText, runFaceFix } from '$lib/server/faceFixActions';
 import { pumpWorkers } from '$lib/server/pumpWorkers';
 import { personDisplayLabel } from '$lib/personLabel';
+import { resolve } from '$app/paths';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -168,6 +169,16 @@ export const actions: Actions = {
 			const result = await undoMerge(client, mergeId, locals.user!.id);
 			return `Merge undone. The two workers are separate again; ${result.photos} photo(s) went back.`;
 		});
+	},
+	// Removes this worker for good (a test photo, someone who is not a worker); audited.
+	removeWorker: async ({ params, locals }) => {
+		let pumpId = '';
+		const result = await runFaceFix('remove_worker', locals.user!.id, async (client) => {
+			pumpId = (await removeWorker(client, params.id, locals.user!.id)).pumpId;
+			return 'Worker removed.';
+		});
+		if (!pumpId || !('success' in result) || !result.success) return result;
+		redirect(303, resolve(`/admin/pumps/${pumpId}`));
 	},
 	flagEvidence: async ({ params, request, locals }) => {
 		const form = await request.formData();

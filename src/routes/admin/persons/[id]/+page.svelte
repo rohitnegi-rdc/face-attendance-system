@@ -81,6 +81,24 @@
 		</label>
 		<button class="button button--secondary" type="submit">Save name</button>
 	</form>
+	<form
+		class="remove-form"
+		method="POST"
+		action="?/removeWorker"
+		onsubmit={(event) => {
+			if (
+				!confirm(
+					'Remove this worker for good? Their faces, attendance days and flags are deleted. The shift photos stay. This cannot be undone.'
+				)
+			)
+				event.preventDefault();
+		}}
+	>
+		<span>Not a real worker, for example a test photo? Remove them and their attendance.</span>
+		<button class="button button--danger" type="submit" data-testid="remove-worker"
+			>Remove worker</button
+		>
+	</form>
 	<MetricStrip {metrics} />
 	{#if form?.message}
 		<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
@@ -243,6 +261,16 @@
 </div>
 
 <style>
+	.remove-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2) var(--space-4);
+		margin-bottom: var(--space-5);
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
+	}
 	.person-page {
 		max-width: 64rem;
 	}
