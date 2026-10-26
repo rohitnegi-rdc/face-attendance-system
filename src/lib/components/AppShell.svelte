@@ -384,6 +384,8 @@
 		width: var(--sidebar-width);
 		flex-direction: column;
 		padding: var(--space-5) var(--space-3);
+		overflow-y: auto;
+		overscroll-behavior: contain;
 		background: var(--brand-white);
 		border-right: 1px solid var(--brand-mist);
 	}
