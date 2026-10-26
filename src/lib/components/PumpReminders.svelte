@@ -80,7 +80,9 @@
 	async function allow() {
 		if (state === 'asking') return;
 		state = 'asking';
-		const permission = await Notification.requestPermission();
+		const permission = await Notification.requestPermission().catch(
+			() => 'default' as NotificationPermission
+		);
 		if (permission !== 'granted') {
 			state = permission === 'denied' ? 'blocked' : 'ask';
 			return;
@@ -115,10 +117,14 @@
 			state = 'blocked';
 			return;
 		}
-		// A phone that has not answered yet: the browser's own question opens on the first tap
-		// anywhere on the pump screen (closing the guide counts). Browsers refuse to open it
-		// without a tap. The card stays as the fallback.
-		if (!laterThisVisit()) state = 'ask';
+		// A phone that has not answered yet (normally it was asked at Sign in): the browser's own
+		// question opens at once, before the guide is even read. Browsers that only ask after a
+		// tap answer "default" without showing anything; then the first tap anywhere on the pump
+		// screen (closing the guide counts) asks. The card stays as the fallback. Not now on the
+		// card stops both for this visit.
+		if (laterThisVisit()) return;
+		state = 'ask';
+		void allow();
 		const firstTap = (event: MouseEvent) => {
 			// The card's own buttons answer for themselves (Not now must not ask).
 			if ((event.target as Element | null)?.closest?.('[data-testid="pump-reminders"]')) return;

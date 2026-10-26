@@ -18,7 +18,7 @@ const DIM = 512;
 const photos = new Map();
 const failing = new Map(); // photo id -> failures left (Infinity = always)
 const calls = new Map();
-const pushes = new Map(); // push id -> Web Push messages received (REM-01)
+const pushes = new Map(); // push id -> Web Push messages received, in order (REM-01, REM-02)
 
 function seededRandom(seed) {
 	let state = crypto.createHash('sha256').update(seed).digest().readUInt32LE(0);
@@ -83,12 +83,17 @@ const server = http.createServer(async (request, response) => {
 		// message like a real one (201), /push-gone/<id> answers 410 like a phone that left.
 		const pushesFor = request.url?.match(/^\/__pushes\/([A-Za-z0-9_-]+)$/)?.[1];
 		if (request.method === 'GET' && pushesFor) {
-			return send(response, 200, { pushes: pushes.get(pushesFor) ?? 0 });
+			// Every message as received (encrypted body in base64 plus its headers), so a test can
+			// decrypt it like the phone does.
+			const received = pushes.get(pushesFor) ?? [];
+			return send(response, 200, { pushes: received.length, messages: received });
 		}
 		const pushTo = request.url?.match(/^\/push(-gone)?\/([A-Za-z0-9_-]+)$/);
 		if (request.method === 'POST' && pushTo) {
-			await readBody(request);
-			pushes.set(pushTo[2], (pushes.get(pushTo[2]) ?? 0) + 1);
+			const body = await readBody(request);
+			const received = pushes.get(pushTo[2]) ?? [];
+			received.push({ body: body.toString('base64'), headers: request.headers });
+			pushes.set(pushTo[2], received);
 			return send(response, pushTo[1] ? 410 : 201, {});
 		}
 		const body = await readBody(request);

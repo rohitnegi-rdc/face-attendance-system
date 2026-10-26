@@ -1,11 +1,13 @@
-// Shift end reminders by Web Push (migration 040). When the evening gap has passed since a shift
-// start and no shift end photo has come, every phone that allowed notifications for that pump
-// gets "time to end the shift"; 30 minutes later, if the end is still missing, a second one.
-// Never more than two per shift. Each reminder is claimed by one UPDATE, so two workers cannot
-// both send it. A phone the push service no longer knows (404/410) is removed.
+// Shift end reminders by Web Push (migration 040). The moment the evening gap has passed since a
+// shift start (the shift can end) and no shift end photo has come, every phone that allowed
+// notifications for that pump gets "time to end the shift"; then one every 15 minutes while the
+// end is still missing. Never more than four per shift. Each reminder is claimed by one UPDATE,
+// so two workers cannot both send it. A phone the push service no longer knows (404/410) is
+// removed.
 import webpush from 'web-push';
 
-export const SECOND_REMINDER_MINUTES = 30;
+export const REMINDER_EVERY_MINUTES = 15;
+export const MAX_REMINDERS = 4;
 
 // Same precedence as src/lib/server/settings.ts: admin setting > env > default (540 = 9 hours).
 async function eveningGapMinutes(db) {
@@ -29,15 +31,19 @@ function duration(minutes, hindi) {
 // Hindi first, then English: the phone shows it before the pump screen's language choice loads.
 function message(reminder, gapMinutes, sessionId) {
 	const first = reminder === 1;
+	const last = reminder === MAX_REMINDERS;
 	return {
 		title: first
 			? 'शिफ्ट एंड करने का समय / Time to end the shift'
-			: 'शिफ्ट एंड अभी बाकी है / Shift end is still pending',
+			: last
+				? 'आखिरी रिमाइंडर: शिफ्ट एंड करें / Last reminder: end the shift'
+				: 'शिफ्ट एंड अभी बाकी है / Shift end is still pending',
 		body: first
 			? `${duration(gapMinutes, true)} पूरे हो गए। अब शिफ्ट एंड की फोटो लें।\n` +
 				`${duration(gapMinutes, false)} are done. Take the Shift end photos now.`
-			: 'कृपया अभी शिफ्ट एंड की फोटो लें।\nPlease take the Shift end photos now.',
-		// The second reminder replaces the first on the phone instead of stacking.
+			: `कृपया अभी शिफ्ट एंड की फोटो लें। (रिमाइंडर ${reminder}/${MAX_REMINDERS})\n` +
+				`Please take the Shift end photos now. (Reminder ${reminder} of ${MAX_REMINDERS})`,
+		// Each reminder replaces the one before on the phone instead of stacking.
 		tag: `shift-end-${sessionId}`,
 		url: 'pump'
 	};
@@ -58,14 +64,15 @@ export async function sendEndReminders(db, log, pairingWindowHours) {
 		 WHERE s.session_type = 'morning' AND s.status = 'completed' AND s.pairing_status = 'open'
 		   AND s.submitted_at > now() - ($2 || ' hours')::interval
 		   AND ((s.end_reminders_sent = 0 AND s.submitted_at <= now() - $1 * interval '1 minute')
-		     OR (s.end_reminders_sent = 1 AND s.end_reminder_at <= now() - $3 * interval '1 minute'))
+		     OR (s.end_reminders_sent BETWEEN 1 AND $4::int - 1
+		         AND s.end_reminder_at <= now() - $3 * interval '1 minute'))
 		   AND NOT EXISTS (
 		     SELECT 1 FROM attendance_sessions e
 		     WHERE e.pump_id = s.pump_id AND e.session_type = 'evening'
 		       AND e.submitted_at > s.submitted_at AND e.status <> 'failed')
 		   AND EXISTS (SELECT 1 FROM push_subscriptions p WHERE p.pump_id = s.pump_id)
 		 RETURNING s.id, s.pump_id, s.end_reminders_sent AS reminder`,
-		[gapMinutes, String(await pairingWindowHours(db)), SECOND_REMINDER_MINUTES]
+		[gapMinutes, String(await pairingWindowHours(db)), REMINDER_EVERY_MINUTES, MAX_REMINDERS]
 	);
 
 	const vapidDetails = {

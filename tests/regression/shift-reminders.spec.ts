@@ -1,10 +1,12 @@
-// REM-01: shift end reminders by Web Push (migration 040, worker/endReminders.js). A pump phone
-// saves its push subscription; once the evening gap (9 hours) has passed since the shift start
-// the worker sends one reminder, 30 minutes later a second if the shift end is still missing,
-// and never a third. A phone the push service no longer knows (410) is removed; a shift that
-// already ended gets nothing. The stub AI server stands in for the push service.
-import { createECDH, randomBytes, randomUUID } from 'node:crypto';
-import { expect, test, type APIRequestContext } from '@playwright/test';
+// REM-01 / REM-02: shift end reminders by Web Push (migration 040, worker/endReminders.js). A pump
+// phone saves its push subscription; the moment the evening gap (9 hours) has passed since the
+// shift start the worker sends the first reminder, then one every 15 minutes while the shift end
+// is still missing, four at most. A phone the push service no longer knows (410) is removed; a
+// shift that already ended gets nothing. The stub AI server stands in for the push service and
+// keeps every message, so REM-02 decrypts it like the phone and hands it to the real service
+// worker, which must show it.
+import { createDecipheriv, createECDH, hkdfSync, randomBytes, randomUUID } from 'node:crypto';
+import { chromium, expect, test, type APIRequestContext } from '@playwright/test';
 import {
 	BASE_URL,
 	PASSWORD,
@@ -19,28 +21,83 @@ import {
 } from './helpers';
 
 const GAP_MINUTES = 540;
+const EVERY_MINUTES = 15;
+const MAX_REMINDERS = 4;
 
+// A phone's push keys: the private half stays here so the test can read what the worker sent.
 function phoneKeys() {
 	const ecdh = createECDH('prime256v1');
 	ecdh.generateKeys();
+	const auth = randomBytes(16);
 	return {
-		p256dh: ecdh.getPublicKey().toString('base64url'),
-		auth: randomBytes(16).toString('base64url')
+		ecdh,
+		auth,
+		json: {
+			p256dh: ecdh.getPublicKey().toString('base64url'),
+			auth: auth.toString('base64url')
+		}
 	};
 }
 
 async function savePhone(context: APIRequestContext, endpoint: string) {
-	return context.post('/api/pump/push', { data: { endpoint, keys: phoneKeys() } });
+	return context.post('/api/pump/push', { data: { endpoint, keys: phoneKeys().json } });
+}
+
+type Received = { body: string; headers: Record<string, string> };
+
+async function received(id: string) {
+	return (await (await fetch(`${STUB_URL}/__pushes/${id}`)).json()) as {
+		pushes: number;
+		messages: Received[];
+	};
 }
 
 async function pushesTo(id: string) {
-	return (await (await fetch(`${STUB_URL}/__pushes/${id}`)).json()).pushes as number;
+	return (await received(id)).pushes;
 }
+
+// Web Push message encryption (RFC 8291, aes128gcm), read the way the phone's browser does.
+function decrypt(message: Received, keys: ReturnType<typeof phoneKeys>) {
+	const data = Buffer.from(message.body, 'base64');
+	const salt = data.subarray(0, 16);
+	const idLength = data[20];
+	const serverKey = data.subarray(21, 21 + idLength);
+	const cipherText = data.subarray(21 + idLength);
+	const shared = keys.ecdh.computeSecret(serverKey);
+	const keyInfo = Buffer.concat([
+		Buffer.from('WebPush: info\0'),
+		keys.ecdh.getPublicKey(),
+		serverKey
+	]);
+	const ikm = Buffer.from(hkdfSync('sha256', shared, keys.auth, keyInfo, 32));
+	const cek = Buffer.from(hkdfSync('sha256', ikm, salt, 'Content-Encoding: aes128gcm\0', 16));
+	const nonce = Buffer.from(hkdfSync('sha256', ikm, salt, 'Content-Encoding: nonce\0', 12));
+	const decipher = createDecipheriv('aes-128-gcm', cek, nonce);
+	decipher.setAuthTag(cipherText.subarray(cipherText.length - 16));
+	const plain = Buffer.concat([
+		decipher.update(cipherText.subarray(0, cipherText.length - 16)),
+		decipher.final()
+	]);
+	// The record ends with the 0x02 delimiter and zero padding.
+	return plain.subarray(0, plain.lastIndexOf(2)).toString('utf8');
+}
+
+const sentFor = async (sessionId: string) =>
+	(await db.query('SELECT end_reminders_sent FROM attendance_sessions WHERE id = $1', [sessionId]))
+		.rows[0].end_reminders_sent as number;
+
+// The last reminder went out a little over 15 minutes ago.
+const fifteenMinutesPass = (sessionId: string) =>
+	db.query(
+		`UPDATE attendance_sessions
+		 SET end_reminder_at = now() - make_interval(mins => $2 + 1) WHERE id = $1`,
+		[sessionId, EVERY_MINUTES]
+	);
 
 // Several worker polls (one a second in regression) with nothing new.
 const quietFor = () => new Promise((r) => setTimeout(r, 3000));
 
-test('REM-01 a shift end reminder at 9 hours, a second after 30 minutes, then none', async () => {
+test('REM-01 the first reminder when the shift can end, then every 15 minutes, four at most', async () => {
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);
 	const context = await login(pump.email);
@@ -58,15 +115,14 @@ test('REM-01 a shift end reminder at 9 hours, a second after 30 minutes, then no
 	expect((await savePhone(context, `${STUB_URL}/push-gone/${gone}`)).status()).toBe(200);
 
 	const start = await recordSession(context, ['rem-a', 'rem-b']);
+	await shiftBack(start, GAP_MINUTES - 1);
 	await quietFor();
 	expect(await pushesTo(phone)).toBe(0);
 
-	await shiftBack(start, GAP_MINUTES + 1);
+	// The gap passes: the first reminder goes at once (within a worker poll).
+	await shiftBack(start, 2);
 	await expect.poll(() => pushesTo(phone), { timeout: 10_000 }).toBe(1);
-	const sent = async () =>
-		(await db.query('SELECT end_reminders_sent FROM attendance_sessions WHERE id = $1', [start]))
-			.rows[0].end_reminders_sent;
-	expect(await sent()).toBe(1);
+	expect(await sentFor(start)).toBe(1);
 	// The phone that left (410) is removed after its one try.
 	expect(await pushesTo(gone)).toBe(1);
 	expect(
@@ -74,22 +130,21 @@ test('REM-01 a shift end reminder at 9 hours, a second after 30 minutes, then no
 			.rowCount
 	).toBe(0);
 
+	// Nothing more until 15 minutes have passed.
 	await quietFor();
 	expect(await pushesTo(phone)).toBe(1);
 
-	await db.query(
-		`UPDATE attendance_sessions SET end_reminder_at = now() - interval '31 minutes' WHERE id = $1`,
-		[start]
-	);
-	await expect.poll(() => pushesTo(phone), { timeout: 10_000 }).toBe(2);
-	expect(await sent()).toBe(2);
+	for (let reminder = 2; reminder <= MAX_REMINDERS; reminder++) {
+		await fifteenMinutesPass(start);
+		await expect.poll(() => pushesTo(phone), { timeout: 10_000 }).toBe(reminder);
+		expect(await sentFor(start)).toBe(reminder);
+	}
 
-	await db.query(
-		`UPDATE attendance_sessions SET end_reminder_at = now() - interval '2 hours' WHERE id = $1`,
-		[start]
-	);
+	// Never a fifth.
+	await fifteenMinutesPass(start);
 	await quietFor();
-	expect(await pushesTo(phone)).toBe(2);
+	expect(await pushesTo(phone)).toBe(MAX_REMINDERS);
+	expect(await sentFor(start)).toBe(MAX_REMINDERS);
 });
 
 test('REM-01 a shift that already ended gets no reminder', async () => {
@@ -106,18 +161,31 @@ test('REM-01 a shift that already ended gets no reminder', async () => {
 	expect(await pushesTo(phone)).toBe(0);
 });
 
-// A phone that has not answered yet gets the browser's own question on its first tap on the
-// pump screen (closing the guide), not only from the card.
-test('REM-01 a new phone is asked on its first tap', async ({ page }) => {
+// A pump phone still undecided when the pump screen opens (signed in earlier) is asked at once;
+// a browser that will not ask without a tap answers "default" without showing anything, and
+// then the first tap (closing the guide) asks. Signing in to another role never asks.
+test('REM-01 asked as the pump screen opens, again on the first tap, never for other roles', async ({
+	page
+}) => {
 	await page.addInitScript(() => {
-		const w = window as unknown as { asked: number };
-		w.asked = 0;
+		const store = window.sessionStorage;
 		Object.defineProperty(Notification, 'permission', { get: () => 'default' });
 		Notification.requestPermission = async () => {
-			w.asked++;
+			store.setItem('asked', String(Number(store.getItem('asked') ?? 0) + 1));
 			return 'default';
 		};
 	});
+	const asked = () => page.evaluate(() => Number(sessionStorage.getItem('asked') ?? 0));
+
+	const admin = await createAdmin();
+	await page.goto('/login');
+	await page.getByTestId('login-email').fill(admin.email);
+	await page.getByTestId('login-password').fill(PASSWORD);
+	await page.getByTestId('login-submit').click();
+	await page.waitForURL(/\/admin/);
+	expect(await asked()).toBe(0);
+	await page.context().clearCookies();
+
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);
 	const response = await page.request.post('/api/auth/login', {
@@ -125,13 +193,197 @@ test('REM-01 a new phone is asked on its first tap', async ({ page }) => {
 		headers: { origin: BASE_URL }
 	});
 	expect(response.status()).toBe(200);
-
 	await page.goto('/pump');
+	await expect.poll(asked).toBe(1);
 	await expect(page.getByTestId('pump-reminders')).toHaveAttribute('data-state', 'ask');
 	await page.getByTestId('guide-close').click();
-	await expect.poll(() => page.evaluate(() => (window as any).asked)).toBe(1);
-
-	// The card's button asks again, once per tap (the first-tap listener is gone).
+	await expect.poll(asked).toBe(2);
+	// The card's button asks once per tap.
 	await page.getByTestId('reminders-allow').click();
-	await expect.poll(() => page.evaluate(() => (window as any).asked)).toBe(2);
+	await expect.poll(asked).toBe(3);
+});
+
+// The whole chain in a phone-sized browser: a new pump phone is asked on the Sign in tap (before
+// the pump screen and its guide), allows, its subscription is saved, the worker sends the four reminders on time, each
+// decrypts to the right words, and the app's service worker shows it as a notification. Chromium
+// under Playwright has no push service of its own, so the subscription points at the stub and
+// each message is handed to the service worker as a real push event (DevTools protocol).
+test('REM-02 end to end: asked at sign in, reminders sent and shown on the phone', async ({}, testInfo) => {
+	const browser = await chromium.launch({ channel: 'chromium' });
+	const { plantId } = await createArea();
+	const pump = await createPump(plantId);
+	const phoneId = randomUUID();
+	const keys = phoneKeys();
+	const endpoint = `${STUB_URL}/push/${phoneId}`;
+
+	const context = await browser.newContext({
+		baseURL: BASE_URL,
+		viewport: { width: 390, height: 844 },
+		isMobile: true,
+		hasTouch: true
+	});
+	// The service worker may show notifications; the page itself starts as a phone that has not
+	// answered yet. The browser's question is answered "Allow" after a moment, like a person
+	// reading it; the answer and where it was asked survive the move from /login to /pump.
+	await context.grantPermissions(['notifications']);
+	await context.addInitScript(
+		({ endpoint, json }) => {
+			const store = window.sessionStorage;
+			Object.defineProperty(Notification, 'permission', {
+				get: () => (store.getItem('answered') ?? 'default') as NotificationPermission
+			});
+			Notification.requestPermission = async () => {
+				store.setItem('asked', String(Number(store.getItem('asked') ?? 0) + 1));
+				store.setItem('askedOn', location.pathname);
+				await new Promise((r) => setTimeout(r, 800));
+				store.setItem('answered', 'granted');
+				return 'granted';
+			};
+			let subscription: PushSubscription | null = null;
+			PushManager.prototype.getSubscription = async () => subscription;
+			PushManager.prototype.subscribe = async () => {
+				subscription = {
+					endpoint,
+					toJSON: () => ({ endpoint, keys: json })
+				} as unknown as PushSubscription;
+				return subscription;
+			};
+		},
+		{ endpoint, json: keys.json }
+	);
+	const asked = () =>
+		page.evaluate(() => ({
+			times: Number(sessionStorage.getItem('asked') ?? 0),
+			on: sessionStorage.getItem('askedOn')
+		}));
+
+	// 1. The question comes on the Sign in tap, before the pump screen and its guide.
+	const page = await context.newPage();
+	await page.goto('/login');
+	await page.getByTestId('login-email').fill(pump.email);
+	await page.getByTestId('login-password').fill(PASSWORD);
+	await page.screenshot({ path: testInfo.outputPath('1-sign-in.png') });
+	await page.getByTestId('login-submit').click();
+	await page.waitForURL(/\/pump$/);
+	expect(await asked()).toEqual({ times: 1, on: '/login' });
+	// Allowed at sign in: the pump screen saves this phone quietly, no card in the way.
+	await expect
+		.poll(async () =>
+			(
+				await db.query('SELECT pump_id FROM push_subscriptions WHERE endpoint = $1', [endpoint])
+			).rows.map((row) => row.pump_id)
+		)
+		.toEqual([pump.id]);
+	await expect(page.getByTestId('pump-reminders')).toHaveCount(0);
+	await page.screenshot({ path: testInfo.outputPath('2-pump-screen-after-sign-in.png') });
+	// Answered once, never asked again.
+	await page.getByTestId('guide-close').click();
+	expect((await asked()).times).toBe(1);
+
+	// 2. This phone is saved for the pump.
+	await expect
+		.poll(async () =>
+			(
+				await db.query('SELECT pump_id FROM push_subscriptions WHERE endpoint = $1', [endpoint])
+			).rows.map((row) => row.pump_id)
+		)
+		.toEqual([pump.id]);
+
+	// The app's service worker, and a DevTools handle to push to it.
+	const devtools = await context.newCDPSession(page);
+	const registrations = new Promise<string>((resolve) => {
+		devtools.on('ServiceWorker.workerRegistrationUpdated', ({ registrations }) => {
+			const found = registrations.find((r: { scopeURL: string; isDeleted: boolean }) =>
+				r.scopeURL.startsWith(BASE_URL)
+			);
+			if (found && !found.isDeleted) resolve(found.registrationId);
+		});
+	});
+	await devtools.send('ServiceWorker.enable');
+	const registrationId = await registrations;
+	const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+	const shown = () =>
+		worker.evaluate(async () => {
+			// Runs inside the service worker (no ServiceWorkerGlobalScope type in the test build).
+			const sw = self as unknown as { registration: ServiceWorkerRegistration };
+			const list = await sw.registration.getNotifications();
+			return list.map((n: Notification) => ({
+				title: n.title,
+				body: n.body,
+				tag: n.tag,
+				url: n.data?.url as string | undefined
+			}));
+		});
+
+	// 3. A shift start; nothing before the 9 hours.
+	const api = await login(pump.email);
+	const start = await recordSession(api, ['rem-e2e-a', 'rem-e2e-b']);
+	await quietFor();
+	expect(await pushesTo(phoneId)).toBe(0);
+
+	// 4. Each reminder: sent on time, decrypted, shown by the service worker.
+	const seen: { title: string; body: string }[] = [];
+	for (let reminder = 1; reminder <= MAX_REMINDERS; reminder++) {
+		if (reminder === 1) await shiftBack(start, GAP_MINUTES + 1);
+		else await fifteenMinutesPass(start);
+		await expect.poll(() => pushesTo(phoneId), { timeout: 10_000 }).toBe(reminder);
+		const message = (await received(phoneId)).messages[reminder - 1];
+		expect(message.headers['content-encoding']).toBe('aes128gcm');
+		expect(message.headers.authorization).toMatch(/^vapid t=.+, k=.+/);
+		const payload = decrypt(message, keys);
+		const content = JSON.parse(payload);
+		expect(content.tag).toBe(`shift-end-${start}`);
+		if (reminder === 1) {
+			expect(content.title).toContain('Time to end the shift');
+			expect(content.body).toContain('9 hours are done');
+		} else if (reminder === MAX_REMINDERS) {
+			expect(content.title).toContain('Last reminder');
+			expect(content.body).toContain(`Reminder ${reminder} of ${MAX_REMINDERS}`);
+		} else {
+			expect(content.title).toContain('Shift end is still pending');
+			expect(content.body).toContain(`Reminder ${reminder} of ${MAX_REMINDERS}`);
+		}
+
+		await devtools.send('ServiceWorker.deliverPushMessage', {
+			origin: new URL(BASE_URL).origin,
+			registrationId,
+			data: payload
+		});
+		// One notification per shift: each reminder replaces the one before.
+		await expect
+			.poll(async () => (await shown()).map((n: { title: string }) => n.title), {
+				timeout: 10_000
+			})
+			.toEqual([content.title]);
+		const [notification] = await shown();
+		expect(notification.body).toBe(content.body);
+		expect(notification.tag).toBe(`shift-end-${start}`);
+		expect(notification.url).toBe(new URL('pump', BASE_URL + '/').href);
+		seen.push({ title: notification.title, body: notification.body });
+	}
+
+	// 5. Never a fifth.
+	await fifteenMinutesPass(start);
+	await quietFor();
+	expect(await pushesTo(phoneId)).toBe(MAX_REMINDERS);
+
+	// What the phone showed, one card per reminder, for the record.
+	const escape = (text: string) =>
+		text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+	await page.setContent(
+		`<body style="margin:0;padding:16px;background:#1f2933;font:15px system-ui">` +
+			seen
+				.map(
+					(n, i) =>
+						`<div style="background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:12px">` +
+						`<div style="font-size:12px;color:#52606d">Reminder ${i + 1} · Face Attendance</div>` +
+						`<div style="font-weight:600;margin:4px 0">${escape(n.title)}</div>` +
+						`<div style="white-space:pre-line;color:#323f4b">${escape(n.body)}</div></div>`
+				)
+				.join('') +
+			`</body>`
+	);
+	await page.screenshot({ path: testInfo.outputPath('3-notifications-shown.png') });
+	await context.close();
+	await browser.close();
 });

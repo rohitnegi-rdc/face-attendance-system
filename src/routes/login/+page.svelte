@@ -21,10 +21,26 @@
 	let ready = $state(false);
 	onMount(() => (ready = true));
 
+	// A pump phone is asked for shift end reminders (PumpReminders.svelte) on the Sign in tap
+	// itself: browsers only ask after a tap, and this is the first one. The question has to be
+	// answered before the page moves on, or the browser drops it; a phone that never answers
+	// (Chrome may show only a small icon) moves on after 30 seconds and is asked again on the
+	// pump screen.
+	function askForReminders(): Promise<unknown> {
+		if (!pumpLogin || !('Notification' in window) || Notification.permission !== 'default') {
+			return Promise.resolve();
+		}
+		return Promise.race([
+			Notification.requestPermission().catch(() => {}),
+			new Promise((r) => setTimeout(r, 30_000))
+		]);
+	}
+
 	async function submit(e: Event) {
 		e.preventDefault();
 		error = '';
 		isSubmitting = true;
+		const reminders = askForReminders();
 
 		try {
 			const res = await fetch(resolve('/api/auth/login'), {
@@ -45,6 +61,7 @@
 				!data.mustChangePassword && next.startsWith(`/${data.role}/`) && !next.startsWith('//')
 					? next
 					: '';
+			await reminders;
 			window.location.href = safeNext
 				? `${base}${safeNext}`
 				: resolve(

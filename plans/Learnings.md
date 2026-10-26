@@ -133,3 +133,15 @@ Test mode (fraud check off) worked only while the server env `TEST_MODE=true`, s
 - The shift end reminder test posted to the stub push service at an http:// address and got `EPROTO ... packet length too long`: `webpush.sendNotification` uses `https.request` whatever the address says.
 - Fix: `worker/endReminders.js` builds the encrypted, signed request with `webpush.generateRequestDetails` and sends it with `fetch`, which follows the address. Production push services are https anyway.
 - Rule: when a library hides the transport, test against the real protocol, or take the transport into your own code so the test exercises the same path.
+
+### 2026-10-26: the reminder question was hidden behind the guide, and the browser test could not show notifications
+- The pump screen asked for notifications only from a card, and the guide that opens on every visit covered that card, so on a real phone nothing seemed to ask. The guess was "a card with an Allow button is enough". It was wrong because the first thing a pump sees is the guide, and browsers only ask after a tap. Now the browser's own question opens on the first tap anywhere on the pump screen (closing the guide counts); the card stays as the fallback and says why when reminders cannot work (http, unsupported browser).
+- Schedule changed at the user's request: first reminder the moment the shift can end, then every 15 minutes, 4 at most.
+- Testing: Playwright's default headless shell refuses `showNotification` even with the permission granted. `chromium.launch({ channel: 'chromium' })` (full Chromium, headless) shows them. Chromium under Playwright has no push service, so REM-02 points the subscription at the stub, decrypts the message the worker sent (RFC 8291) and hands it to the real service worker with the DevTools command `ServiceWorker.deliverPushMessage`.
+- Rule: a permission request must not sit behind something that opens first; test a notification feature through the real service worker, not only up to the push service.
+
+### 2026-10-26: "ask on the first tap" still did not ask on a real Android phone
+- Production ran 3eeaad8 (ask on the first tap on the pump screen), yet the user, on Android Chrome, saw no question after signing in. The guess was "the first tap after the guide is soon enough". It was wrong because the user expects the question the moment they sign in, before anything else, and a test that fakes the question cannot show whether a real phone shows it.
+- Fix: a pump login is asked on the Sign in tap itself (a tap, so every browser allows it) and the login page waits for the answer before moving on, because leaving the page drops the question. A phone still undecided is asked as the pump screen opens, and on its first tap there.
+- Rule: ask for a permission at the user's first deliberate tap in the flow (here Sign in), not at a later screen; and verify permission prompts on a real phone before calling it done, since Playwright answers them itself.
+
