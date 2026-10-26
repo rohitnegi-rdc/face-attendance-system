@@ -84,36 +84,38 @@
 			<h1>Attendance records</h1>
 			<p>Filter daily outcomes, inspect grouped attendance, and export the same result set.</p>
 		</div>
-		<a
-			class="button button--secondary"
-			href={resolve(`/api/admin/attendance/export?${exportQuery}`)}
-		>
-			<Download size={17} /> Export XLSX
-		</a>
-		<form
-			class="headcount-form"
-			method="GET"
-			action={resolve('/api/admin/attendance/export')}
-			data-sveltekit-reload
-		>
-			<input type="hidden" name="report" value="headcount" />
-			{#each ['area', 'vendor', 'plant', 'pump'] as key (key)}{#if baseParams()[key]}<input
-						type="hidden"
-						name={key}
-						value={baseParams()[key]}
-					/>{/if}{/each}
-			<label class="field"
-				><span>Headcount month</span><input
-					type="month"
-					name="month"
-					value={todayStr().slice(0, 7)}
-					max={todayStr().slice(0, 7)}
-				/></label
+		<div class="header-actions">
+			<a
+				class="button button--secondary"
+				href={resolve(`/api/admin/attendance/export?${exportQuery}`)}
 			>
-			<button class="button button--secondary" type="submit"
-				><Download size={17} /> Headcount report</button
+				<Download size={17} /> Export XLSX
+			</a>
+			<form
+				class="headcount-form"
+				method="GET"
+				action={resolve('/api/admin/attendance/export')}
+				data-sveltekit-reload
 			>
-		</form>
+				<input type="hidden" name="report" value="headcount" />
+				{#each ['area', 'vendor', 'plant', 'pump'] as key (key)}{#if baseParams()[key]}<input
+							type="hidden"
+							name={key}
+							value={baseParams()[key]}
+						/>{/if}{/each}
+				<label class="field"
+					><span>Headcount month</span><input
+						type="month"
+						name="month"
+						value={todayStr().slice(0, 7)}
+						max={todayStr().slice(0, 7)}
+					/></label
+				>
+				<button class="button button--secondary" type="submit"
+					><Download size={17} /> Headcount report</button
+				>
+			</form>
+		</div>
 	</header>
 
 	<form class="filter-bar" method="GET">

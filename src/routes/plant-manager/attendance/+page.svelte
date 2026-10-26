@@ -210,22 +210,6 @@
 		color: var(--ink-muted);
 		font-size: var(--text-sm);
 	}
-	/* One row: export, then the month and its button, bottoms aligned; wraps on a phone. */
-	.header-actions {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: var(--space-3);
-	}
-	.headcount-form {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: var(--space-3);
-	}
-	.header-actions .button {
-		white-space: nowrap;
-	}
 	.compact-filter {
 		grid-template-columns: repeat(3, minmax(11rem, 16rem)) auto;
 		justify-content: start;
@@ -234,22 +218,6 @@
 		width: 100%;
 	}
 	@media (max-width: 38rem) {
-		/* One row: export, then the month and its button, bottoms aligned; wraps on a phone. */
-		.header-actions {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: flex-end;
-			gap: var(--space-3);
-		}
-		.headcount-form {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: flex-end;
-			gap: var(--space-3);
-		}
-		.header-actions .button {
-			white-space: nowrap;
-		}
 		.compact-filter {
 			grid-template-columns: 1fr;
 		}

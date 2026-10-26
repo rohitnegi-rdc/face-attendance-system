@@ -169,15 +169,4 @@
 		font-weight: 700;
 		text-transform: uppercase;
 	}
-	/* One row: export, then the month and its button, bottoms aligned; wraps on a phone. */
-	.header-actions,
-	.headcount-form {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: var(--space-3);
-	}
-	.header-actions .button {
-		white-space: nowrap;
-	}
 </style>
