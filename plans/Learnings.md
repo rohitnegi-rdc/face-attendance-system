@@ -124,3 +124,7 @@ Test mode (fraud check off) worked only while the server env `TEST_MODE=true`, s
 - The button deleted every session and worker of the pump. Its name promised test data, but nothing in the data said which records were tests, so one click on a live pump would erase real attendance.
 - Fix: each session stores `test_mode` at submit (migration 039). The clear deletes only shifts where every photo was taken in test mode, plus workers left with no photo; a shift that is part test, part genuine is kept and reported.
 - Rule: a destructive action named after a kind of data needs that kind recorded on the row. Records from before the flag count as genuine.
+
+### 2026-10-26: unit and regression gates shared a database port
+- The unit database used port 6114, which is regression lane 2's database port since the lanes were added. Run one after the other it worked; run in parallel, the regression failed at "Prepare test databases" with "port is already allocated".
+- Fix: the unit database moved to 6199. Rule: a new port range (like the lanes' 6104 + 10·i) must be checked against every other script's fixed ports.

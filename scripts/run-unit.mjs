@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
 
-const DB_PORT = process.env.UNIT_DB_PORT ?? '6114';
+// 6199, clear of the regression lanes (6104, 6114, 6124, ...), so both gates can run at once.
+const DB_PORT = process.env.UNIT_DB_PORT ?? '6199';
 const COMPOSE = ['compose', '-p', 'fa-unit', '-f', 'tests/regression/docker-compose.yml'];
 const isWindows = process.platform === 'win32';
 const external = process.env.UNIT_DATABASE_URL;
