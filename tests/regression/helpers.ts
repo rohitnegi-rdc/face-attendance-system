@@ -1,7 +1,7 @@
 // Shared fixtures for the regression scenarios. Accounts are created with
 // must_change_password = FALSE (the column defaults to TRUE, migration 016). The database is a throwaway one created by
 // scripts/run-regression.mjs, so tests create their own Areas/Pumps freely and never clean up.
-import { expect, request, type APIRequestContext } from '@playwright/test';
+import { expect, request, type APIRequestContext, type Page } from '@playwright/test';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -99,6 +99,14 @@ export async function login(email: string, password = PASSWORD): Promise<APIRequ
 	const response = await context.post('/api/auth/login', { data: { email, password } });
 	expect(response.status(), await response.text()).toBe(200);
 	return context;
+}
+
+// The pump screen in a browser, past the guide that opens on every visit (UI-13): a pump that
+// already finished it closes it with the X.
+export async function openPumpScreen(page: Page) {
+	await page.goto('/pump');
+	await page.getByTestId('guide-close').click();
+	await expect(page.getByTestId('pump-guide')).toHaveCount(0);
 }
 
 type StubFace = string | { identity: string; similarity: number };

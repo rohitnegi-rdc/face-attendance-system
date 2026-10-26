@@ -1,6 +1,6 @@
 // UI-13: a new pump's first visit opens the guide, which cannot be closed (no close button,
 // Escape does nothing) and switches between Hindi and English. Finishing it is saved on the
-// server, so it does not open again; the Help button reopens it, and from there it closes.
+// server; every later visit opens it again with a close (X) button, and Help reopens it.
 import { test, expect } from '@playwright/test';
 import { BASE_URL, PASSWORD, createArea, createPump, db } from './helpers';
 
@@ -41,11 +41,15 @@ test('UI-13 first sign-in guide cannot be skipped, switches language, Help reope
 		})
 		.toBe(true);
 
+	// Every later visit opens it again, now with the X to close it.
 	await page.reload();
+	await expect(guide).toBeVisible();
+	await expect(guide).toHaveAttribute('data-forced', 'false');
+	await page.getByTestId('guide-close').click();
+	await expect(guide).toHaveCount(0);
 	await expect(
 		page.getByRole('button', { name: 'Take Pump Operator photo', exact: true })
 	).toBeVisible();
-	await expect(guide).toHaveCount(0);
 
 	await page.getByTestId('guide-help').click();
 	await expect(guide).toHaveAttribute('data-forced', 'false');

@@ -1,7 +1,7 @@
 // UI-08: the pump screen is in Hindi by default; one toggle switches to English and the choice
 // stays after a reload. The first step is the operator photo.
 import { test, expect } from '@playwright/test';
-import { BASE_URL, PASSWORD, createArea, createPump } from './helpers';
+import { BASE_URL, PASSWORD, createArea, createPump, openPumpScreen } from './helpers';
 
 test('UI-08 pump screen starts in Hindi, the toggle switches to English and is remembered', async ({
 	page
@@ -14,7 +14,7 @@ test('UI-08 pump screen starts in Hindi, the toggle switches to English and is r
 	});
 	expect(response.status()).toBe(200);
 
-	await page.goto('/pump');
+	await openPumpScreen(page);
 	const toggle = page.getByTestId('lang-toggle');
 	await expect(toggle).toHaveAttribute('aria-checked', 'true');
 	await expect(page.getByText('शिफ्ट की जानकारी')).toBeVisible();

@@ -2,7 +2,7 @@
 // the "Something went wrong. Please contact Admin." toast (or the error page for a full page
 // load), never a blank or stuck screen, and never internal details.
 import { test, expect, type Page } from '@playwright/test';
-import { BASE_URL, PASSWORD, createAdmin, createArea, createPump } from './helpers';
+import { BASE_URL, PASSWORD, createAdmin, createArea, createPump, openPumpScreen } from './helpers';
 
 const CONTACT_ADMIN = 'Something went wrong. Please contact Admin.';
 
@@ -24,7 +24,7 @@ test('ERR-01 a server error on an API call shows the contact-admin toast on the 
 		route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"boom"}' })
 	);
 
-	await page.goto('/pump');
+	await openPumpScreen(page);
 	const toast = page.getByTestId('error-toast');
 	await expect(toast).toBeVisible();
 	await expect(toast).toContainText(CONTACT_ADMIN);
@@ -39,7 +39,7 @@ test('ERR-02 a lost connection shows the toast instead of leaving the pump scree
 	await signIn(page, pump.email);
 	await page.route('**/api/attendance/today', (route) => route.abort('internetdisconnected'));
 
-	await page.goto('/pump');
+	await openPumpScreen(page);
 	await expect(page.getByTestId('error-toast')).toContainText(CONTACT_ADMIN);
 	await expect(page.getByTestId('error-toast')).toContainText('could not be reached');
 	await expect(page.getByTestId('status-failed')).toBeVisible();

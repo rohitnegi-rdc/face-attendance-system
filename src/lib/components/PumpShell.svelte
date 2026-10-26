@@ -18,11 +18,12 @@
 		children: import('svelte').Snippet;
 	}>();
 
-	// Until the pump finishes the guide once it opens by itself and cannot be closed; after
-	// that the Help button opens it, closable. The page load decides; later changes are local.
+	// The guide opens on every visit. Until the pump finishes it once it cannot be closed; after
+	// that it has a close (X) button, and the Help button opens it again. The page load decides;
+	// later changes are local.
 	const startedDone = untrack(() => guideDone);
 	let guideFinished = $state(startedDone);
-	let guideOpen = $state(!startedDone);
+	let guideOpen = $state(true);
 	let guideForced = $state(!startedDone);
 
 	onMount(loadPumpLang);

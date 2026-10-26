@@ -23,7 +23,7 @@ async function authenticate(page: Page, role: Role) {
 		`SELECT id, ${emailColumn} AS email FROM ${table} ORDER BY created_at LIMIT 1`
 	);
 	if (!result.rows[0]) throw new Error(`No ${role} account is available in the test database.`);
-	// The first sign-in guide would cover the pump screen this script checks.
+	// Past the first sign-in guide, so it opens closable (with the X) instead of forced.
 	if (role === 'pump')
 		await pool.query(
 			`UPDATE pumps SET guide_done_at = COALESCE(guide_done_at, now()) WHERE id = $1`,
@@ -79,6 +79,8 @@ test('pump capture retains a selected group photo before submission', async ({ p
 	await page.setViewportSize({ width: 390, height: 844 });
 	await installFakeCamera(page);
 	await page.goto('/pump');
+	// The guide opens on every visit; a pump that finished it closes it with the X.
+	await page.getByTestId('guide-close').click();
 	await takeShiftPhotos(page, { buffer: await readFile('Test/faces/group photo.jpg') });
 	await expect(page.getByRole('button', { name: 'Submit photos' })).toBeVisible();
 	await expectNoHorizontalOverflow(page);

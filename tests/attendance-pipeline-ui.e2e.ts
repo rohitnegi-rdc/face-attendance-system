@@ -150,6 +150,8 @@ test.describe.serial('real pump attendance pipeline', () => {
 		await page.setViewportSize({ width: 390, height: 844 });
 		await installFakeCamera(page);
 		await page.goto('/pump');
+		// The guide opens on every visit; a pump that finished it closes it with the X.
+		await page.getByTestId('guide-close').click();
 
 		await expect(page.getByTestId('session-title')).toHaveText('Start shift');
 		await expect(page.getByText('Start open', { exact: true })).toBeVisible();

@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { BASE_URL, PASSWORD, createArea, createPump } from './helpers';
+import { BASE_URL, PASSWORD, createArea, createPump, openPumpScreen } from './helpers';
 
 const ROOTS = ['src', 'worker'];
 const FORBIDDEN: [RegExp, string][] = [
@@ -54,7 +54,7 @@ test('UI-14 the pump screen shows the date bold at the top right, labelled', asy
 		.format(new Date())
 		.replaceAll('/', '-');
 
-	await page.goto('/pump');
+	await openPumpScreen(page);
 	const date = page.getByTestId('heading-date');
 	await expect(date.locator('strong')).toHaveText(ist);
 	await expect(date.locator('span')).toContainText('आज ·');

@@ -2,7 +2,8 @@
 	// Walkthrough of the pump screen for operators: one action per step, a moving picture of it,
 	// the same button the screen shows, and a Listen button that reads the step aloud. On the
 	// first sign-in it cannot be closed (forced): no close, Escape and the phone's Back do
-	// nothing, only the last step's button ends it. From the Help button it closes any time.
+	// nothing, only the last step's button ends it. On every later visit it opens again with a
+	// close (X) button, and from the Help button; then it closes any time.
 	import { onDestroy, tick } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
