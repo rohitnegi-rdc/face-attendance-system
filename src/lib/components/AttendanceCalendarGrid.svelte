@@ -1,11 +1,12 @@
 <script lang="ts">
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import FacePeek from '$lib/components/FacePeek.svelte';
 	import { formatDate, formatDayLabel } from '$lib/date';
 
 	// Generic entity x day grid. `days` is an array of "YYYY-MM-DD" strings, rendered as
-	// horizontally-scrollable columns. `entities` is an array of { id, label }, rendered as
-	// rows. `cellValue(entityId, day)` returns either a status string
+	// horizontally-scrollable columns. `entities` is an array of { id, label, faceUrl? }, rendered
+	// as rows; worker rows pass faceUrl so the face shows beside the name. `cellValue(entityId, day)` returns either a status string
 	// ('present'|'morning_only'|'evening_only'|'absent') or a number 0-100 (attendance %)
 	// when `mode === 'percent'`.
 	let {
@@ -16,7 +17,7 @@
 		entityLabel = 'Entity'
 	} = $props<{
 		days: string[];
-		entities: { id: string; label: string }[];
+		entities: { id: string; label: string; faceUrl?: string }[];
 		cellValue: (entityId: string, day: string) => string | number | null;
 		mode?: 'status' | 'percent';
 		entityLabel?: string;
@@ -116,7 +117,12 @@
 		<tbody>
 			{#each entities as e}
 				<tr>
-					<th class="entity-col" scope="row" title={e.label}>{e.label}</th>
+					<th class="entity-col" scope="row" title={e.label}>
+						{#if e.faceUrl}<span class="worker-tag entity-worker"
+								><FacePeek url={e.faceUrl} label={e.label} /><span class="entity-name">{e.label}</span
+								></span
+							>{:else}{e.label}{/if}
+					</th>
 					{#each orderedDays as day}
 						{@const v = cellValue(e.id, day)}
 						<td class={statusClass(v)} aria-label={accessibleCellLabel(e.label, day, v)}
@@ -250,6 +256,17 @@
 		color: var(--ink-default);
 		background: var(--brand-white);
 		box-shadow: 1px 0 0 var(--brand-mist);
+	}
+
+	.entity-worker {
+		max-width: 100%;
+	}
+
+	.entity-name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.calendar-grid thead .entity-col {

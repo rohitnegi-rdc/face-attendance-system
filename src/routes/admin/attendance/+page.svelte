@@ -3,6 +3,7 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Download from '@lucide/svelte/icons/download';
 	import Search from '@lucide/svelte/icons/search';
+	import FacePeek from '$lib/components/FacePeek.svelte';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { dateKey, formatDate, todayStr } from '$lib/date';
@@ -269,13 +270,17 @@
 												<tr class="detail-row"
 													><td colspan="6"
 														><div class="person-records">
-															{#each pumpRows(pump.pump_id) as row}<a
-																	href={resolve(`/admin/persons/${row.person_id}`)}
-																	><span>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</span
-																	><StatusBadge
-																		tone={isPresent(row) ? 'success' : 'neutral'}
-																		label={isPresent(row) ? 'Present' : 'Absent'}
-																	/></a
+															{#each pumpRows(pump.pump_id) as row}{@const label = personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}<div
+																	class="person-record"
+																	><FacePeek
+																		url={resolve('/api/persons/[id]/face', { id: row.person_id })}
+																		{label}
+																	/><a href={resolve(`/admin/persons/${row.person_id}`)}
+																		><span>{label}</span><StatusBadge
+																			tone={isPresent(row) ? 'success' : 'neutral'}
+																			label={isPresent(row) ? 'Present' : 'Absent'}
+																		/></a
+																	></div
 																>{/each}
 														</div></td
 													></tr
@@ -312,8 +317,13 @@
 					<tbody
 						>{#each data.rows as row}<tr
 								><td>{formatDate(row.session_date)}</td><td
-									><a href={resolve(`/admin/persons/${row.person_id}`)}
-										>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</a
+									><span class="worker-tag"
+										><FacePeek
+											url={resolve('/api/persons/[id]/face', { id: row.person_id })}
+											label={personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}
+										/><a href={resolve(`/admin/persons/${row.person_id}`)}
+											>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</a
+										></span
 									></td
 								><td><a href={resolve(`/admin/pumps/${row.pump_id}`)}>{row.pump_code}</a></td><td
 									><a href={resolve(`/admin/vendors/${row.vendor_id}`)}>{row.vendor_name}</a></td
@@ -340,8 +350,13 @@
 				{#each data.rows as row}
 					<article class="mobile-record">
 						<div>
-							<a href={resolve(`/admin/persons/${row.person_id}`)}
-								>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</a
+							<span class="worker-tag"
+								><FacePeek
+									url={resolve('/api/persons/[id]/face', { id: row.person_id })}
+									label={personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}
+								/><a href={resolve(`/admin/persons/${row.person_id}`)}
+									>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</a
+								></span
 							><StatusBadge
 								tone={isPresent(row) ? 'success' : 'neutral'}
 								label={isPresent(row) ? 'Present' : 'Absent'}
@@ -474,17 +489,23 @@
 		display: grid;
 		padding: var(--space-2) var(--space-6);
 	}
-	.person-records a {
+	.person-record {
 		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-2);
+		border-bottom: 1px solid var(--brand-mist);
+	}
+	.person-record:last-child {
+		border-bottom: 0;
+	}
+	.person-record a {
+		display: flex;
+		flex: 1;
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-3);
-		padding: var(--space-2);
 		text-decoration: none;
-		border-bottom: 1px solid var(--brand-mist);
-	}
-	.person-records a:last-child {
-		border-bottom: 0;
 	}
 	.mobile-record {
 		padding: var(--space-4);

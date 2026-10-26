@@ -6,6 +6,7 @@
 	import AttendanceDailyBars from '$lib/components/AttendanceDailyBars.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import FacePeek from '$lib/components/FacePeek.svelte';
 	import ShiftLog from '$lib/components/ShiftLog.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDate, formatDateTime, formatDayLabel } from '$lib/date';
@@ -27,7 +28,8 @@
 				person.display_seq,
 				person.is_operator,
 				person.name
-			)
+			),
+			faceUrl: resolve('/api/persons/[id]/face', { id: person.id })
 		}))
 	);
 	const dailyBreakdownTotals = $derived(
@@ -355,13 +357,23 @@
 				><tbody
 					>{#each data.roster as person}<tr
 							><td
-								><a href={resolve(`/admin/persons/${person.id}`)}
-									>{personDisplayLabel(
-										data.pump.pump_code,
-										person.display_seq,
-										person.is_operator,
-										person.name
-									)}</a
+								><span class="worker-tag"
+									><FacePeek
+										url={resolve('/api/persons/[id]/face', { id: person.id })}
+										label={personDisplayLabel(
+											data.pump.pump_code,
+											person.display_seq,
+											person.is_operator,
+											person.name
+										)}
+									/><a href={resolve(`/admin/persons/${person.id}`)}
+										>{personDisplayLabel(
+											data.pump.pump_code,
+											person.display_seq,
+											person.is_operator,
+											person.name
+										)}</a
+									></span
 								></td
 							><td>{formatDate(person.first_seen_at)}</td><td>{formatDate(person.last_seen_at)}</td
 							><td>{person.days_present}</td><td>{person.days_morning_only}</td><td

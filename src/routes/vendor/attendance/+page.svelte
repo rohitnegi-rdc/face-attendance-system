@@ -4,6 +4,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import FacePeek from '$lib/components/FacePeek.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { calendarDays, dateKey, formatDate, todayStr } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
@@ -142,7 +143,12 @@
 				<tbody
 					>{#each data.records as row}<tr
 							><td>{formatDate(row.session_date)}</td><td
-								>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</td
+								><span class="worker-tag"
+									><FacePeek
+										url={resolve('/api/persons/[id]/face', { id: row.person_id })}
+										label={personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}
+									/>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</span
+								></td
 							><td>{row.pump_code}</td><td>{row.plant_name}</td><td
 								><StatusBadge
 									tone={row.morning_matched ? 'success' : 'neutral'}

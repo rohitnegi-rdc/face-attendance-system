@@ -12,10 +12,11 @@ export function personDisplayLabel(
 	return `${name ? `${name} · ` : ''}${pumpCode} Worker ${displaySeq}${operator}`;
 }
 
-// Short form for places that already show the pump (face tiles, the fraud case page).
+// Short form for places that already show the pump (face tiles, the fraud case page). The number
+// stays beside a name so two workers with the same name can still be told apart.
 export function personShortLabel(displaySeq: number, isOperator = false, name: string | null = null) {
 	const operator = isOperator ? ' (Operator)' : '';
-	return name ? `${name}${operator}` : `Worker ${displaySeq}${operator}`;
+	return name ? `${name} (#${displaySeq})${operator}` : `Worker ${displaySeq}${operator}`;
 }
 
 // Letters in any script (Hindi names too), digits, space and . ' - ; must start with a letter.

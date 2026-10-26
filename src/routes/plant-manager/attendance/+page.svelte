@@ -33,7 +33,8 @@
 				person.display_seq,
 				person.is_operator,
 				person.name
-			)
+			),
+			faceUrl: resolve('/api/persons/[id]/face', { id: person.id })
 		}))
 	);
 	const personStatus = (personId: string, day: string) =>

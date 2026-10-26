@@ -2,29 +2,28 @@
 	import ScanFace from '@lucide/svelte/icons/scan-face';
 	import X from '@lucide/svelte/icons/x';
 
-	// A "Face" button that opens the worker's face in a dialog. The image is requested only when
-	// opened, so a long list of workers does not load every face (~30 KB each since the larger face
-	// pictures of 2026-10-23, ai-service face_preview; older ones ~17 KB).
+	// The worker's face shown beside their name, so a reader confirms name and face together; a tap
+	// opens it large. Loaded lazily from the cached face route (~30 KB, kept a day by the browser),
+	// so a long list only fetches the faces scrolled into view. No face yet: the icon instead.
 	let { url, label }: { url: string; label: string } = $props();
 
 	let dialog: HTMLDialogElement;
-	let opened = $state(false);
-
-	function open() {
-		opened = true;
-		dialog.showModal();
-	}
+	let missing = $state(false);
 </script>
 
 <button
 	class="face-peek"
 	type="button"
-	onclick={open}
+	onclick={() => dialog.showModal()}
 	aria-label="View face of {label}"
 	title="View face"
 	data-testid="face-peek"
 >
-	<ScanFace size={16} aria-hidden="true" />
+	{#if missing}
+		<ScanFace size={16} aria-hidden="true" />
+	{:else}
+		<img src={url} alt="" loading="lazy" decoding="async" onerror={() => (missing = true)} />
+	{/if}
 </button>
 
 <dialog bind:this={dialog} class="face-peek__dialog" aria-label="Face of {label}">
@@ -34,22 +33,36 @@
 			<X size={18} />
 		</button>
 	</div>
-	{#if opened}<img src={url} alt="Face of {label}" />{/if}
+	{#if missing}<p class="face-peek__none">No face saved for this worker yet.</p>{:else}<img
+			src={url}
+			alt="Face of {label}"
+		/>{/if}
 </dialog>
 
 <style>
 	.face-peek {
 		display: inline-grid;
 		flex: none;
-		width: 2rem;
-		height: 2rem;
+		width: 2.25rem;
+		height: 2.25rem;
 		place-items: center;
 		padding: 0;
+		overflow: hidden;
 		color: var(--brand-teal);
 		background: var(--surface-raised);
 		border: 1px solid var(--brand-mist);
 		border-radius: 999px;
 		cursor: pointer;
+	}
+	.face-peek img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+	.face-peek__none {
+		margin: 0;
+		padding: var(--space-4);
+		color: var(--ink-muted);
 	}
 	.face-peek:hover,
 	.face-peek:focus-visible {
@@ -73,7 +86,7 @@
 		padding: var(--space-3) var(--space-4);
 		border-bottom: 1px solid var(--brand-mist);
 	}
-	.face-peek__dialog img {
+	.face-peek__dialog > img {
 		display: block;
 		width: 100%;
 		aspect-ratio: 1;

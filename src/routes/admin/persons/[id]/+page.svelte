@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AttendanceEvidenceButtons from '$lib/components/AttendanceEvidenceButtons.svelte';
+	import FacePeek from '$lib/components/FacePeek.svelte';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import WorkerPicker from '$lib/components/WorkerPicker.svelte';
@@ -45,7 +46,16 @@
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Worker</p>
-			<h1>
+			<h1 class="worker-tag">
+				<FacePeek
+					url={resolve('/api/persons/[id]/face', { id: data.person.id })}
+					label={personDisplayLabel(
+						data.person.pump_code,
+						data.person.display_seq,
+						data.person.is_operator,
+						data.person.name
+					)}
+				/>
 				{personDisplayLabel(
 					data.person.pump_code,
 					data.person.display_seq,
