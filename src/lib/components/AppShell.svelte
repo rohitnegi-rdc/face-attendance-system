@@ -115,6 +115,7 @@
 		{ href: resolve('/admin/flagged-guests'), label: 'Guest review', icon: ScanFace },
 		{ href: resolve('/admin/merge-candidates'), label: 'Merge review', icon: UsersRound },
 		{ href: resolve('/admin/photo-backups'), label: 'Kept photos', icon: ImageOff },
+		{ href: resolve('/admin/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/admin/vendors'), label: 'Vendors', icon: Building2 },
 		{ href: resolve('/admin/plant-managers'), label: 'Plant managers', icon: Building2 },
 		{ href: resolve('/admin/import'), label: 'Imports', icon: FileUp },
