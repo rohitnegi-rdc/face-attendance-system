@@ -6,7 +6,7 @@ import path from 'node:path';
 import { pool } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
 import { logger } from '$lib/server/log';
-import { getAttendanceSettings } from '$lib/server/settings';
+import { getAttendanceSettings, isTestModeOn } from '$lib/server/settings';
 import { expireStaleStarts, shiftEndOpensMessage } from '$lib/server/shiftSessions';
 import {
 	checkShiftStartLocation,
@@ -181,9 +181,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			   (pump_id, session_date, session_type, status, pairing_status,
 			    photo_url, photo_hash, gps_lat, gps_lng, paired_session_id,
 			    location_status, location_issue, location_distance_m,
-			    pump_gps_lat, pump_gps_lng, pump_gps_at, operator_photo_url, operator_photo_hash)
+			    pump_gps_lat, pump_gps_lng, pump_gps_at, operator_photo_url, operator_photo_hash,
+			    test_mode)
 			 VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-			         $16, $17)
+			         $16, $17, $18)
 			 RETURNING id`,
 			[
 				pumpId,
@@ -202,7 +203,8 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				location?.pumpLng ?? null,
 				location?.pumpAt ?? null,
 				operatorPath,
-				operatorHash
+				operatorHash,
+				await isTestModeOn(client)
 			]
 		);
 		const session = sessionResult.rows[0];

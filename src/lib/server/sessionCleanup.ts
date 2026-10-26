@@ -218,40 +218,73 @@ export async function deleteSession(
 	return result;
 }
 
-// Wipes every attendance record of one pump (sessions, people, rollups, flags). The pump
-// account itself stays. Meant for clearing test data; callers must audit it.
-export async function clearPumpAttendance(
+// Deletes the shifts of one pump that were taken while test mode was on, and the workers only
+// those shifts knew. Genuine shifts and workers are never touched: a shift whose start and end
+// differ (one in test mode, one not) is skipped and counted, not split. Callers must audit it.
+export async function clearTestModeAttendance(
 	client: PoolClient,
 	pumpId: string
-): Promise<CleanupResult> {
+): Promise<CleanupResult & { skippedShifts: number }> {
 	const result = emptyResult();
-	const { rows: sessions } = await client.query<{ id: string }>(
-		`SELECT id FROM attendance_sessions WHERE pump_id = $1
-		 ORDER BY (session_type = 'evening') DESC, submitted_at DESC`,
+	const { rows: sessions } = await client.query<{
+		id: string;
+		session_type: string;
+		paired_session_id: string | null;
+		test_mode: boolean;
+	}>(
+		`SELECT id, session_type, paired_session_id, test_mode
+		 FROM attendance_sessions WHERE pump_id = $1 FOR UPDATE`,
 		[pumpId]
 	);
+	// One shift = a start and its paired end, keyed by the start (or a lone end by itself).
+	const shifts = new Map<string, { morningId: string | null; ids: string[]; test: boolean[] }>();
 	for (const session of sessions) {
-		mergeInto(result, await deleteSession(client, session.id, { cascadePairedEvening: true }));
+		const key =
+			session.session_type === 'evening' && session.paired_session_id
+				? session.paired_session_id
+				: session.id;
+		const shift = shifts.get(key) ?? { morningId: null, ids: [], test: [] };
+		if (session.session_type === 'morning') shift.morningId = session.id;
+		shift.ids.push(session.id);
+		shift.test.push(session.test_mode);
+		shifts.set(key, shift);
+	}
+	const toDelete: string[] = [];
+	let skippedShifts = 0;
+	for (const shift of shifts.values()) {
+		if (shift.test.every(Boolean)) toDelete.push(...shift.ids);
+		else if (shift.test.some(Boolean)) skippedShifts += 1;
+	}
+	if (!toDelete.length) return { ...result, skippedShifts };
+
+	const affected = await client.query<{ person_id: string }>(
+		`SELECT person_id FROM person_face_vectors WHERE session_id = ANY($1::uuid[])
+		 UNION
+		 SELECT person_id FROM attendance_face_evidence WHERE session_id = ANY($1::uuid[])`,
+		[toDelete]
+	);
+
+	// Ends first, so deleting a start never has to cascade.
+	const ordered = sessions
+		.filter((session) => toDelete.includes(session.id))
+		.sort((a, b) => Number(b.session_type === 'evening') - Number(a.session_type === 'evening'));
+	for (const session of ordered) {
+		mergeInto(result, await deleteSession(client, session.id, { cascadePairedEvening: false }));
 	}
 
-	const { rows: people } = await client.query<{ id: string }>(
-		'SELECT id FROM persons WHERE pump_id = $1',
-		[pumpId]
+	// Workers seen only in test shifts: nothing of theirs is left once those shifts are gone.
+	// A worker with any genuine photo keeps that photo's vector or evidence and stays.
+	const orphans = await client.query<{ id: string }>(
+		`SELECT p.id FROM persons p
+		 WHERE p.id = ANY($1::uuid[]) AND p.pump_id = $2
+		   AND NOT EXISTS (SELECT 1 FROM person_face_vectors v WHERE v.person_id = p.id)
+		   AND NOT EXISTS (SELECT 1 FROM attendance_face_evidence e WHERE e.person_id = p.id)`,
+		[affected.rows.map((row) => row.person_id), pumpId]
 	);
-	const personIds = people.map((row) => row.id);
-	result.fraudFlagsDeleted += await deletePersons(client, personIds);
-	result.personIds.push(...personIds);
-
-	const otherPumpFlags = await client.query(
-		'DELETE FROM fraud_flags WHERE matched_at_pump_id = $1',
-		[pumpId]
-	);
-	result.fraudFlagsDeleted += otherPumpFlags.rowCount ?? 0;
-	await client.query('DELETE FROM attendance_corrections WHERE pump_id = $1', [pumpId]);
-	await client.query('DELETE FROM attendance_duplicate_resolutions WHERE pump_id = $1', [pumpId]);
-	await client.query('DELETE FROM daily_person_attendance WHERE pump_id = $1', [pumpId]);
-	await client.query('DELETE FROM attendance_rollup_finalizations WHERE pump_id = $1', [pumpId]);
-	return result;
+	const orphanIds = orphans.rows.map((row) => row.id);
+	result.fraudFlagsDeleted += await deletePersons(client, orphanIds);
+	result.personIds.push(...orphanIds);
+	return { ...result, skippedShifts };
 }
 
 // Photo files are removed only after the transaction commits, so a rollback never loses them.

@@ -7,7 +7,7 @@ import { todayStr, addDaysStr, dateKey, daysBetween } from '$lib/date';
 import { createAttendanceReviewFlag } from '$lib/server/attendanceReview';
 import { logger } from '$lib/server/log';
 import {
-	clearPumpAttendance,
+	clearTestModeAttendance,
 	deleteSession,
 	removePhotoFiles,
 	type CleanupResult
@@ -99,7 +99,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const sessionLog = await query<any>(
 		`SELECT s.id, s.pump_id, s.session_date, s.session_type, s.status, s.pairing_status,
 		        s.paired_session_id, s.closed_by, s.submitted_at, s.processed_at, s.error_reason,
-		        s.photo_url, s.fraud_resolution, s.fraud_resolved_at, s.location_status,
+		        s.photo_url, s.fraud_resolution, s.fraud_resolved_at, s.location_status, s.test_mode,
 		        EXISTS (
 		          SELECT 1 FROM attendance_review_flags arf
 		          WHERE arf.session_id = s.id AND arf.person_id IS NULL AND arf.status = 'open'
@@ -182,8 +182,15 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		};
 	});
 
+	const testSessions = await queryOne<{ sessions: number; first: Date | null; last: Date | null }>(
+		`SELECT count(*)::int AS sessions, min(submitted_at) AS first, max(submitted_at) AS last
+		 FROM attendance_sessions WHERE pump_id = $1 AND test_mode`,
+		[pump.id]
+	);
+
 	return {
 		pump,
+		testSessions: testSessions ?? { sessions: 0, first: null, last: null },
 		roster,
 		rosterPagination: {
 			page: rosterPaging.page,
@@ -375,23 +382,31 @@ export const actions: Actions = {
 			};
 		});
 	},
-	// Wipes every attendance record of this pump. The admin must type the pump code to confirm.
+	// Deletes only the shifts taken while test mode was on. The admin must type the pump code.
 	clearPumpData: async ({ params, request, locals }) => {
 		const form = await request.formData();
-		const pump = await queryOne<{ pump_code: string }>(
-			'SELECT pump_code FROM pumps WHERE id = $1',
+		const pump = await queryOne<{ pump_code: string; test_sessions: number }>(
+			`SELECT pump_code,
+			        (SELECT count(*)::int FROM attendance_sessions s
+			         WHERE s.pump_id = pumps.id AND s.test_mode) AS test_sessions
+			 FROM pumps WHERE id = $1`,
 			[params.id]
 		);
 		if (!pump) return fail(404, { message: 'Pump not found.' });
 		if (String(form.get('confirm_code') || '').trim() !== pump.pump_code) {
 			return fail(400, { message: `Type ${pump.pump_code} exactly to confirm.` });
 		}
+		if (!pump.test_sessions) {
+			return fail(400, {
+				message: `${pump.pump_code} has no shifts taken in test mode. Nothing was deleted.`
+			});
+		}
 		return runAuditedCleanup(
 			locals.user!.id,
 			params.id,
-			'clear_pump_attendance',
+			'clear_test_attendance',
 			params.id,
-			(client) => clearPumpAttendance(client, params.id)
+			(client) => clearTestModeAttendance(client, params.id)
 		);
 	}
 };
@@ -401,13 +416,13 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 async function runAuditedCleanup(
 	adminId: string,
 	pumpId: string,
-	action: 'delete_session' | 'clear_pump_attendance',
+	action: 'delete_session' | 'clear_test_attendance',
 	targetId: string,
-	cleanup: (client: PoolClient) => Promise<CleanupResult>
+	cleanup: (client: PoolClient) => Promise<CleanupResult & { skippedShifts?: number }>
 ) {
 	if (!UUID_PATTERN.test(targetId)) return fail(400, { message: 'Invalid request.' });
 	const client = await pool.connect();
-	let result: CleanupResult;
+	let result: CleanupResult & { skippedShifts?: number };
 	try {
 		await client.query('BEGIN');
 		if (action === 'delete_session') {
@@ -433,7 +448,8 @@ async function runAuditedCleanup(
 					pump_id: pumpId,
 					sessions_deleted: result.sessionIds,
 					people_deleted: result.personIds.length,
-					fraud_flags_deleted: result.fraudFlagsDeleted
+					fraud_flags_deleted: result.fraudFlagsDeleted,
+					...(result.skippedShifts !== undefined && { mixed_shifts_kept: result.skippedShifts })
 				})
 			]
 		);
@@ -459,9 +475,12 @@ async function runAuditedCleanup(
 		},
 		'admin deleted attendance records'
 	);
+	const kept = result.skippedShifts
+		? ` Kept ${result.skippedShifts} shift(s) that are part test and part genuine; delete those from the Session log one by one if needed.`
+		: '';
 	return {
 		success: true,
-		message: `Deleted ${result.sessionIds.length} session(s), ${result.personIds.length} worker record(s) and ${result.fraudFlagsDeleted} fraud flag(s). The pump can submit again.`
+		message: `Deleted ${result.sessionIds.length} session(s), ${result.personIds.length} worker record(s) and ${result.fraudFlagsDeleted} fraud flag(s).${kept} The pump can submit again.`
 	};
 }
 

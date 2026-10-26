@@ -9,7 +9,8 @@
 		set_fraud_check: 'Switched fraud check',
 		set_test_mode: 'Switched test mode',
 		delete_session: 'Deleted a session',
-		clear_pump_attendance: 'Cleared pump data'
+		clear_pump_attendance: 'Cleared pump data',
+		clear_test_attendance: 'Cleared test records'
 	};
 
 	function hoursAndMinutes(minutes: number) {
@@ -186,10 +187,10 @@
 	.test-mode-form p {
 		margin: 0;
 	}
-	.reset-form {
 	.test-mode-since {
 		color: var(--ink-muted);
 	}
+	.reset-form {
 		margin-top: var(--space-3);
 	}
 	code {

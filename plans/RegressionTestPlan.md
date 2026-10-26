@@ -287,7 +287,7 @@ screenshots in `test-output/shift-live/<run>/`. Needs `LIVE_DATABASE_URL`, `LIVE
 |---|---|---|---|---|---|
 | ADM-11 | Admin deletes a fraud-flagged session | Session, flags and new workers gone; audit row records the flag count; pump can submit again | 1 | P0 | Covered (fraud-review-admin.spec) |
 | ADM-12 | Admin deletes a morning that has a paired evening | Both deleted; attendance rows and yearly roll-up reversed | 1 | P0 | Covered (fraud-review-admin.spec) |
-| ADM-13 | Admin clears all attendance of a pump | Refused without the exact pump code; then every session, worker and related fraud flag is gone, audited, and the pump can start fresh | 1 | P0 | Covered (fraud-review-admin.spec) |
+| ADM-13 | Admin clears the test records of a pump | Each session stores whether test mode was on. Refused without the exact pump code, and refused when there is no test-mode shift. Deletes only test-mode shifts and the workers seen only in them; a genuine shift and its worker stay, a part-test part-genuine shift is kept whole (audited as `mixed_shifts_kept`), and the pump can submit again | 1 | P0 | Covered (fraud-review-admin.spec) |
 
 ### IMP: CSV import
 

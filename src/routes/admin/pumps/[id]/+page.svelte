@@ -7,7 +7,8 @@
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ShiftLog from '$lib/components/ShiftLog.svelte';
-	import { formatDate, formatDayLabel } from '$lib/date';
+	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import { formatDate, formatDateTime, formatDayLabel } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 	import { shiftTypeLabel } from '$lib/shiftLabels';
 
@@ -221,6 +222,9 @@
 					resolve(`/admin/attendance/correct?pump=${data.pump.id}&day=${day}`)}
 			>
 				{#snippet actions(session)}
+					{#if session.test_mode}<span data-testid="test-mode-session"
+							><StatusBadge tone="attention" label="Taken in test mode" /></span
+						>{/if}
 					{#if session.status === 'fraud_detected'}<div class="fraud-review">
 							{#if session.fraud_resolution === 'marked_normal'}<span
 									>Marked normal — reprocessed</span
@@ -418,31 +422,51 @@
 	<section class="surface surface--padded section danger-zone" aria-labelledby="danger-heading">
 		<h2 id="danger-heading">Clear test records</h2>
 		<p class="supporting-text">
-			Deletes every session, photo, worker record, roll-up and fraud flag of {data.pump.pump_code}.
-			The pump login stays. Use this only for test data. The action is recorded in the admin audit
-			log.
+			Deletes only the shifts {data.pump.pump_code} took while test mode was on (marked "Taken in test
+			mode" in the Session log), with their photos, roll-ups, fraud flags and the workers seen only in
+			them. Genuine shifts and workers are never deleted. The pump login stays and the action is in the
+			admin audit log.
 		</p>
-		<form
-			method="POST"
-			action="?/clearPumpData"
-			class="danger-form"
-			onsubmit={(event) => {
-				if (
-					!confirm(`Delete ALL attendance data of ${data.pump.pump_code}? This cannot be undone.`)
-				)
-					event.preventDefault();
-			}}
-		>
-			<label>
-				Type <strong>{data.pump.pump_code}</strong> to confirm
-				<input name="confirm_code" autocomplete="off" required />
-			</label>
-			<button type="submit" class="button button--secondary">Delete all attendance data</button>
-		</form>
+		<p class="test-count" data-testid="test-session-count">
+			{#if data.testSessions.sessions}
+				<strong>{data.testSessions.sessions}</strong>
+				{data.testSessions.sessions === 1 ? 'photo' : 'photos'} taken in test mode{#if data.testSessions.first && data.testSessions.last},
+					from {formatDateTime(data.testSessions.first)} to {formatDateTime(
+						data.testSessions.last
+					)}{/if}.
+			{:else}
+				No shifts taken in test mode. Genuine records can only be deleted one shift at a time from
+				the Session log.
+			{/if}
+		</p>
+		{#if data.testSessions.sessions}
+			<form
+				method="POST"
+				action="?/clearPumpData"
+				class="danger-form"
+				onsubmit={(event) => {
+					if (
+						!confirm(
+							`Delete the ${data.testSessions.sessions} test-mode photo(s) of ${data.pump.pump_code}? Genuine shifts stay. This cannot be undone.`
+						)
+					)
+						event.preventDefault();
+				}}
+			>
+				<label>
+					Type <strong>{data.pump.pump_code}</strong> to confirm
+					<input name="confirm_code" autocomplete="off" required />
+				</label>
+				<button type="submit" class="button button--secondary">Delete test records</button>
+			</form>
+		{/if}
 	</section>
 </div>
 
 <style>
+	.test-count {
+		margin: var(--space-3) 0;
+	}
 	.detail-page {
 		--content-max: 82rem;
 	}

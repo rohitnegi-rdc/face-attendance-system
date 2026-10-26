@@ -273,33 +273,92 @@ test('ADM-12 deleting a morning also deletes its evening and reverses the yearly
 	expect(after.rows[0]?.days_present ?? 0).toBe(0);
 });
 
-test('ADM-13 clearing a pump needs the exact pump code, then removes all its data', async () => {
+test('ADM-13 Clear test records deletes only test-mode shifts and keeps every genuine one', async () => {
 	const admin = await login((await createAdmin()).email);
-	const [pump, other] = await sameAreaPumps(2);
-	await recordSession(pump.context, ['ADM13A', 'ADM13B']);
-	await submitAndWait(other.context, ['ADM13A']); // a fraud flag pointing at the cleared pump
+	const [pump, mixed] = await sameAreaPumps(2);
+	const setTestMode = (on: boolean) =>
+		on
+			? db.query(
+					`INSERT INTO app_settings (key, value) VALUES ('test_mode', 'true')
+					 ON CONFLICT (key) DO UPDATE SET value = 'true'`
+				)
+			: db.query(`DELETE FROM app_settings WHERE key = 'test_mode'`);
 
-	const wrong = await action(admin, `/admin/pumps/${pump.id}?/clearPumpData`, {
-		confirm_code: 'WRONG'
-	});
-	expect(wrong.type).toBe('failure');
-	expect(await count('SELECT 1 FROM attendance_sessions WHERE pump_id = $1', [pump.id])).toBe(1);
+	try {
+		// Yesterday: a genuine shift start. Today: a test shift with that worker and a tester.
+		const genuineId = await recordSession(pump.context, ['ADM13G']);
+		await shiftBack(genuineId, 1500, true);
+		// A part-test, part-genuine shift on the other pump: test start, genuine end.
+		await setTestMode(true);
+		const testId = await recordSession(pump.context, ['ADM13G', 'ADM13T']);
+		const mixedStart = await recordSession(mixed.context, ['ADM13M']);
+		await setTestMode(false);
+		await shiftBack(mixedStart, 541);
+		await recordSession(mixed.context, ['ADM13M']);
+		expect(
+			await count('SELECT 1 FROM attendance_sessions WHERE id = ANY($1) AND test_mode', [
+				[genuineId, testId]
+			])
+		).toBe(1);
+		const page = await (await admin.get(`/admin/pumps/${pump.id}`)).text();
+		expect(page).toContain('data-testid="test-mode-session"');
+		expect(page).toMatch(
+			/data-testid="test-session-count"[^>]*>(<!--[^>]*-->)?<strong>1<\/strong> photo taken in test mode/
+		);
 
-	const right = await action(admin, `/admin/pumps/${pump.id}?/clearPumpData`, {
-		confirm_code: pump.code
-	});
-	expect(right.type).toBe('success');
-	expect(await count('SELECT 1 FROM attendance_sessions WHERE pump_id = $1', [pump.id])).toBe(0);
-	expect(await count('SELECT 1 FROM persons WHERE pump_id = $1', [pump.id])).toBe(0);
-	expect(await count('SELECT 1 FROM fraud_flags WHERE matched_at_pump_id = $1', [pump.id])).toBe(0);
-	expect(
-		await count(
-			`SELECT 1 FROM admin_audit_log WHERE action = 'clear_pump_attendance' AND target_id = $1`,
-			[pump.id]
-		)
-	).toBe(1);
-	// The pump account stays and can start fresh.
-	expect((await submit(pump.context, await photo(['ADM13C']))).status).toBe(202);
+		const wrong = await action(admin, `/admin/pumps/${pump.id}?/clearPumpData`, {
+			confirm_code: 'WRONG'
+		});
+		expect(wrong.type).toBe('failure');
+		expect(await count('SELECT 1 FROM attendance_sessions WHERE pump_id = $1', [pump.id])).toBe(2);
+
+		const right = await action(admin, `/admin/pumps/${pump.id}?/clearPumpData`, {
+			confirm_code: pump.code
+		});
+		expect(right.type).toBe('success');
+		// The test shift and the tester seen only in it are gone; the genuine shift and worker stay.
+		expect(await count('SELECT 1 FROM attendance_sessions WHERE id = $1', [testId])).toBe(0);
+		expect(await count('SELECT 1 FROM attendance_sessions WHERE id = $1', [genuineId])).toBe(1);
+		expect(await count('SELECT 1 FROM persons WHERE pump_id = $1', [pump.id])).toBe(1);
+		expect(
+			await count(
+				`SELECT 1 FROM daily_person_attendance d JOIN attendance_sessions s
+				   ON s.pump_id = d.pump_id AND s.session_date = d.session_date
+				 WHERE s.id = $1 AND d.morning_matched`,
+				[genuineId]
+			)
+		).toBe(1);
+		expect(
+			await count(
+				`SELECT 1 FROM admin_audit_log WHERE action = 'clear_test_attendance' AND target_id = $1`,
+				[pump.id]
+			)
+		).toBe(1);
+
+		// Nothing left to clear: refused, nothing deleted.
+		const again = await action(admin, `/admin/pumps/${pump.id}?/clearPumpData`, {
+			confirm_code: pump.code
+		});
+		expect(again.type).toBe('failure');
+		expect(await count('SELECT 1 FROM attendance_sessions WHERE pump_id = $1', [pump.id])).toBe(1);
+
+		// A shift with a genuine end is kept whole, and the admin is told so.
+		const kept = await action(admin, `/admin/pumps/${mixed.id}?/clearPumpData`, {
+			confirm_code: mixed.code
+		});
+		expect(kept.type).toBe('success');
+		const keptAudit = await db.query(
+			`SELECT details FROM admin_audit_log WHERE action = 'clear_test_attendance' AND target_id = $1`,
+			[mixed.id]
+		);
+		expect(keptAudit.rows[0].details.mixed_shifts_kept).toBe(1);
+		expect(await count('SELECT 1 FROM attendance_sessions WHERE pump_id = $1', [mixed.id])).toBe(2);
+
+		// The pump account stays and can submit again.
+		expect((await submit(pump.context, await photo(['ADM13C']))).status).toBe(202);
+	} finally {
+		await setTestMode(false);
+	}
 });
 
 test('MATCH-06 the default threshold is 0.28 when FACE_MATCH_THRESHOLD is empty', async () => {
@@ -449,6 +508,11 @@ test('FRD-13 the admin turns test mode on and off: fraud check off, banner, audi
 		await recordSession(c.context, ['FRD13on']);
 		expect(await fraudFlagsOn(await submitAndWait(d.context, ['FRD13on']))).toBe(1);
 
+		// Reset to production defaults also turns test mode off.
+		await action(admin, '/admin/settings?/testMode', { on: 'true' });
+		expect((await action(admin, '/admin/settings?/reset', {})).type).toBe('success');
+		expect(await count(`SELECT 1 FROM app_settings WHERE key = 'test_mode'`)).toBe(0);
+
 		const audit = await db.query(
 			`SELECT details FROM admin_audit_log WHERE admin_id = $1 AND action = 'set_test_mode'
 			 ORDER BY created_at`,
@@ -459,8 +523,3 @@ test('FRD-13 the admin turns test mode on and off: fraud check off, banner, audi
 		await db.query(`DELETE FROM app_settings WHERE key IN ('test_mode', 'fraud_check_disabled')`);
 	}
 });
-		// Reset to production defaults also turns test mode off.
-		await action(admin, '/admin/settings?/testMode', { on: 'true' });
-		expect((await action(admin, '/admin/settings?/reset', {})).type).toBe('success');
-		expect(await count(`SELECT 1 FROM app_settings WHERE key = 'test_mode'`)).toBe(0);
-

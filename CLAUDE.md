@@ -99,7 +99,7 @@ Full spec: [plans/FaceAttendanceEvaluationApprovalSystem.md](plans/FaceAttendanc
 - `npm run test:unit` (`scripts/run-unit.mjs`): fast unit tests in `tests/unit` (face lookups in `worker/faceQueries.js`, fraud resolution, session cleanup) against a throwaway pgvector Postgres; no build, app or worker. Needs Docker. Runs separately from the regression gate.
 - `npm run test:regression` (`scripts/run-regression.mjs`): svelte-check, throwaway Postgres, migrations, build, stub AI service (`tests/regression/stub-ai.mjs`, fixed face vectors), app + worker, then the API scenarios in `tests/regression/*.spec.ts`. Needs Docker. Run it before every push: the server does not run tests.
 - Deploy is GitHub-only: on the server, inside the clone, `bash scripts/deploy.sh` fetches and fast-forwards to `origin/main`, backs up DB + photos, rebuilds, health-checks and rolls back on failure. Only the user deploys. Scenario IDs and coverage: [plans/RegressionTestPlan.md](plans/RegressionTestPlan.md). Every bug fix adds or flips a scenario.
-- Pump Retry only works on `failed`/`review` sessions with no fraud evidence; deleting anything else is admin-only (`src/lib/server/sessionCleanup.ts`, audited in `admin_audit_log`).
+- Pump Retry only works on `failed`/`review` sessions with no fraud evidence; deleting anything else is admin-only (`src/lib/server/sessionCleanup.ts`, audited in `admin_audit_log`). Clear test records deletes only sessions with `test_mode` (set at submit while test mode is on, migration 039); never add a bulk delete of genuine attendance.
 
 ## Known gotchas (full log: [plans/Learnings.md](plans/Learnings.md) — append new ones there, don't duplicate here)
 
