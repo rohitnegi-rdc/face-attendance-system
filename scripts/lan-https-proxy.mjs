@@ -5,6 +5,11 @@ import { readFileSync } from 'node:fs';
 const port = Number(process.env.LAN_HTTPS_PORT || 6103);
 const upstreamHost = process.env.UPSTREAM_HOST || 'app';
 const upstreamPort = Number(process.env.UPSTREAM_PORT || 3000);
+// The app's ORIGIN (when the env file sets one, e.g. the laptop address) makes SvelteKit refuse
+// form posts from the phone's address as cross-site. A request whose Origin is this proxy's own
+// address is same-origin, so it is passed on with the app's ORIGIN; any other Origin is passed
+// unchanged and still refused by the app.
+const appOrigin = process.env.ORIGIN || '';
 
 const server = https.createServer(
 	{
@@ -20,6 +25,9 @@ const server = https.createServer(
 				method: request.method,
 				headers: {
 					...request.headers,
+					...(appOrigin && request.headers.origin === `https://${request.headers.host}`
+						? { origin: appOrigin }
+						: {}),
 					host: request.headers.host || `${upstreamHost}:${upstreamPort}`,
 					'x-forwarded-proto': 'https',
 					'x-forwarded-host': request.headers.host || ''

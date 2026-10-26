@@ -14,6 +14,8 @@ services:
       LAN_HTTPS_PORT: '6103'
       UPSTREAM_HOST: app
       UPSTREAM_PORT: '3000'
+      # Passed through only when set (see scripts/lan-https-proxy.mjs).
+      ORIGIN:
     ports:
       - '6103:6103'
     volumes:
