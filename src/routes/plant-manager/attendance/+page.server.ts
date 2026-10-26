@@ -3,10 +3,13 @@ import { attachSessionEvidence, groupShifts } from '$lib/server/sessionEvidence'
 import { query } from '$lib/server/db';
 import { nowIST } from '$lib/server/time';
 import { isDateKey } from '$lib/date';
+import { personDayStatuses } from '$lib/server/personCalendar';
 
 // The session log shows one row per shift (pump + date) with its start and end photos side by
 // side, paged by shift to keep the page small (worker faces load on click).
 const SESSION_PAGE_SIZE = 15;
+// Attendance calendar: one row per person of the manager's pumps (or one pump), paged.
+const ROSTER_PAGE_SIZE = 50;
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const managerId = locals.user!.id;
@@ -19,6 +22,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		: today.format('YYYY-MM-DD');
 	const requestedPage = Number(url.searchParams.get('session_page') || '1');
 	const sessionPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+	const requestedRosterPage = Number(url.searchParams.get('roster_page') || '1');
+	const rosterPage =
+		Number.isInteger(requestedRosterPage) && requestedRosterPage > 0 ? requestedRosterPage : 1;
+	// Only a pump of this manager's plants; anything else means all of them.
+	const requestedPump = url.searchParams.get('pump') || '';
 	const [pumps, plants, daily, sessionRows, sessionCount] = await Promise.all([
 		query<any>(
 			`SELECT pu.id, pu.pump_code FROM pumps pu JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id WHERE pma.manager_id = $1 ORDER BY pu.pump_code`,
@@ -68,6 +76,29 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		)
 	]);
 
+	const pumpFilter = pumps.some((p: any) => p.id === requestedPump) ? requestedPump : '';
+	const rosterPumpIds = pumpFilter ? [pumpFilter] : pumps.map((p: any) => p.id);
+	const [roster, rosterCount] = await Promise.all([
+		query<any>(
+			`SELECT p.id, p.display_seq, p.name, p.is_operator, pu.pump_code
+			 FROM persons p JOIN pumps pu ON pu.id = p.pump_id
+			 WHERE p.pump_id = ANY($1) AND p.status = 'active'
+			 ORDER BY pu.pump_code, p.display_seq
+			 LIMIT $2 OFFSET $3`,
+			[rosterPumpIds, ROSTER_PAGE_SIZE, (rosterPage - 1) * ROSTER_PAGE_SIZE]
+		),
+		query<any>(
+			`SELECT count(*)::int AS n FROM persons WHERE pump_id = ANY($1) AND status = 'active'`,
+			[rosterPumpIds]
+		)
+	]);
+	const attendanceMap = await personDayStatuses(
+		roster.map((p: any) => p.id),
+		from,
+		to
+	);
+	const rosterTotal = rosterCount[0]?.n ?? 0;
+
 	// Same per-worker and fraud evidence the admin pump page shows. Sessions are already limited to
 	// this manager's plants, so the evidence is too.
 	const sessions = await attachSessionEvidence(sessionRows);
@@ -83,6 +114,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			total: sessionTotal,
 			totalPages: Math.max(1, Math.ceil(sessionTotal / SESSION_PAGE_SIZE))
 		},
-		filters: { from, to }
+		roster,
+		attendanceMap,
+		rosterPagination: {
+			page: rosterPage,
+			pageSize: ROSTER_PAGE_SIZE,
+			total: rosterTotal,
+			totalPages: Math.max(1, Math.ceil(rosterTotal / ROSTER_PAGE_SIZE))
+		},
+		filters: { from, to, pump: pumpFilter }
 	};
 };

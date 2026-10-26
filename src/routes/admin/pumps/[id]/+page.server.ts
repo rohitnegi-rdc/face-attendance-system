@@ -15,6 +15,7 @@ import {
 import { getAttendanceSettings } from '$lib/server/settings';
 import { todayIST } from '$lib/server/time';
 import { validCoordinate } from '$lib/server/locationCheck';
+import { personDayStatuses } from '$lib/server/personCalendar';
 import {
 	ShiftError,
 	adminEndShift,
@@ -86,25 +87,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const rosterIds = roster.map((p: any) => p.id);
 
 	// Calendar only needs rows for the roster page currently shown.
-	const attendanceRows = rosterIds.length
-		? await query<any>(
-				`SELECT person_id, session_date, morning_matched, evening_matched
-			 FROM daily_person_attendance
-			 WHERE pump_id = $1 AND person_id = ANY($2) AND session_date >= $3 AND session_date <= $4`,
-				[pump.id, rosterIds, from, to]
-			)
-		: [];
-	const attendanceMap: Record<string, string> = {};
-	for (const r of attendanceRows) {
-		const sessionDate = dateKey(r.session_date);
-		const status =
-			r.morning_matched && r.evening_matched
-				? 'present'
-				: r.morning_matched
-					? 'morning_only'
-					: 'evening_only';
-		attendanceMap[`${r.person_id}|${sessionDate}`] = status;
-	}
+	const attendanceMap = await personDayStatuses(rosterIds, from, to);
 
 	// Session log: one row per shift (date), start and end side by side, paged by shift like the
 	// plant manager's log.

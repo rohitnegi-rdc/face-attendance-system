@@ -5,18 +5,40 @@
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ShiftLog from '$lib/components/ShiftLog.svelte';
-	import { calendarDays, dateKey, todayStr } from '$lib/date';
+	import { calendarDays, dateKey, formatDate, todayStr } from '$lib/date';
+	import { personDisplayLabel } from '$lib/personLabel';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	const days = $derived(calendarDays(data.filters.from, data.filters.to));
 	const entities = $derived(
 		data.pumps.map((pump: any) => ({ id: pump.id, label: pump.pump_code }))
 	);
-	function sessionPageUrl(page: number) {
+	// Keeps the date range, the pump and the other list's page when one list pages.
+	function pageUrl(param: 'session_page' | 'roster_page', page: number) {
 		const params = new URLSearchParams({ from: data.filters.from, to: data.filters.to });
-		params.set('session_page', String(page));
+		if (data.filters.pump) params.set('pump', data.filters.pump);
+		if (param === 'session_page' && data.rosterPagination.page > 1)
+			params.set('roster_page', String(data.rosterPagination.page));
+		if (param === 'roster_page' && data.sessionPagination.page > 1)
+			params.set('session_page', String(data.sessionPagination.page));
+		params.set(param, String(page));
 		return `?${params.toString()}`;
 	}
+	// Person x day calendar, the same rows and letters as the admin pump page.
+	const people = $derived(
+		data.roster.map((person: any) => ({
+			id: person.id,
+			label: personDisplayLabel(
+				person.pump_code,
+				person.display_seq,
+				person.is_operator,
+				person.name
+			)
+		}))
+	);
+	const personStatus = (personId: string, day: string) =>
+		data.attendanceMap[`${personId}|${day}`] ?? 'absent';
+	const rangeLabel = $derived(`${formatDate(data.filters.from)} – ${formatDate(data.filters.to)}`);
 	const lookup = $derived(
 		new Map(
 			data.daily.map((row: any) => [
@@ -71,6 +93,12 @@
 			><span>From</span><input type="date" name="from" value={data.filters.from} /></label
 		><label class="field"
 			><span>To</span><input type="date" name="to" value={data.filters.to} /></label
+		><label class="field"
+			><span>Pump</span><select name="pump" value={data.filters.pump} data-testid="pm-pump-filter"
+				><option value="">All pumps</option>{#each data.pumps as pump (pump.id)}<option
+						value={pump.id}>{pump.pump_code}</option
+					>{/each}</select
+			></label
 		>
 		<div class="filter-actions">
 			<button class="button button--primary" type="submit"><Search size={17} /> Apply</button>
@@ -91,6 +119,44 @@
 			/>{:else}<EmptyState
 				title="No attendance in this range"
 				description="Choose another date range."
+			/>{/if}
+	</section>
+	<section class="section" aria-labelledby="calendar-title" data-testid="pm-person-calendar">
+		<div class="section-header">
+			<div>
+				<h2 id="calendar-title">Attendance calendar</h2>
+				<p class="supporting-text">
+					Person status by day, {rangeLabel} &middot; {data.rosterPagination.total}
+					{data.rosterPagination.total === 1 ? 'person' : 'people'} &middot; scroll for more days
+				</p>
+			</div>
+		</div>
+		{#if people.length}
+			<div class="calendar-frame">
+				<AttendanceCalendarGrid
+					{days}
+					entities={people}
+					cellValue={personStatus}
+					mode="status"
+					entityLabel="Person"
+				/>
+			</div>
+			{#if data.rosterPagination.totalPages > 1}
+				<nav class="pager" aria-label="Attendance calendar pagination">
+					{#if data.rosterPagination.page > 1}<a
+							class="button button--secondary"
+							href={pageUrl('roster_page', data.rosterPagination.page - 1)}>Previous</a
+						>{:else}<span></span>{/if}
+					<span>Page {data.rosterPagination.page} of {data.rosterPagination.totalPages}</span>
+					{#if data.rosterPagination.page < data.rosterPagination.totalPages}<a
+							class="button button--secondary"
+							href={pageUrl('roster_page', data.rosterPagination.page + 1)}>Next</a
+						>{/if}
+				</nav>
+			{/if}
+		{:else}<EmptyState
+				title="No people yet"
+				description="People appear here after their pump sends its first shift photo."
 			/>{/if}
 	</section>
 	<section class="section" aria-labelledby="session-log-title">
@@ -118,12 +184,12 @@
 				<nav class="pager" aria-label="Session log pagination">
 					{#if data.sessionPagination.page > 1}<a
 							class="button button--secondary"
-							href={sessionPageUrl(data.sessionPagination.page - 1)}>Previous</a
+							href={pageUrl('session_page', data.sessionPagination.page - 1)}>Previous</a
 						>{:else}<span></span>{/if}
 					<span>Page {data.sessionPagination.page} of {data.sessionPagination.totalPages}</span>
 					{#if data.sessionPagination.page < data.sessionPagination.totalPages}<a
 							class="button button--secondary"
-							href={sessionPageUrl(data.sessionPagination.page + 1)}>Next</a
+							href={pageUrl('session_page', data.sessionPagination.page + 1)}>Next</a
 						>{/if}
 				</nav>
 			{/if}
@@ -161,8 +227,11 @@
 		white-space: nowrap;
 	}
 	.compact-filter {
-		grid-template-columns: repeat(2, minmax(11rem, 16rem)) auto;
+		grid-template-columns: repeat(3, minmax(11rem, 16rem)) auto;
 		justify-content: start;
+	}
+	.calendar-frame :global(.grid-wrap) {
+		width: 100%;
 	}
 	@media (max-width: 38rem) {
 		/* One row: export, then the month and its button, bottoms aligned; wraps on a phone. */
