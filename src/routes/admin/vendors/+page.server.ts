@@ -10,7 +10,10 @@ function temporaryPassword() {
 	return randomBytes(15).toString('base64url');
 }
 
-export const load: PageServerLoad = async () => {
+// q searches the vendor list by name, area or login; the New pump form still lists every vendor.
+// Pump password resets live on /admin/pumps.
+export const load: PageServerLoad = async ({ url }) => {
+	const q = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
 	const vendors = await query<any>(
 		`SELECT v.id, v.name, v.email, v.area_id, a.name AS area_name,
 		        COUNT(p.id) AS pump_count
@@ -26,13 +29,16 @@ export const load: PageServerLoad = async () => {
 		 FROM plants pl JOIN areas a ON a.id = pl.area_id
 		 ORDER BY a.name, pl.name`
 	);
-	const pumps = await query<any>(
-		`SELECT p.id, p.pump_code, p.login_email, v.name AS vendor_name, pl.name AS plant_name
-		 FROM pumps p JOIN vendors v ON v.id = p.vendor_id JOIN plants pl ON pl.id = p.plant_id
-		 ORDER BY p.pump_code`
-	);
+	const needle = q.toLowerCase();
+	const matches = needle
+		? vendors.filter((v) =>
+				[v.name, v.area_name ?? 'National', v.email].some((field: string) =>
+					field.toLowerCase().includes(needle)
+				)
+			)
+		: vendors;
 
-	return { vendors, areas, plants, pumps };
+	return { vendors, matches, q, areas, plants };
 };
 
 export const actions: Actions = {
@@ -136,25 +142,17 @@ export const actions: Actions = {
 			credentials: { email: loginEmail, password }
 		};
 	},
-	resetVendorPassword: async ({ request, locals }) => resetAccount('vendor', request, locals),
-	resetPumpPassword: async ({ request, locals }) => resetAccount('pump', request, locals)
-};
-
-async function resetAccount(role: 'vendor' | 'pump', request: Request, locals: App.Locals) {
-	const id = String((await request.formData()).get('id') || '').trim();
-	const issued = /^[0-9a-f-]{36}$/i.test(id)
-		? await issueTemporaryPassword(role, id, { role: 'admin', id: locals.user!.id })
-		: null;
-	if (!issued) {
-		return fail(404, {
+	resetVendorPassword: async ({ request, locals }) => {
+		const id = String((await request.formData()).get('id') || '').trim();
+		const issued = /^[0-9a-f-]{36}$/i.test(id)
+			? await issueTemporaryPassword('vendor', id, { role: 'admin', id: locals.user!.id })
+			: null;
+		if (!issued) return fail(404, { formKind: 'reset', message: 'Vendor account not found.' });
+		return {
 			formKind: 'reset',
-			message: role === 'vendor' ? 'Vendor account not found.' : 'Pump account not found.'
-		});
+			success: true,
+			message: `Password reset to the default (${issued.password}). The user must choose their own at the next sign-in.`,
+			credentials: issued
+		};
 	}
-	return {
-		formKind: 'reset',
-		success: true,
-		message: `Password reset to the default (${issued.password}). The user must choose their own at the next sign-in.`,
-		credentials: issued
-	};
-}
+};

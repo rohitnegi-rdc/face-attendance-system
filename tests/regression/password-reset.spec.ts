@@ -211,7 +211,7 @@ test('PWD-09 the admin resets a vendor and a pump to the default password', asyn
 
 	for (const [path, account] of [
 		['/admin/vendors?/resetVendorPassword', vendor],
-		['/admin/vendors?/resetPumpPassword', pump]
+		['/admin/pumps?/resetPumpPassword', pump]
 	] as const) {
 		const response = await admin.post(path, { form: { id: account.id }, headers: HTML });
 		const html = await response.text();

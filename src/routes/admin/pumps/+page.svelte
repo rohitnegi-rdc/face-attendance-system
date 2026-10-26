@@ -3,16 +3,24 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDateTime } from '$lib/date';
-	let { data } = $props();
+	let { data, form } = $props();
 
 	const pumpsPath = resolve('/admin/pumps');
-	function pageUrl(page: number) {
+	function pageParams(page: number) {
 		const params = new URLSearchParams();
 		if (data.q) params.set('q', data.q);
 		if (page > 1) params.set('page', String(page));
-		const search = params.toString();
+		return params.toString();
+	}
+	function pageUrl(page: number) {
+		const search = pageParams(page);
 		return search ? `${pumpsPath}?${search}` : pumpsPath;
 	}
+	// The reset keeps the search and page the admin is on.
+	const resetAction = $derived.by(() => {
+		const search = pageParams(data.pagination.page);
+		return search ? `?${search}&/resetPumpPassword` : '?/resetPumpPassword';
+	});
 </script>
 
 <svelte:head><title>Pumps | Face Attendance</title></svelte:head>
@@ -44,6 +52,17 @@
 		</div>
 	</form>
 
+	{#if form?.credentials}
+		<div class="credential-notice" role="status" data-testid="pump-reset-done">
+			<strong>Password reset to the default. Give these to the pump operator.</strong>
+			<span>They sign in with it and choose their own password straight away.</span>
+			<code>{form.credentials.email}</code>
+			<code>{form.credentials.password}</code>
+		</div>
+	{:else if form?.message}
+		<p class="alert alert--error" role="alert">{form.message}</p>
+	{/if}
+
 	<p class="muted" data-testid="pump-total">
 		{data.pagination.total}
 		{data.pagination.total === 1 ? 'pump' : 'pumps'}{data.q ? ` matching "${data.q}"` : ''}
@@ -55,7 +74,7 @@
 				<thead>
 					<tr>
 						<th>Pump</th><th>Vendor</th><th>Plant</th><th>Area</th><th>People</th><th>Last photo</th
-						><th>Status</th>
+						><th>Status</th><th>Password</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -76,6 +95,24 @@
 									tone={pump.status === 'active' ? 'success' : 'critical'}
 									label={pump.status === 'active' ? 'Active' : 'Disabled'}
 								/></td
+							>
+							<td
+								><form method="POST" action={resetAction}>
+									<input type="hidden" name="id" value={pump.id} /><button
+										class="button button--secondary"
+										type="submit"
+										data-testid="admin-reset-pump-password"
+										title="Reset the password of {pump.login_email}"
+										onclick={(e) => {
+											if (
+												!confirm(
+													`Reset the password of ${pump.pump_code} to the default? The current password stops working at once.`
+												)
+											)
+												e.preventDefault();
+										}}>Reset password</button
+									>
+								</form></td
 							>
 						</tr>
 					{/each}
@@ -114,6 +151,18 @@
 	}
 	.num {
 		font-variant-numeric: tabular-nums;
+	}
+	.credential-notice {
+		display: grid;
+		gap: var(--space-2);
+		margin-bottom: var(--space-4);
+		padding: var(--space-3);
+		background: var(--surface-muted);
+		border-left: 3px solid var(--brand-teal);
+	}
+	.credential-notice code {
+		user-select: all;
+		overflow-wrap: anywhere;
 	}
 	.data-table td {
 		white-space: nowrap;

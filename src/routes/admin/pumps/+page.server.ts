@@ -1,8 +1,11 @@
-import type { PageServerLoad } from './$types';
+import { fail } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
 import { query } from '$lib/server/db';
+import { issueTemporaryPassword } from '$lib/server/passwordReset';
 
 // Every pump, searchable by pump code, plant, area, vendor or login, 50 a page. Each row opens
-// the pump page (attendance calendar, session log, admin fixes, Clear test records).
+// the pump page (attendance calendar, session log, admin fixes, Clear test records) and resets
+// the pump's password to the default.
 const PAGE_SIZE = 50;
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -50,4 +53,16 @@ export const load: PageServerLoad = async ({ url }) => {
 		q,
 		pagination: { page, total: count, totalPages: Math.max(1, Math.ceil(count / PAGE_SIZE)) }
 	};
+};
+
+export const actions: Actions = {
+	// Back to the default password, change forced at the next sign-in (passwordReset.ts).
+	resetPumpPassword: async ({ request, locals }) => {
+		const id = String((await request.formData()).get('id') || '').trim();
+		const issued = /^[0-9a-f-]{36}$/i.test(id)
+			? await issueTemporaryPassword('pump', id, { role: 'admin', id: locals.user!.id })
+			: null;
+		if (!issued) return fail(404, { message: 'Pump account not found.' });
+		return { success: true, credentials: issued };
+	}
 };

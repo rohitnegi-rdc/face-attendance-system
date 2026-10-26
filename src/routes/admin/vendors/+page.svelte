@@ -99,11 +99,31 @@
 		<div class="section-header">
 			<div>
 				<h2>All vendors</h2>
-				<p class="supporting-text">
-					{data.vendors.length} login{data.vendors.length === 1 ? '' : 's'}.
+				<p class="supporting-text" data-testid="vendor-total">
+					{#if data.q}
+						{data.matches.length} of {data.vendors.length} logins matching "{data.q}".
+					{:else}
+						{data.vendors.length} login{data.vendors.length === 1 ? '' : 's'}.
+					{/if}
 				</p>
 			</div>
 		</div>
+		<form class="filter-bar vendor-search" method="GET" role="search">
+			<label class="field"
+				><span>Search</span><input
+					name="q"
+					type="search"
+					value={data.q}
+					placeholder="e.g. RDC, Mumbai, Kapcom"
+					autocomplete="off"
+					data-testid="vendor-search"
+				/></label
+			>
+			<div class="filter-actions">
+				<button class="button button--primary" type="submit">Search</button>
+				{#if data.q}<a class="button button--ghost" href={resolve('/admin/vendors')}>Clear</a>{/if}
+			</div>
+		</form>
 		<div class="table-wrap bounded-table-frame">
 			<table class="data-table">
 				<thead>
@@ -113,14 +133,19 @@
 					>
 				</thead>
 				<tbody>
-					{#each data.vendors as vendor}
+					{#each data.matches as vendor}
 						<tr>
 							<td>{vendor.name}</td>
 							<td>{vendor.area_name ?? 'National'}</td>
 							<td>{vendor.email}</td>
 							<td>{vendor.pump_count}</td>
 							<td
-								><form method="POST" action="?/resetVendorPassword">
+								><form
+									method="POST"
+									action={data.q
+										? `?q=${encodeURIComponent(data.q)}&/resetVendorPassword`
+										: '?/resetVendorPassword'}
+								>
 									<input type="hidden" name="id" value={vendor.id} /><button
 										class="button button--secondary"
 										type="submit"
@@ -142,51 +167,15 @@
 							>
 						</tr>
 					{/each}
-					{#if !data.vendors.length}
-						<tr><td colspan="6">No vendors yet — create one above or import a CSV.</td></tr>
-					{/if}
-				</tbody>
-			</table>
-		</div>
-	</section>
-
-	<section class="section">
-		<div class="section-header">
-			<div>
-				<h2>Pump accounts</h2>
-				<p class="supporting-text">Reset a pump login when its user cannot sign in.</p>
-			</div>
-		</div>
-		<div class="table-wrap bounded-table-frame">
-			<table class="data-table">
-				<thead
-					><tr><th>Pump</th><th>Vendor</th><th>Plant</th><th>Login email</th><th>Access</th></tr
-					></thead
-				>
-				<tbody>
-					{#each data.pumps as pump}
+					{#if !data.matches.length}
 						<tr
-							><td>{pump.pump_code}</td><td>{pump.vendor_name}</td><td>{pump.plant_name}</td><td
-								>{pump.login_email}</td
-							><td
-								><form method="POST" action="?/resetPumpPassword">
-									<input type="hidden" name="id" value={pump.id} /><button
-										class="button button--secondary"
-										type="submit"
-										onclick={(e) => {
-											if (
-												!confirm(
-													`Reset the password of ${pump.pump_code}? The current password stops working at once.`
-												)
-											)
-												e.preventDefault();
-										}}>Reset password</button
-									>
-								</form></td
+							><td colspan="6"
+								>{data.q
+									? 'No vendor matches. Check the spelling, or search by area or login instead.'
+									: 'No vendors yet. Create one above or import a CSV.'}</td
 							></tr
 						>
-					{/each}
-					{#if !data.pumps.length}<tr><td colspan="5">No pump accounts.</td></tr>{/if}
+					{/if}
 				</tbody>
 			</table>
 		</div>
@@ -251,6 +240,11 @@
 		user-select: all;
 		overflow-wrap: anywhere;
 	}
+	.vendor-search {
+		grid-template-columns: minmax(0, 28rem) auto;
+		align-items: end;
+		margin-bottom: var(--space-3);
+	}
 	.bounded-table-frame {
 		max-height: 32rem;
 		overflow: auto;
@@ -258,6 +252,11 @@
 		scrollbar-gutter: stable;
 		scrollbar-width: thin;
 		scrollbar-color: var(--brand-mist) var(--surface-muted);
+	}
+	@media (max-width: 30rem) {
+		.vendor-search {
+			grid-template-columns: 1fr;
+		}
 	}
 	@media (max-width: 60rem) {
 		.creation-grid {

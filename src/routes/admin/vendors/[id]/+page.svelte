@@ -44,7 +44,9 @@
 <svelte:head><title>{data.vendor.name} | Face Attendance</title></svelte:head>
 
 <div class="page detail-page">
-	<a class="back-link" href={resolve('/admin/attendance')}><ArrowLeft size={16} /> Attendance records</a>
+	<a class="back-link" href={resolve('/admin/attendance')}
+		><ArrowLeft size={16} /> Attendance records</a
+	>
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Vendor</p>
