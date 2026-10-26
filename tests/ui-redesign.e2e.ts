@@ -2,8 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import jwt from 'jsonwebtoken';
 import pg from 'pg';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { installFakeCamera, takeShiftPhotos } from './e2e-camera';
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -22,6 +23,12 @@ async function authenticate(page: Page, role: Role) {
 		`SELECT id, ${emailColumn} AS email FROM ${table} ORDER BY created_at LIMIT 1`
 	);
 	if (!result.rows[0]) throw new Error(`No ${role} account is available in the test database.`);
+	// The first sign-in guide would cover the pump screen this script checks.
+	if (role === 'pump')
+		await pool.query(
+			`UPDATE pumps SET guide_done_at = COALESCE(guide_done_at, now()) WHERE id = $1`,
+			[result.rows[0].id]
+		);
 
 	const token = jwt.sign(
 		{ role, id: result.rows[0].id, email: result.rows[0].email },
@@ -70,10 +77,10 @@ test('login is accessible and reflows on a narrow phone', async ({ page }) => {
 test('pump capture retains a selected group photo before submission', async ({ page }) => {
 	await authenticate(page, 'pump');
 	await page.setViewportSize({ width: 390, height: 844 });
+	await installFakeCamera(page);
 	await page.goto('/pump');
-	await page.getByTestId('capture-input').setInputFiles('Test/faces/group photo.jpg');
-	await expect(page.getByAltText('Selected group attendance preview')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Submit group photo' })).toBeVisible();
+	await takeShiftPhotos(page, { buffer: await readFile('Test/faces/group photo.jpg') });
+	await expect(page.getByRole('button', { name: 'Submit photos' })).toBeVisible();
 	await expectNoHorizontalOverflow(page);
 	await page.screenshot({ path: path.join(screenshots, 'pump-preview-390.png'), fullPage: true });
 });

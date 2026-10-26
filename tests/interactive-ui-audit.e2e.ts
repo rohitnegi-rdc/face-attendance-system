@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import pg from 'pg';
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { installFakeCamera, submitPhotos, takeShiftPhotos } from './e2e-camera';
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -856,26 +857,22 @@ test('pump choose-photo, cancel, and sign-out controls work for the imported aud
 		 WHERE pump_id = $1 AND pairing_status = 'open'`,
 		[auditPumpId]
 	);
+	// The CSV-imported pump would open the first sign-in guide; this audit is about the controls.
+	await pool.query(`UPDATE pumps SET guide_done_at = now() WHERE id = $1`, [auditPumpId]);
 	await authenticate(page, 'pump', auditPumpId);
 	const failures = monitorRuntime(page);
+	await installFakeCamera(page);
 	await expectHealthyPage(page, '/pump');
 
-	await expect(page.getByRole('button', { name: 'Choose photo' })).toBeEnabled();
-	const chooserPromise = page.waitForEvent('filechooser');
-	await page.getByRole('button', { name: 'Choose photo' }).click();
-	const chooser = await chooserPromise;
-	await chooser.setFiles('tests/fixtures/group-e2e/photos/a-01-baseline.jpg');
-	await expect(page.getByAltText('Selected group attendance preview')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Submit group photo' })).toBeVisible();
+	const takeOperator = page.getByRole('button', { name: 'Take Pump Operator photo', exact: true });
+	await expect(takeOperator).toBeEnabled();
+	await takeShiftPhotos(page, { buffer: await taggedPhoto('a-01-baseline.jpg', 'audit-cancel') });
+	await expect(page.getByRole('button', { name: 'Submit photos' })).toBeVisible();
 	await page.getByRole('button', { name: 'Cancel' }).click();
 	await expect(page.getByAltText('Selected group attendance preview')).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Choose photo' })).toBeVisible();
+	await expect(takeOperator).toBeVisible();
 
-	const cameraChooserPromise = page.waitForEvent('filechooser');
-	await page.getByRole('button', { name: 'Take photo' }).click();
-	const cameraChooser = await cameraChooserPromise;
-	await cameraChooser.setFiles('tests/fixtures/group-e2e/photos/a-02-lowlight.jpg');
-	await expect(page.getByAltText('Selected group attendance preview')).toBeVisible();
+	await takeShiftPhotos(page, { buffer: await taggedPhoto('a-02-lowlight.jpg', 'audit-submit') });
 	await page.route('**/api/attendance/submit', async (route) => {
 		await route.fulfill({
 			status: 409,
@@ -888,7 +885,7 @@ test('pump choose-photo, cancel, and sign-out controls work for the imported aud
 		if (request.url().includes('/api/attendance/submit')) submissionAttempts += 1;
 	});
 	expect(failures).toEqual([]);
-	await page.getByRole('button', { name: 'Submit group photo' }).click();
+	await submitPhotos(page);
 	await expect(page.getByTestId('status-failed')).toContainText('Audit rejection');
 	failures.length = 0;
 	await page.getByRole('button', { name: 'Retry' }).click();
@@ -928,8 +925,8 @@ test('attendance evidence shows live morning-only totals, both sessions, and per
 		).rows[0];
 		const pump = (
 			await client.query(
-				`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash)
-				 VALUES ($1, $2, $3, $4, 'unused') RETURNING id`,
+				`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash, guide_done_at)
+				 VALUES ($1, $2, $3, $4, 'unused', now()) RETURNING id`,
 				[plant.id, vendor.id, tag, `${tag.toLowerCase()}@pump.local`]
 			)
 		).rows[0];
@@ -944,13 +941,10 @@ test('attendance evidence shows live morning-only totals, both sessions, and per
 
 	const failures = monitorRuntime(page);
 	await authenticate(page, 'pump', pumpId);
+	await installFakeCamera(page);
 	await expectHealthyPage(page, '/pump');
-	await page.getByTestId('capture-input').setInputFiles({
-		name: 'morning-baseline.jpg',
-		mimeType: 'image/jpeg',
-		buffer: await taggedPhoto('a-01-baseline.jpg', `${tag}-morning`)
-	});
-	await page.getByRole('button', { name: 'Submit group photo' }).click();
+	await takeShiftPhotos(page, { buffer: await taggedPhoto('a-01-baseline.jpg', `${tag}-morning`) });
+	await submitPhotos(page);
 	await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 4 * 60 * 1000 });
 
 	const morning = (
@@ -1028,12 +1022,8 @@ test('attendance evidence shows live morning-only totals, both sessions, and per
 	);
 	await authenticate(page, 'pump', pumpId);
 	await expectHealthyPage(page, '/pump');
-	await page.getByTestId('capture-input').setInputFiles({
-		name: 'evening-mirrored.jpg',
-		mimeType: 'image/jpeg',
-		buffer: await taggedPhoto('a-05-mirrored.jpg', `${tag}-evening`)
-	});
-	await page.getByRole('button', { name: 'Submit group photo' }).click();
+	await takeShiftPhotos(page, { buffer: await taggedPhoto('a-05-mirrored.jpg', `${tag}-evening`) });
+	await submitPhotos(page);
 	await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 4 * 60 * 1000 });
 
 	const paired = (
@@ -1061,7 +1051,9 @@ test('attendance evidence shows live morning-only totals, both sessions, and per
 		personEvidence.filter({ has: page.getByRole('button', { name: 'View group' }) })
 	).toHaveCount(2);
 	await expect(
-		personEvidence.filter({ has: page.getByRole('button', { name: 'View Individual photo' }) })
+		personEvidence.filter({
+			has: page.getByRole('button', { name: 'View face of Individual photo' })
+		})
 	).toHaveCount(2);
 
 	for (const sessionId of [paired.morning_id, paired.evening_id]) {
@@ -1077,7 +1069,7 @@ test('attendance evidence shows live morning-only totals, both sessions, and per
 			)
 			.toBeGreaterThan(0);
 		await page.getByTitle('Close evidence viewer').click();
-		await evidence.getByRole('button', { name: 'View Individual photo' }).click();
+		await evidence.getByRole('button', { name: 'View face of Individual photo' }).click();
 		await expect
 			.poll(() =>
 				page

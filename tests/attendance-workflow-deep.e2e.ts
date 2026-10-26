@@ -3,6 +3,15 @@ import bcrypt from 'bcryptjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import pg from 'pg';
+import {
+	completeReview,
+	installFakeCamera,
+	submitPhotos,
+	takeMembersPhoto,
+	takeOperatorPhoto,
+	takeShiftPhotos,
+	type CameraImage
+} from './e2e-camera';
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -63,19 +72,26 @@ async function cleanupRun() {
 		await pool.query(`DELETE FROM person_face_vectors WHERE session_id = ANY($1::uuid[])`, [
 			sessionIds
 		]);
-		await pool.query(`DELETE FROM attendance_jobs WHERE session_id = ANY($1::uuid[])`, [sessionIds]);
-		await pool.query(`DELETE FROM attendance_rollup_finalizations WHERE session_id = ANY($1::uuid[])`, [
+		await pool.query(`DELETE FROM attendance_jobs WHERE session_id = ANY($1::uuid[])`, [
 			sessionIds
 		]);
+		await pool.query(
+			`DELETE FROM attendance_rollup_finalizations WHERE session_id = ANY($1::uuid[])`,
+			[sessionIds]
+		);
 	}
 
 	if (personIds.length) {
 		await pool.query(`DELETE FROM person_attendance_yearly WHERE person_id = ANY($1::uuid[])`, [
 			personIds
 		]);
-		await pool.query(`DELETE FROM person_face_vectors WHERE person_id = ANY($1::uuid[])`, [personIds]);
+		await pool.query(`DELETE FROM person_face_vectors WHERE person_id = ANY($1::uuid[])`, [
+			personIds
+		]);
 	}
-	await pool.query(`DELETE FROM daily_person_attendance WHERE pump_id = ANY($1::uuid[])`, [pumpIds]);
+	await pool.query(`DELETE FROM daily_person_attendance WHERE pump_id = ANY($1::uuid[])`, [
+		pumpIds
+	]);
 	await pool.query(`DELETE FROM persons WHERE pump_id = ANY($1::uuid[])`, [pumpIds]);
 	await pool.query(`DELETE FROM attendance_sessions WHERE pump_id = ANY($1::uuid[])`, [pumpIds]);
 	await pool.query(`DELETE FROM pumps WHERE id = ANY($1::uuid[])`, [pumpIds]);
@@ -106,8 +122,8 @@ async function createPump(suffix: string) {
 		]
 	);
 	const created = await pool.query<PumpAccount>(
-		`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash, guide_done_at)
+		 VALUES ($1, $2, $3, $4, $5, now())
 		 RETURNING id, pump_code, login_email`,
 		[
 			plant.rows[0].id,
@@ -138,6 +154,7 @@ async function readFixture(candidates: string[], marker: string) {
 }
 
 async function loginAsPump(page: Page, account = pump) {
+	await installFakeCamera(page);
 	await page.goto('/login');
 	await page.getByTestId('login-email').fill(account.login_email);
 	await page.getByTestId('login-password').fill(PASSWORD);
@@ -146,17 +163,20 @@ async function loginAsPump(page: Page, account = pump) {
 	await expect(page.getByTestId('session-title')).toBeVisible();
 }
 
-async function choosePhoto(page: Page, fixture: Awaited<ReturnType<typeof readFixture>>) {
-	const chooserPromise = page.waitForEvent('filechooser');
-	await page.getByRole('button', { name: 'Choose photo' }).click();
-	const chooser = await chooserPromise;
-	await chooser.setFiles(fixture);
-	await expect(page.getByAltText('Selected group attendance preview')).toBeVisible();
-	await expect(page.getByText(fixture.name, { exact: true })).toBeVisible();
+// Pump Operator photo, then the Pump Members photo, both through the (fake) camera.
+async function choosePhoto(page: Page, fixture: CameraImage, operator: CameraImage = fixture) {
+	await takeShiftPhotos(page, fixture, operator);
+	await expect(page.locator('.photo-meta span').first()).toHaveText(/^camera-group-/);
+}
+
+async function expectReadyForPhotos(page: Page) {
+	await expect(
+		page.getByRole('button', { name: 'Take Pump Operator photo', exact: true })
+	).toBeVisible();
 }
 
 async function submitAndWaitForResult(page: Page) {
-	await page.getByRole('button', { name: 'Submit group photo' }).click();
+	await submitPhotos(page);
 	await expect(
 		page.locator(
 			'[data-testid="status-processing"], [data-testid="status-failed"], [data-testid="result-screen"]'
@@ -166,7 +186,7 @@ async function submitAndWaitForResult(page: Page) {
 }
 
 async function submitAndWaitForFailed(page: Page) {
-	await page.getByRole('button', { name: 'Submit group photo' }).click();
+	await submitPhotos(page);
 	await expect(page.getByTestId('status-failed')).toBeVisible({ timeout: 5 * 60 * 1000 });
 }
 
@@ -223,7 +243,10 @@ test('retry clears a finalized evening/no-face attendance instead of showing gen
 	await choosePhoto(
 		page,
 		await readFixture(
-			['test-output/manual-pump-fixtures/pump-fixture-morning-5.jpg', 'Test/faces/group_morning.jpg'],
+			[
+				'test-output/manual-pump-fixtures/pump-fixture-morning-5.jpg',
+				'Test/faces/group_morning.jpg'
+			],
 			'morning'
 		)
 	);
@@ -233,26 +256,42 @@ test('retry clears a finalized evening/no-face attendance instead of showing gen
 	await expect(page.getByTestId('worker-preview')).toHaveCount(0);
 	await openFirstWorkerPreview(page, '01b-morning-worker-preview-reopened.png');
 	await closeWorkerPreview(page);
-	await page.screenshot({ path: path.join(screenshotRoot, '01-morning-result.png'), fullPage: true });
-	await page.getByRole('button', { name: 'Done reviewing' }).click();
+	await page.screenshot({
+		path: path.join(screenshotRoot, '01-morning-result.png'),
+		fullPage: true
+	});
+	await completeReview(page);
 
 	const morning = await pool.query<{ id: string }>(
 		`SELECT id FROM attendance_sessions WHERE pump_id = $1 AND session_type = 'morning'`,
 		[pump.id]
 	);
-	await pool.query(`UPDATE attendance_sessions SET submitted_at = now() - interval '5 minutes' WHERE id = $1`, [
-		morning.rows[0].id
-	]);
+	await pool.query(
+		`UPDATE attendance_sessions SET submitted_at = now() - interval '5 minutes' WHERE id = $1`,
+		[morning.rows[0].id]
+	);
 
 	await page.reload();
 	await expect(page.getByTestId('session-title')).toHaveText('End shift');
+	// No face in the Pump Members photo; the Pump Operator photo has one, and it is the only
+	// face of the shift.
 	await choosePhoto(
 		page,
-		await readFixture(['tests/fixtures/group-e2e/negative/no-face.jpg'], 'evening-no-face')
+		await readFixture(['tests/fixtures/group-e2e/negative/no-face.jpg'], 'evening-no-face'),
+		await readFixture(
+			[
+				'test-output/manual-pump-fixtures/pump-fixture-morning-5.jpg',
+				'Test/faces/group_morning.jpg'
+			],
+			'evening-operator'
+		)
 	);
 	await submitAndWaitForResult(page);
-	await expect(page.getByRole('heading', { name: '0 people found' })).toBeVisible();
-	await page.screenshot({ path: path.join(screenshotRoot, '02-evening-no-face-result.png'), fullPage: true });
+	await expect(page.getByTestId('result-heading')).toHaveText('1 person marked present');
+	await page.screenshot({
+		path: path.join(screenshotRoot, '02-evening-no-face-result.png'),
+		fullPage: true
+	});
 
 	const finalizedBeforeRetry = await pool.query<{ count: number }>(
 		`SELECT count(*)::int AS count FROM attendance_rollup_finalizations WHERE pump_id = $1`,
@@ -261,9 +300,12 @@ test('retry clears a finalized evening/no-face attendance instead of showing gen
 	expect(finalizedBeforeRetry.rows[0].count).toBe(1);
 
 	await page.getByRole('button', { name: 'Retry with better photo' }).click();
-	await expect(page.getByText('Ready for the team photo')).toBeVisible();
+	await expectReadyForPhotos(page);
 	await expect(page.getByText(/Could not prepare retry/i)).toHaveCount(0);
-	await page.screenshot({ path: path.join(screenshotRoot, '03-retry-ready-for-new-photo.png'), fullPage: true });
+	await page.screenshot({
+		path: path.join(screenshotRoot, '03-retry-ready-for-new-photo.png'),
+		fullPage: true
+	});
 
 	const retryState = await pool.query<{
 		finalizations: number;
@@ -296,32 +338,27 @@ test('retry clears a finalized evening/no-face attendance instead of showing gen
 	await choosePhoto(
 		page,
 		await readFixture(
-			['test-output/manual-pump-fixtures/pump-fixture-evening-4.jpg', 'Test/faces/group_evening.jpg'],
+			[
+				'test-output/manual-pump-fixtures/pump-fixture-evening-4.jpg',
+				'Test/faces/group_evening.jpg'
+			],
 			'evening-retake'
 		)
 	);
 	await submitAndWaitForResult(page);
 	await openFirstWorkerPreview(page, '04-evening-worker-preview-after-retry.png');
 	await closeWorkerPreview(page);
-	await page.screenshot({ path: path.join(screenshotRoot, '05-evening-result-after-retry.png'), fullPage: true });
-	await page.getByRole('button', { name: 'Done reviewing' }).click();
+	await page.screenshot({
+		path: path.join(screenshotRoot, '05-evening-result-after-retry.png'),
+		fullPage: true
+	});
+	await completeReview(page);
 	await expect(page.getByTestId('session-title')).toHaveText('Shift complete');
 	expect(browserErrors).toEqual([]);
 	expect(failedResponses).toEqual([]);
 });
 
-test('camera, screen capture, cancel, and failed-session retry controls stay stable', async ({
-	page
-}) => {
-	await page.addInitScript(() => {
-		const mediaDevices = navigator.mediaDevices;
-		if (!mediaDevices?.getUserMedia) return;
-		Object.defineProperty(mediaDevices, 'getDisplayMedia', {
-			configurable: true,
-			value: () => mediaDevices.getUserMedia({ video: true, audio: false })
-		});
-	});
-
+test('camera, cancel, and failed-session retry controls stay stable', async ({ page }) => {
 	const browserErrors: string[] = [];
 	const failedResponses: string[] = [];
 	page.on('pageerror', (error) => browserErrors.push(error.message));
@@ -331,39 +368,52 @@ test('camera, screen capture, cancel, and failed-session retry controls stay sta
 
 	await page.context().grantPermissions(['camera']);
 	await loginAsPump(page, capturePump);
-	await page.getByRole('button', { name: 'Take photo' }).click();
-	await expect(page.getByLabel('Laptop camera preview')).toBeVisible();
-	await page.getByRole('button', { name: 'Use this photo' }).click();
-	await expect(page.getByAltText('Selected group attendance preview')).toBeVisible();
-	await page.screenshot({ path: path.join(screenshotRoot, '06-camera-frame-selected.png'), fullPage: true });
+	const cameraPhoto = await readFixture(
+		['test-output/manual-pump-fixtures/pump-fixture-morning-5.jpg', 'Test/faces/group_morning.jpg'],
+		'camera-check'
+	);
+	await takeOperatorPhoto(page, cameraPhoto);
+	await takeMembersPhoto(page, cameraPhoto);
+	await page.screenshot({
+		path: path.join(screenshotRoot, '06-camera-frame-selected.png'),
+		fullPage: true
+	});
 	await page.getByRole('button', { name: 'Cancel' }).click();
-	await expect(page.getByText('Ready for the team photo')).toBeVisible();
-
-	await page.getByRole('button', { name: 'Capture video call' }).click();
-	await expect(page.getByLabel('Selected video call preview')).toBeVisible();
-	await page.getByRole('button', { name: 'Use this frame' }).click();
-	await expect(page.getByAltText('Selected group attendance preview')).toBeVisible();
-	await page.screenshot({ path: path.join(screenshotRoot, '07-video-call-frame-selected.png'), fullPage: true });
-	await page.getByRole('button', { name: 'Cancel' }).click();
-	await expect(page.getByText('Ready for the team photo')).toBeVisible();
+	await expectReadyForPhotos(page);
 
 	await loginAsPump(page, failedPump);
 	await choosePhoto(
 		page,
-		await readFixture(['tests/fixtures/group-e2e/negative/corrupt-image.jpg'], 'corrupt-failure')
+		await readFixture(
+			[
+				'test-output/manual-pump-fixtures/pump-fixture-morning-5.jpg',
+				'Test/faces/group_morning.jpg'
+			],
+			'failed-group'
+		),
+		await readFixture(['tests/fixtures/group-e2e/negative/no-face.jpg'], 'failed-no-operator-face')
 	);
 	await submitAndWaitForFailed(page);
 	await expect(page.getByText('Could not finish')).toBeVisible();
-	await page.screenshot({ path: path.join(screenshotRoot, '08-failed-session-state.png'), fullPage: true });
+	await page.screenshot({
+		path: path.join(screenshotRoot, '08-failed-session-state.png'),
+		fullPage: true
+	});
 	await page.getByRole('button', { name: 'Retry' }).click();
-	await expect(page.getByText('Ready for the team photo')).toBeVisible();
+	await expectReadyForPhotos(page);
 	await expect(page.getByText(/Duplicate photo/i)).toHaveCount(0);
-	await page.screenshot({ path: path.join(screenshotRoot, '09-failed-retry-reset.png'), fullPage: true });
+	await page.screenshot({
+		path: path.join(screenshotRoot, '09-failed-retry-reset.png'),
+		fullPage: true
+	});
 
 	await choosePhoto(
 		page,
 		await readFixture(
-			['test-output/manual-pump-fixtures/pump-fixture-morning-5.jpg', 'Test/faces/group_morning.jpg'],
+			[
+				'test-output/manual-pump-fixtures/pump-fixture-morning-5.jpg',
+				'Test/faces/group_morning.jpg'
+			],
 			'failed-recovery-good-photo'
 		)
 	);

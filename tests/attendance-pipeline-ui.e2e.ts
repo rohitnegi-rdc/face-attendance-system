@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import jwt from 'jsonwebtoken';
 import pg from 'pg';
+import { completeReview, installFakeCamera, submitPhotos, takeShiftPhotos } from './e2e-camera';
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -38,8 +39,8 @@ async function authenticate(page: Page, pump: Pump) {
 
 async function createPump(plantId: string, vendorId: string, tag: string): Promise<Pump> {
 	const result = await pool.query<Pump>(
-		`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash)
-		 VALUES ($1, $2, $3, $4, 'e2e-unused')
+		`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash, guide_done_at)
+		 VALUES ($1, $2, $3, $4, 'e2e-unused', now())
 		 RETURNING id, pump_code, login_email`,
 		[plantId, vendorId, `E2EUI${tag}`, `e2e-ui-${tag.toLowerCase()}@e2e.local`]
 	);
@@ -86,6 +87,12 @@ async function submitApi(
 		multipart: {
 			photo: {
 				name: path.basename(relativePhoto),
+				mimeType: 'image/jpeg',
+				buffer
+			},
+			// Required with every shift photo; the group photo's largest face is the operator.
+			operator_photo: {
+				name: `operator-${path.basename(relativePhoto)}`,
 				mimeType: 'image/jpeg',
 				buffer
 			}
@@ -141,28 +148,24 @@ test.describe.serial('real pump attendance pipeline', () => {
 		await context.grantPermissions(['geolocation'], { origin: baseUrl });
 		await context.setGeolocation({ latitude: 12.9716, longitude: 77.5946 });
 		await page.setViewportSize({ width: 390, height: 844 });
+		await installFakeCamera(page);
 		await page.goto('/pump');
 
 		await expect(page.getByTestId('session-title')).toHaveText('Start shift');
 		await expect(page.getByText('Start open', { exact: true })).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Submit group photo' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Submit photos' })).toHaveCount(0);
 
 		const morningBytes = await taggedFixture('photos/b-01-baseline.jpg', 'flow-morning');
-		await page.getByTestId('capture-input').setInputFiles({
-			name: 'b-01-baseline.jpg',
-			mimeType: 'image/jpeg',
-			buffer: morningBytes
-		});
-		await expect(page.getByAltText('Selected group attendance preview')).toBeVisible();
-		await expect(page.getByText('b-01-baseline.jpg', { exact: true })).toBeVisible();
+		await takeShiftPhotos(page, { buffer: morningBytes });
+		await expect(page.locator('.photo-meta span').nth(0)).toHaveText(/^camera-group-/);
 		await expect(page.locator('.photo-meta span').nth(1)).toHaveText(/\d+\.\d MB/);
-		await expect(page.getByRole('button', { name: 'Submit group photo' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Submit photos' })).toBeVisible();
 		await page.screenshot({
 			path: path.join(screenshotRoot, '01-morning-photo-selected.png'),
 			fullPage: true
 		});
 
-		await page.getByRole('button', { name: 'Submit group photo' }).click();
+		await submitPhotos(page);
 		await expect(page.getByTestId('status-processing')).toBeVisible({ timeout: 15_000 });
 		await expect(page.locator('.processing-list li').nth(0)).toHaveClass(/active/);
 		await expect(page.locator('.processing-list li').nth(1)).not.toHaveClass(/active/);
@@ -176,7 +179,7 @@ test.describe.serial('real pump attendance pipeline', () => {
 		}
 
 		await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 4 * 60 * 1000 });
-		await expect(page.getByRole('heading', { name: '30 people found' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: '30 people marked present' })).toBeVisible();
 		await expect(page.getByRole('heading', { name: /New people/ })).toContainText('30');
 		await expect(page.getByRole('heading', { name: /Matched/ })).toHaveCount(0);
 
@@ -189,7 +192,7 @@ test.describe.serial('real pump attendance pipeline', () => {
 		expect(morningStatus.new_persons).toHaveLength(30);
 		expect(morningStatus.matched).toHaveLength(0);
 
-		await page.getByRole('button', { name: 'Done' }).click();
+		await completeReview(page);
 		await expect(page.getByTestId('session-title')).toHaveText('Shift in progress');
 		await expect(page.getByText('Waiting', { exact: true })).toBeVisible();
 		await expect(page.getByText(/^Available /)).toBeVisible();
@@ -214,16 +217,13 @@ test.describe.serial('real pump attendance pipeline', () => {
 		await expect(page.getByTestId('session-title')).toHaveText('End shift');
 		await expect(page.getByText('End open', { exact: true })).toBeVisible();
 
-		await page.getByTestId('capture-input').setInputFiles({
-			name: 'b-02-lowlight.jpg',
-			mimeType: 'image/jpeg',
+		await takeShiftPhotos(page, {
 			buffer: await taggedFixture('photos/b-02-lowlight.jpg', 'flow-evening')
 		});
-		await expect(page.getByText('b-02-lowlight.jpg', { exact: true })).toBeVisible();
-		await page.getByRole('button', { name: 'Submit group photo' }).click();
+		await submitPhotos(page);
 		await expect(page.getByTestId('status-processing')).toBeVisible({ timeout: 15_000 });
 		await expect(page.getByTestId('result-screen')).toBeVisible({ timeout: 4 * 60 * 1000 });
-		await expect(page.getByRole('heading', { name: '30 people found' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: '30 people marked present' })).toBeVisible();
 		await expect(page.getByRole('heading', { name: /Matched/ })).toContainText('30');
 		await expect(page.getByRole('heading', { name: /New people/ })).toHaveCount(0);
 		await page.screenshot({
@@ -278,7 +278,7 @@ test.describe.serial('real pump attendance pipeline', () => {
 			evening_only_days: 0
 		});
 
-		await page.getByRole('button', { name: 'Done' }).click();
+		await completeReview(page);
 		await expect(page.getByTestId('session-title')).toHaveText('Shift complete');
 		await expect(page.getByText('Complete', { exact: true })).toBeVisible();
 		await submitApi(request, pump, 'photos/a-04-center-crop.jpg', 409);
