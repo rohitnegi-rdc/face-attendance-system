@@ -6,6 +6,8 @@
 import { createECDH, randomBytes, randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import {
+	BASE_URL,
+	PASSWORD,
 	STUB_URL,
 	createAdmin,
 	createArea,
@@ -102,4 +104,34 @@ test('REM-01 a shift that already ended gets no reminder', async () => {
 	expect((await savePhone(context, `${STUB_URL}/push/${phone}`)).status()).toBe(200);
 	await quietFor();
 	expect(await pushesTo(phone)).toBe(0);
+});
+
+// A phone that has not answered yet gets the browser's own question on its first tap on the
+// pump screen (closing the guide), not only from the card.
+test('REM-01 a new phone is asked on its first tap', async ({ page }) => {
+	await page.addInitScript(() => {
+		const w = window as unknown as { asked: number };
+		w.asked = 0;
+		Object.defineProperty(Notification, 'permission', { get: () => 'default' });
+		Notification.requestPermission = async () => {
+			w.asked++;
+			return 'default';
+		};
+	});
+	const { plantId } = await createArea();
+	const pump = await createPump(plantId);
+	const response = await page.request.post('/api/auth/login', {
+		data: { email: pump.email, password: PASSWORD },
+		headers: { origin: BASE_URL }
+	});
+	expect(response.status()).toBe(200);
+
+	await page.goto('/pump');
+	await expect(page.getByTestId('pump-reminders')).toHaveAttribute('data-state', 'ask');
+	await page.getByTestId('guide-close').click();
+	await expect.poll(() => page.evaluate(() => (window as any).asked)).toBe(1);
+
+	// The card's button asks again, once per tap (the first-tap listener is gone).
+	await page.getByTestId('reminders-allow').click();
+	await expect.poll(() => page.evaluate(() => (window as any).asked)).toBe(2);
 });

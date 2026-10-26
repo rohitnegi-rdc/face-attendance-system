@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Asks the pump to allow shift end reminders (Web Push, worker/endReminders.js). Browsers only
-	// show their permission question after a tap, so the card explains first and its button asks.
+	// show their permission question after a tap, so it opens on the first tap anywhere on the
+	// pump screen; the card explains and its button asks again.
 	// Once allowed, every visit quietly re-saves this phone's subscription and the card stays
 	// away. Not now hides it until the next visit. On an iPhone, push needs the app on the Home
 	// Screen first, so the card says how.
@@ -11,7 +12,16 @@
 	import { t } from '$lib/pumpLang.svelte';
 
 	const LATER_KEY = 'pump-reminders-later';
-	type State = 'hidden' | 'ask' | 'asking' | 'on' | 'blocked' | 'iphone' | 'failed';
+	type State =
+		| 'hidden'
+		| 'ask'
+		| 'asking'
+		| 'on'
+		| 'blocked'
+		| 'iphone'
+		| 'failed'
+		| 'insecure'
+		| 'unsupported';
 	let state = $state<State>('hidden');
 
 	function laterThisVisit() {
@@ -68,6 +78,7 @@
 	}
 
 	async function allow() {
+		if (state === 'asking') return;
 		state = 'asking';
 		const permission = await Notification.requestPermission();
 		if (permission !== 'granted') {
@@ -83,26 +94,48 @@
 	}
 
 	onMount(() => {
+		// Browsers allow notifications only on an https address; on http they are switched off
+		// entirely, so say so instead of hiding the card.
+		if (!window.isSecureContext) {
+			state = 'insecure';
+			return;
+		}
 		const supported =
 			'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 		if (!supported) {
 			const iphone = /iPhone|iPad|iPod/.test(navigator.userAgent);
-			if (iphone && !laterThisVisit()) state = 'iphone';
+			state = iphone ? 'iphone' : 'unsupported';
 			return;
 		}
 		if (Notification.permission === 'granted') {
 			subscribe().catch(() => {});
 			return;
 		}
-		if (laterThisVisit()) return;
-		state = Notification.permission === 'denied' ? 'blocked' : 'ask';
+		if (Notification.permission === 'denied') {
+			state = 'blocked';
+			return;
+		}
+		// A phone that has not answered yet: the browser's own question opens on the first tap
+		// anywhere on the pump screen (closing the guide counts). Browsers refuse to open it
+		// without a tap. The card stays as the fallback.
+		if (!laterThisVisit()) state = 'ask';
+		const firstTap = (event: MouseEvent) => {
+			// The card's own buttons answer for themselves (Not now must not ask).
+			if ((event.target as Element | null)?.closest?.('[data-testid="pump-reminders"]')) return;
+			if (Notification.permission === 'default') void allow();
+		};
+		document.addEventListener('click', firstTap, { capture: true, once: true });
+		return () => document.removeEventListener('click', firstTap, { capture: true });
 	});
 </script>
 
 {#if state !== 'hidden'}
 	<section
 		class="reminders"
-		class:reminders--quiet={state === 'blocked' || state === 'failed'}
+		class:reminders--quiet={state === 'blocked' ||
+			state === 'failed' ||
+			state === 'insecure' ||
+			state === 'unsupported'}
 		aria-live="polite"
 		data-testid="pump-reminders"
 		data-state={state}
@@ -118,6 +151,12 @@
 			{:else if state === 'failed'}
 				<strong>{t('Reminders could not be turned on.')}</strong>
 				<p>{t('Check the internet and open the app again.')}</p>
+			{:else if state === 'insecure'}
+				<strong>{t('Reminders need the secure (https) address.')}</strong>
+				<p>{t('Open the app with its https:// address to get reminders.')}</p>
+			{:else if state === 'unsupported'}
+				<strong>{t('This browser cannot show reminders.')}</strong>
+				<p>{t('Open the app in Chrome to get reminders.')}</p>
 			{:else if state === 'iphone'}
 				<strong>{t('Turn on reminders')}</strong>
 				<p>

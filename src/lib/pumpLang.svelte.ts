@@ -299,6 +299,11 @@ const HI: Record<string, string> = {
 		'चालू करने के लिए ब्राउज़र की सेटिंग में इस साइट के नोटिफिकेशन की अनुमति दें।',
 	'Reminders could not be turned on.': 'रिमाइंडर चालू नहीं हो पाए।',
 	'Check the internet and open the app again.': 'इंटरनेट चेक करें और ऐप फिर से खोलें।',
+	'Reminders need the secure (https) address.': 'रिमाइंडर के लिए सुरक्षित (https) पता चाहिए।',
+	'Open the app with its https:// address to get reminders.':
+		'रिमाइंडर पाने के लिए ऐप को https:// वाले पते से खोलें।',
+	'This browser cannot show reminders.': 'यह ब्राउज़र रिमाइंडर नहीं दिखा सकता।',
+	'Open the app in Chrome to get reminders.': 'रिमाइंडर पाने के लिए ऐप को Chrome में खोलें।',
 	'On iPhone, tap Share, then "Add to Home Screen", and open the app from the Home Screen.':
 		'iPhone पर Share दबाएँ, फिर "Add to Home Screen" चुनें, और ऐप को होम स्क्रीन से खोलें।'
 };

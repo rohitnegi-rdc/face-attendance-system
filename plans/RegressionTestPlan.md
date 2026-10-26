@@ -421,7 +421,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 
 | ID | Scenario | Expected | Tier | Pri | Status |
 |---|---|---|---|---|---|
-| REM-01 | Pump phone allows notifications, shift start taken, no shift end | The pump screen asks once (Allow reminders / Not now); the phone's push address is saved (https only, internal addresses refused, admin gets 403); when the evening gap (9 hours) has passed the worker sends one reminder, 30 minutes later a second if the end is still missing, never a third; a phone the push service answers 404/410 for is removed; a shift that already ended gets nothing | 1 | P1 | Covered (shift-reminders.spec) |
+| REM-01 | Pump phone allows notifications, shift start taken, no shift end | A phone that has not answered gets the browser's own question on its first tap on the pump screen (closing the guide counts), the card (Allow reminders / Not now) stays as fallback, and on http or an unsupported browser the card says why instead of hiding; the phone's push address is saved (https only, internal addresses refused, admin gets 403); when the evening gap (9 hours) has passed the worker sends one reminder, 30 minutes later a second if the end is still missing, never a third; a phone the push service answers 404/410 for is removed; a shift that already ended gets nothing | 1 | P1 | Covered (shift-reminders.spec) |
 
 ### PWD: forgot password and resets (added 2026-10-22)
 
