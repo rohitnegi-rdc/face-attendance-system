@@ -356,6 +356,10 @@ function serviceEnv(lane) {
 		AI_REQUEST_TIMEOUT_MS: '3000',
 		JOB_RETRY_BASE_SECONDS: '2',
 		STUCK_JOB_SWEEP_SECONDS: '2',
+		// Shift end reminders (REM-01): checked every second, sent to the stub's stand-in push
+		// service over http (production takes https push services only).
+		END_REMINDER_POLL_SECONDS: '1',
+		PUSH_TEST_ENDPOINTS: 'true',
 		TZ: 'UTC' // proves IST handling does not rely on the machine time zone
 	};
 }

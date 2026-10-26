@@ -8,6 +8,7 @@ import path from 'node:path';
 import { sendFraudAlertEmail } from './mailer.js';
 import { checkRecapture } from './recaptureCheck.js';
 import { pollPumpGps } from './gpsFeed.js';
+import { sendEndReminders } from './endReminders.js';
 import {
 	assignFaces,
 	findCrossPumpMatch,
@@ -850,6 +851,15 @@ async function loop() {
 		},
 		60 * 60 * 1000
 	);
+
+	// Shift end reminders by Web Push (worker/endReminders.js), checked every minute.
+	setInterval(
+		() =>
+			sendEndReminders(pool, log, pairingWindowHours).catch((err) =>
+				log('error', { error: String(err?.message || err) }, 'shift end reminder sweep failed')
+			),
+		Number(process.env.END_REMINDER_POLL_SECONDS || 60) * 1000
+	).unref();
 
 	// Pump GPS positions for the shift start location check (worker/gpsFeed.js).
 	const pollGps = () =>

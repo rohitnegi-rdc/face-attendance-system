@@ -282,7 +282,25 @@ const HI: Record<string, string> = {
 		'"{name}" दो बार लिखा है। हर वर्कर का नाम अलग होना चाहिए।',
 	'"{name}" is already the name of another worker at this pump. Add the father\'s name or village.':
 		'"{name}" इस पंप पर किसी और वर्कर का नाम है। पिता का नाम या गाँव जोड़ें।',
-	'{n} names still to write above.': 'ऊपर {n} नाम लिखने बाकी हैं।'
+	'{n} names still to write above.': 'ऊपर {n} नाम लिखने बाकी हैं।',
+
+	// Shift end reminders (PumpReminders.svelte)
+	'Turn on reminders': 'रिमाइंडर चालू करें',
+	'Get a reminder on this phone when it is time to end the shift.':
+		'शिफ्ट एंड करने का समय होने पर इस फ़ोन पर रिमाइंडर पाएँ।',
+	'Allow reminders': 'रिमाइंडर की अनुमति दें',
+	'Not now': 'अभी नहीं',
+	Close: 'बंद करें',
+	'Reminders are on.': 'रिमाइंडर चालू हैं।',
+	'This phone will remind you when it is time to end the shift.':
+		'शिफ्ट एंड करने का समय होने पर यह फ़ोन आपको याद दिलाएगा।',
+	'Reminders are blocked on this phone.': 'इस फ़ोन पर रिमाइंडर बंद हैं।',
+	'To turn them on, allow notifications for this site in the browser settings.':
+		'चालू करने के लिए ब्राउज़र की सेटिंग में इस साइट के नोटिफिकेशन की अनुमति दें।',
+	'Reminders could not be turned on.': 'रिमाइंडर चालू नहीं हो पाए।',
+	'Check the internet and open the app again.': 'इंटरनेट चेक करें और ऐप फिर से खोलें।',
+	'On iPhone, tap Share, then "Add to Home Screen", and open the app from the Home Screen.':
+		'iPhone पर Share दबाएँ, फिर "Add to Home Screen" चुनें, और ऐप को होम स्क्रीन से खोलें।'
 };
 
 export function t(english: string, vars: Record<string, string | number> = {}): string {

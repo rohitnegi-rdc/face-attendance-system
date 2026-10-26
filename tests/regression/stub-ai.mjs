@@ -18,6 +18,7 @@ const DIM = 512;
 const photos = new Map();
 const failing = new Map(); // photo id -> failures left (Infinity = always)
 const calls = new Map();
+const pushes = new Map(); // push id -> Web Push messages received (REM-01)
 
 function seededRandom(seed) {
 	let state = crypto.createHash('sha256').update(seed).digest().readUInt32LE(0);
@@ -77,6 +78,18 @@ const server = http.createServer(async (request, response) => {
 		const callsFor = request.url?.match(/^\/__calls\/([A-Za-z0-9_-]+)$/)?.[1];
 		if (request.method === 'GET' && callsFor) {
 			return send(response, 200, { calls: calls.get(callsFor) ?? 0 });
+		}
+		// Stand-in push service for the shift end reminders (REM-01): /push/<id> takes a Web Push
+		// message like a real one (201), /push-gone/<id> answers 410 like a phone that left.
+		const pushesFor = request.url?.match(/^\/__pushes\/([A-Za-z0-9_-]+)$/)?.[1];
+		if (request.method === 'GET' && pushesFor) {
+			return send(response, 200, { pushes: pushes.get(pushesFor) ?? 0 });
+		}
+		const pushTo = request.url?.match(/^\/push(-gone)?\/([A-Za-z0-9_-]+)$/);
+		if (request.method === 'POST' && pushTo) {
+			await readBody(request);
+			pushes.set(pushTo[2], (pushes.get(pushTo[2]) ?? 0) + 1);
+			return send(response, pushTo[1] ? 410 : 201, {});
 		}
 		const body = await readBody(request);
 		if (request.method === 'POST' && request.url === '/__register') {

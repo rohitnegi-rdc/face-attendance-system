@@ -1,0 +1,9 @@
+{
+	"name": "Face Attendance",
+	"short_name": "Attendance",
+	"start_url": "./pump",
+	"scope": "./",
+	"display": "standalone",
+	"background_color": "#ffffff",
+	"theme_color": "#05ad98"
+}

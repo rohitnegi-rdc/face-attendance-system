@@ -4,6 +4,7 @@
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import CircleHelp from '@lucide/svelte/icons/circle-help';
 	import PumpGuide from '$lib/components/PumpGuide.svelte';
+	import PumpReminders from '$lib/components/PumpReminders.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 	import { loadPumpLang, pumpLang, setPumpHindi, t } from '$lib/pumpLang.svelte';
@@ -93,6 +94,7 @@
 		</div>
 	</header>
 	<main id="main-content" inert={guideOpen}>
+		<PumpReminders />
 		{@render children()}
 	</main>
 	{#if guideOpen}

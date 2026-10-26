@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const BASE_URL = process.env.REGRESSION_BASE_URL ?? 'http://127.0.0.1:6105';
-const STUB_URL = process.env.REGRESSION_STUB_URL ?? 'http://127.0.0.1:6106';
+export const STUB_URL = process.env.REGRESSION_STUB_URL ?? 'http://127.0.0.1:6106';
 export const db = new pg.Pool({
 	connectionString:
 		process.env.REGRESSION_DATABASE_URL ??

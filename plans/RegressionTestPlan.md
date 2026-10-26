@@ -417,6 +417,12 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | UI-17 | Admin Vendors search (added 2026-10-26) | Search by vendor name, area or login shows only matching vendors with "N of M logins"; no match says so; the New pump form still lists every vendor | 1 | P2 | Covered (admin-pumps.spec) |
 | UI-09 | Session log with five workers (added 2026-10-22) | Every worker shown inline by name (a chip; the face opens on click, UI-10) next to View group, in a fixed-height scroll area; no fold-out list; plant manager Attendance has no Person records table | 1 | P1 | Covered (nav-badges.spec) |
 
+### REM: shift end reminders (shift-reminders.spec, added 2026-10-26)
+
+| ID | Scenario | Expected | Tier | Pri | Status |
+|---|---|---|---|---|---|
+| REM-01 | Pump phone allows notifications, shift start taken, no shift end | The pump screen asks once (Allow reminders / Not now); the phone's push address is saved (https only, internal addresses refused, admin gets 403); when the evening gap (9 hours) has passed the worker sends one reminder, 30 minutes later a second if the end is still missing, never a third; a phone the push service answers 404/410 for is removed; a shift that already ended gets nothing | 1 | P1 | Covered (shift-reminders.spec) |
+
 ### PWD: forgot password and resets (added 2026-10-22)
 
 | ID | Scenario | Expected | Tier | Pri | Status |

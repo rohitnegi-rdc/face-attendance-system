@@ -128,3 +128,8 @@ Test mode (fraud check off) worked only while the server env `TEST_MODE=true`, s
 ### 2026-10-26: unit and regression gates shared a database port
 - The unit database used port 6114, which is regression lane 2's database port since the lanes were added. Run one after the other it worked; run in parallel, the regression failed at "Prepare test databases" with "port is already allocated".
 - Fix: the unit database moved to 6199. Rule: a new port range (like the lanes' 6104 + 10·i) must be checked against every other script's fixed ports.
+
+### 2026-10-26: web-push sendNotification always speaks https
+- The shift end reminder test posted to the stub push service at an http:// address and got `EPROTO ... packet length too long`: `webpush.sendNotification` uses `https.request` whatever the address says.
+- Fix: `worker/endReminders.js` builds the encrypted, signed request with `webpush.generateRequestDetails` and sends it with `fetch`, which follows the address. Production push services are https anyway.
+- Rule: when a library hides the transport, test against the real protocol, or take the transport into your own code so the test exercises the same path.

@@ -152,6 +152,8 @@ services:
       GALLERY_ADD_THRESHOLD: '${GALLERY_ADD_THRESHOLD:-0.40}'
       GALLERY_ADD_MARGIN: '${GALLERY_ADD_MARGIN:-0.10}'
       EVENING_PAIRING_WINDOW_HOURS: '${EVENING_PAIRING_WINDOW_HOURS:-24}'
+      # The shift end reminder goes out once this gap has passed (worker/endReminders.js).
+      EVENING_MIN_GAP_MINUTES: '${EVENING_MIN_GAP_MINUTES:-540}'
       AI_SERVICE_URL: http://ai-service:8000
       AI_REQUEST_TIMEOUT_MS: '30000'
       WORKER_BATCH_SIZE: '${WORKER_BATCH_SIZE:-4}'
