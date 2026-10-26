@@ -32,30 +32,30 @@
 		{
 			scene: 'operator',
 			title: 'Take the Pump Operator photo',
-			body: 'Tap "{button}". Only the operator should be in the photo, with the face clearly visible.',
+			body: 'Tap the "{button}" button. Only the operator should be in the photo, with the face clearly visible.',
 			button: 'Take Pump Operator photo'
 		},
 		{
 			scene: 'group',
 			title: 'Take the photo of all Pump Members',
-			body: 'Tap "{button}". Every member\'s face should be clearly visible.',
+			body: 'Tap the "{button}" button. Every member\'s face should be clearly visible.',
 			button: 'Take Pump Members photo'
 		},
 		{
 			scene: 'names',
 			title: 'Send the photos and write the names',
-			body: 'Tap "{send}" and wait. Then write the names of all members and tap "{button}". Your shift will start.',
+			body: 'Tap the "{send}" button. Then write the full names of all members and tap "{button}". Your shift will start.',
 			send: 'Submit photos',
 			button: 'Done reviewing'
 		},
 		{
 			scene: 'end',
 			title: 'Close the shift after 9 hours',
-			body: 'After 9 hours, take everyone\'s photo again and tap "{button}". The shift will close.',
+			body: 'After 9 hours, take and send the photos of the operator and all members again. Then tap "{button}". The shift will close.',
 			button: 'Done reviewing'
 		}
 	];
-	const HELP_NOTE = 'Any problem? Tap "Help".';
+	const HELP_NOTE = 'Any problem? Tap the "Help" button.';
 	const SHIRTS = ['#05ad98', '#f08a4b', '#4c7bd9', '#9b5fc0'];
 
 	let index = $state(0);

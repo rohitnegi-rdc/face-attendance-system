@@ -2,14 +2,14 @@
 	// The signed-out frame: sign in, forgot password, reset password. A card on wide screens,
 	// plain white full width on a phone.
 	import type { Snippet } from 'svelte';
-	import ScanFace from '@lucide/svelte/icons/scan-face';
+	import RdcLogo from '$lib/components/RdcLogo.svelte';
 	let { labelledby, children }: { labelledby: string; children: Snippet } = $props();
 </script>
 
 <main id="main-content" class="auth-page">
 	<section class="auth-panel" aria-labelledby={labelledby}>
 		<div class="product-lockup">
-			<span class="product-mark" aria-hidden="true"><ScanFace size={28} strokeWidth={1.8} /></span>
+			<span class="product-mark" aria-hidden="true"><RdcLogo height={3} /></span>
 			<div>
 				<strong>Face Attendance</strong>
 				<span>Workforce operations</span>
@@ -53,13 +53,8 @@
 		font-size: var(--text-sm);
 	}
 	.product-mark {
-		display: grid;
-		width: 2.75rem;
-		height: 2.75rem;
-		place-items: center;
-		color: var(--primary-on);
-		background: var(--brand-teal);
-		border-radius: var(--radius-md);
+		display: flex;
+		align-items: center;
 	}
 	/* Shared by the pages inside the frame. */
 	.auth-panel :global(.auth-heading) {

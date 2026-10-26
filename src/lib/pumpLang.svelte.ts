@@ -31,18 +31,18 @@ const HI: Record<string, string> = {
 
 	// First sign-in guide (PumpGuide.svelte); button names are filled from the entries below
 	'Take the Pump Operator photo': 'पंप ऑपरेटर की फोटो लें',
-	'Tap "{button}". Only the operator should be in the photo, with the face clearly visible.':
-		'"{button}" दबाएँ। फोटो में सिर्फ ऑपरेटर हों और चेहरा साफ़ दिखे।',
+	'Tap the "{button}" button. Only the operator should be in the photo, with the face clearly visible.':
+		'"{button}" बटन पर क्लिक करें। फोटो में केवल ऑपरेटर हों और उनका चेहरा साफ़ दिखे।',
 	'Take the photo of all Pump Members': 'सभी पंप मेंबर्स की फोटो लें',
-	'Tap "{button}". Every member\'s face should be clearly visible.':
-		'"{button}" दबाएँ। सभी मेंबर्स के चेहरे साफ़ दिखने चाहिए।',
+	'Tap the "{button}" button. Every member\'s face should be clearly visible.':
+		'"{button}" बटन पर क्लिक करें। सभी मेंबर्स के चेहरे साफ़ दिखाई दें।',
 	'Send the photos and write the names': 'फोटो भेजें और नाम लिखें',
-	'Tap "{send}" and wait. Then write the names of all members and tap "{button}". Your shift will start.':
-		'"{send}" दबाएँ और इंतज़ार करें। फिर सभी मेंबर्स के नाम लिखकर "{button}" दबाएँ। आपकी शिफ्ट शुरू हो जाएगी।',
+	'Tap the "{send}" button. Then write the full names of all members and tap "{button}". Your shift will start.':
+		'"{send}" बटन पर क्लिक करें। फिर सभी मेंबर्स के पूरे नाम लिखकर "{button}" दबाएँ। आपकी शिफ्ट शुरू हो जाएगी।',
 	'Close the shift after 9 hours': '9 घंटे बाद शिफ्ट बंद करें',
-	'After 9 hours, take everyone\'s photo again and tap "{button}". The shift will close.':
-		'9 घंटे बाद दोबारा सभी की फोटो लें और "{button}" दबाएँ। शिफ्ट बंद हो जाएगी।',
-	'Any problem? Tap "Help".': 'कोई परेशानी हो? "मदद" दबाएँ।',
+	'After 9 hours, take and send the photos of the operator and all members again. Then tap "{button}". The shift will close.':
+		'9 घंटे बाद ऑपरेटर और सभी मेंबर्स की दोबारा फोटो लेकर भेजें। फिर "{button}" दबाएँ। शिफ्ट बंद हो जाएगी।',
+	'Any problem? Tap the "Help" button.': 'कोई परेशानी हो तो "मदद" बटन दबाएँ।',
 	'Ramesh Kumar': 'रमेश कुमार',
 	'Step {n} of {total}': 'स्टेप {n} / {total}',
 	Listen: 'सुनें',
@@ -286,18 +286,10 @@ const HI: Record<string, string> = {
 	'Tap the button, then tap "Allow".': 'बटन दबाएँ, फिर "अनुमति दें" (Allow) दबाएँ।',
 	'Not now': 'अभी नहीं',
 	Close: 'बंद करें',
-	'Reminders are on.': 'रिमाइंडर चालू हैं।',
-	'This phone will remind you when it is time to end the shift.':
-		'शिफ्ट एंड करने का समय होने पर यह फ़ोन आपको याद दिलाएगा।',
 	'Reminders are blocked on this phone.': 'इस फ़ोन पर रिमाइंडर बंद हैं।',
 	'To turn them on, allow notifications for this site in the browser settings.':
 		'चालू करने के लिए ब्राउज़र की सेटिंग में इस साइट के नोटिफिकेशन की अनुमति दें।',
 	'Reminders could not be turned on.': 'रिमाइंडर चालू नहीं हो पाए।',
-	// Install the app (PumpInstall.svelte)
-	'Install the app': 'ऐप इंस्टॉल करें',
-	'Open attendance from the Home screen and get reminders without a spam warning.':
-		'होम स्क्रीन से अटेंडेंस खोलें और रिमाइंडर बिना स्पैम चेतावनी के पाएँ।',
-	'Install app': 'ऐप इंस्टॉल करें',
 	'Check the internet and open the app again.': 'इंटरनेट चेक करें और ऐप फिर से खोलें।',
 	'Reminders need the secure (https) address.': 'रिमाइंडर के लिए सुरक्षित (https) पता चाहिए।',
 	'Open the app with its https:// address to get reminders.':

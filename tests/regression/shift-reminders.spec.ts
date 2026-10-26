@@ -278,7 +278,8 @@ test('REM-02 end to end: Enable notifications, reminders sent and shown on the p
 	await page.screenshot({ path: testInfo.outputPath('2-enable-notifications.png') });
 	await page.getByTestId('reminders-allow').click();
 	await expect.poll(asked).toEqual({ times: 1, on: '/pump' });
-	await expect(page.getByTestId('pump-reminders')).toHaveAttribute('data-state', 'on');
+	// Allowed and saved: no card left on the screen.
+	await expect(page.getByTestId('pump-reminders')).toHaveCount(0);
 	// Answered: the guide comes next, and nothing asks again.
 	await expect(page.getByTestId('pump-guide')).toBeVisible();
 	await page.screenshot({ path: testInfo.outputPath('3-guide-after-enable.png') });

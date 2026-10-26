@@ -2,7 +2,7 @@
 	// Shift end reminders (Web Push, worker/endReminders.js), in Chrome's recommended flow: a
 	// phone that has not answered sees an "Enable notifications" sheet with a short explanation
 	// before the guide; only a tap on its button opens Chrome's question, and only once allowed is
-	// the phone's subscription saved. Not now hides it until the next visit. An allowed phone
+	// the phone's subscription saved, with no card after. Not now hides it until the next visit. An allowed phone
 	// re-saves its subscription quietly on every visit, no card. Decisions: $lib/pushReminders.
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
@@ -74,7 +74,9 @@
 	async function allow() {
 		if (state === 'asking') return;
 		state = 'asking';
-		state = await enable(() => Notification.requestPermission(), subscribe);
+		// Allowed and saved: nothing more to show.
+		const result = await enable(() => Notification.requestPermission(), subscribe);
+		state = result === 'on' ? 'hidden' : result;
 	}
 
 	onMount(() => {
@@ -127,10 +129,7 @@
 	>
 		<span class="reminders__icon" aria-hidden="true"><BellRing size={22} /></span>
 		<div class="reminders__copy">
-			{#if state === 'on'}
-				<strong>{t('Reminders are on.')}</strong>
-				<p>{t('This phone will remind you when it is time to end the shift.')}</p>
-			{:else if state === 'blocked'}
+			{#if state === 'blocked'}
 				<strong>{t('Reminders are blocked on this phone.')}</strong>
 				<p>{t('To turn them on, allow notifications for this site in the browser settings.')}</p>
 			{:else if state === 'failed'}

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import favicon from '$lib/assets/favicon.svg';
+	import { assets } from '$app/paths';
 	import '$lib/styles/global.css';
 	import Toaster from '$lib/components/Toaster.svelte';
 
@@ -7,7 +7,10 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<!-- The RDC truck (static/icons, cut from assets/logo.png). -->
+	<link rel="icon" type="image/png" sizes="32x32" href="{assets}/icons/favicon-32.png" />
+	<link rel="icon" type="image/png" sizes="48x48" href="{assets}/icons/favicon-48.png" />
+	<link rel="icon" type="image/png" sizes="96x96" href="{assets}/icons/favicon-96.png" />
 	<title>Face Attendance</title>
 	<meta
 		name="description"

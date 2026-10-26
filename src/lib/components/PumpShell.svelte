@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import ScanFace from '@lucide/svelte/icons/scan-face';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import CircleHelp from '@lucide/svelte/icons/circle-help';
 	import PumpGuide from '$lib/components/PumpGuide.svelte';
-	import PumpInstall from '$lib/components/PumpInstall.svelte';
+	import RdcLogo from '$lib/components/RdcLogo.svelte';
 	import PumpReminders from '$lib/components/PumpReminders.svelte';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
@@ -68,7 +67,7 @@
 <div class="pump-shell" lang={pumpLang.hindi ? 'hi' : 'en'}>
 	<header class="pump-topbar" inert={guideShown}>
 		<a class="pump-brand" href={resolve('/pump')} aria-label="Face Attendance pump home">
-			<span class="pump-brand__mark"><ScanFace size={21} /></span>
+			<span class="pump-brand__mark"><RdcLogo height={2.25} /></span>
 			<span>
 				<strong>{t('Face Attendance')}</strong>
 				<small>{userEmail}</small>
@@ -105,7 +104,6 @@
 		</div>
 	</header>
 	<main id="main-content" inert={guideShown}>
-		<PumpInstall />
 		<PumpReminders onhold={(hold) => (remindersHold = hold)} />
 		{@render children()}
 	</main>
@@ -210,12 +208,7 @@
 	}
 
 	.pump-brand__mark {
-		display: grid;
-		width: 2rem;
-		height: 2rem;
-		place-items: center;
-		color: var(--primary-on);
-		background: var(--brand-teal);
-		border-radius: var(--radius-md);
+		display: flex;
+		align-items: center;
 	}
 </style>

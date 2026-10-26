@@ -21,6 +21,7 @@
 	import Settings from '@lucide/svelte/icons/settings';
 	import ScrollText from '@lucide/svelte/icons/scroll-text';
 	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
+	import RdcLogo from '$lib/components/RdcLogo.svelte';
 
 	type NavCounts = { attendance: number; fraud: number; approvals: number };
 	type BadgeKey = keyof NavCounts;
@@ -227,7 +228,7 @@
 			href={resolve(role === 'admin' ? '/admin' : role === 'vendor' ? '/vendor' : '/plant-manager')}
 			aria-label="Face Attendance home"
 		>
-			<span class="brand__mark"><ScanFace size={21} /></span>
+			<span class="brand__mark"><RdcLogo height={2.25} /></span>
 			<span>Face Attendance</span>
 		</a>
 		<div class="account">
@@ -344,13 +345,8 @@
 	}
 
 	.brand__mark {
-		display: grid;
-		width: 2rem;
-		height: 2rem;
-		place-items: center;
-		color: var(--primary-on);
-		background: var(--brand-teal);
-		border-radius: var(--radius-md);
+		display: flex;
+		align-items: center;
 	}
 
 	.account {

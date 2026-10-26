@@ -1,7 +1,6 @@
-// APP-01: the pump screen installs as an app (Android Chrome), so the shift end reminders come
-// from an installed app with the RDC icon instead of a website Chrome may flag as spam. The
-// manifest names the app and its icons; when Chrome says the app can be installed the pump
-// screen shows Install app, which opens Chrome's install question and goes away once installed.
+// APP-01: the RDC truck logo is the browser tab icon, the sign-in mark and the pump header mark,
+// and the manifest names the app with its icons (the reminders use them). There is no Install
+// app banner: notifications work from the web app directly (removed 2026-10-27).
 import { expect, test } from '@playwright/test';
 import { BASE_URL, PASSWORD, createArea, createPump } from './helpers';
 
@@ -21,10 +20,19 @@ test('APP-01 manifest and icons make the pump screen installable', async ({ requ
 	expect(manifest.icons.some((icon: { purpose: string }) => icon.purpose === 'maskable')).toBe(
 		true
 	);
+	// The browser tab shows the RDC truck, not the Svelte logo.
+	expect(html).toMatch(
+		/<link rel="icon" type="image\/png" sizes="32x32" href="[^"]*icons\/favicon-32\.png"/
+	);
+	expect(html).not.toContain('favicon.svg');
 	for (const file of [
 		...manifest.icons.map((icon: { src: string }) => icon.src),
 		'icons/apple-touch-icon.png',
-		'icons/badge-96.png'
+		'icons/badge-96.png',
+		'icons/favicon-32.png',
+		'icons/favicon-48.png',
+		'icons/favicon-96.png',
+		'icons/logo-wide.png'
 	]) {
 		const response = await request.get(`/${file}`);
 		expect(response.status(), file).toBe(200);
@@ -32,28 +40,15 @@ test('APP-01 manifest and icons make the pump screen installable', async ({ requ
 	}
 });
 
-test('APP-01 Install app shows when Chrome offers it, installs on tap, then goes away', async ({
+test('APP-01 the RDC logo on sign in and in the pump header, no install banner', async ({
 	page
 }, testInfo) => {
 	await page.setViewportSize({ width: 390, height: 844 });
-	// Chrome's "can be installed" announcement, answered "install" when its question is shown.
-	await page.addInitScript(() => {
-		const w = window as unknown as { installAsked: number };
-		w.installAsked = 0;
-		window.addEventListener('load', () => {
-			setTimeout(() => {
-				const event = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
-					prompt: () => Promise<void>;
-					userChoice: Promise<{ outcome: string }>;
-				};
-				event.prompt = async () => {
-					w.installAsked++;
-				};
-				event.userChoice = Promise.resolve({ outcome: 'accepted' });
-				window.dispatchEvent(event);
-			}, 300);
-		});
-	});
+	// The sign-in page and the pump header carry the RDC truck.
+	await page.goto('/login');
+	await expect(page.locator('.rdc-logo')).toHaveJSProperty('naturalWidth', 240);
+	await page.screenshot({ path: testInfo.outputPath('logo-sign-in-390.png') });
+
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);
 	const signedIn = await page.request.post('/api/auth/login', {
@@ -64,11 +59,11 @@ test('APP-01 Install app shows when Chrome offers it, installs on tap, then goes
 
 	await page.goto('/pump');
 	await page.getByTestId('guide-close').click();
-	const card = page.getByTestId('pump-install');
-	await expect(card).toBeVisible();
-	await expect(card.locator('img')).toHaveJSProperty('naturalWidth', 192);
-	await page.screenshot({ path: testInfo.outputPath('install-card-390.png') });
-	await page.getByTestId('pump-install-button').click();
-	await expect.poll(() => page.evaluate(() => (window as any).installAsked)).toBe(1);
-	await expect(card).toHaveCount(0);
+	await expect(page.locator('.pump-topbar .rdc-logo')).toHaveJSProperty('naturalWidth', 240);
+	// Logo, Help, language and sign out all fit one phone-wide header.
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+		true
+	);
+	await expect(page.getByTestId('pump-install')).toHaveCount(0);
+	await page.screenshot({ path: testInfo.outputPath('pump-header-390.png') });
 });

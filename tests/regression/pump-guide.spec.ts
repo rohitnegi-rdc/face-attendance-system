@@ -63,41 +63,44 @@ const STEPS = {
 	hi: [
 		[
 			'पंप ऑपरेटर की फोटो लें',
-			'"पंप ऑपरेटर फोटो लें" दबाएँ। फोटो में सिर्फ ऑपरेटर हों और चेहरा साफ़ दिखे।'
+			'"पंप ऑपरेटर फोटो लें" बटन पर क्लिक करें। फोटो में केवल ऑपरेटर हों और उनका चेहरा साफ़ दिखे।'
 		],
 		[
 			'सभी पंप मेंबर्स की फोटो लें',
-			'"पंप मेंबर्स फोटो लें" दबाएँ। सभी मेंबर्स के चेहरे साफ़ दिखने चाहिए।'
+			'"पंप मेंबर्स फोटो लें" बटन पर क्लिक करें। सभी मेंबर्स के चेहरे साफ़ दिखाई दें।'
 		],
 		[
 			'फोटो भेजें और नाम लिखें',
-			'"फोटो भेजें" दबाएँ और इंतज़ार करें। फिर सभी मेंबर्स के नाम लिखकर "रिव्यू पूरा" दबाएँ। आपकी शिफ्ट शुरू हो जाएगी।'
+			'"फोटो भेजें" बटन पर क्लिक करें। फिर सभी मेंबर्स के पूरे नाम लिखकर "रिव्यू पूरा" दबाएँ। आपकी शिफ्ट शुरू हो जाएगी।'
 		],
 		[
 			'9 घंटे बाद शिफ्ट बंद करें',
-			'9 घंटे बाद दोबारा सभी की फोटो लें और "रिव्यू पूरा" दबाएँ। शिफ्ट बंद हो जाएगी।'
+			'9 घंटे बाद ऑपरेटर और सभी मेंबर्स की दोबारा फोटो लेकर भेजें। फिर "रिव्यू पूरा" दबाएँ। शिफ्ट बंद हो जाएगी।'
 		]
 	],
 	en: [
 		[
 			'Take the Pump Operator photo',
-			'Tap "Take Pump Operator photo". Only the operator should be in the photo, with the face clearly visible.'
+			'Tap the "Take Pump Operator photo" button. Only the operator should be in the photo, with the face clearly visible.'
 		],
 		[
 			'Take the photo of all Pump Members',
-			'Tap "Take Pump Members photo". Every member\'s face should be clearly visible.'
+			'Tap the "Take Pump Members photo" button. Every member\'s face should be clearly visible.'
 		],
 		[
 			'Send the photos and write the names',
-			'Tap "Submit photos" and wait. Then write the names of all members and tap "Done reviewing". Your shift will start.'
+			'Tap the "Submit photos" button. Then write the full names of all members and tap "Done reviewing". Your shift will start.'
 		],
 		[
 			'Close the shift after 9 hours',
-			'After 9 hours, take everyone\'s photo again and tap "Done reviewing". The shift will close.'
+			'After 9 hours, take and send the photos of the operator and all members again. Then tap "Done reviewing". The shift will close.'
 		]
 	]
 };
-const FOOTER = { hi: 'कोई परेशानी हो? "मदद" दबाएँ।', en: 'Any problem? Tap "Help".' };
+const FOOTER = {
+	hi: 'कोई परेशानी हो तो "मदद" बटन दबाएँ।',
+	en: 'Any problem? Tap the "Help" button.'
+};
 const BUTTONS = {
 	hi: ['पंप ऑपरेटर फोटो लें', 'पंप मेंबर्स फोटो लें', 'रिव्यू पूरा', 'रिव्यू पूरा'],
 	en: ['Take Pump Operator photo', 'Take Pump Members photo', 'Done reviewing', 'Done reviewing']
