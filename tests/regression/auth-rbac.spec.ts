@@ -138,19 +138,20 @@ test('AUTH-06/07 first login is forced through a password change', async () => {
 	expect((await context.get('/api/attendance/today')).status()).toBe(403);
 
 	const short = await context.post('/api/auth/password', {
-		data: { password: 'short', confirmation: 'short' }
+		data: { password: 'Seven-7', confirmation: 'Seven-7' }
 	});
 	expect(short.status()).toBe(400);
 	const mismatch = await context.post('/api/auth/password', {
 		data: { password: 'Long-enough-pass-1', confirmation: 'Long-enough-pass-2' }
 	});
 	expect(mismatch.status()).toBe(400);
+	// 8 characters is the minimum.
 	const changed = await context.post('/api/auth/password', {
-		data: { password: 'Long-enough-pass-1', confirmation: 'Long-enough-pass-1' }
+		data: { password: 'Eight-08', confirmation: 'Eight-08' }
 	});
 	expect(changed.status()).toBe(200);
 	expect((await context.get('/api/attendance/today')).status()).toBe(200);
-	await login(pump.email, 'Long-enough-pass-1');
+	await login(pump.email, 'Eight-08');
 });
 
 test('AUTH-09 a tampered session cookie counts as logged out', async () => {

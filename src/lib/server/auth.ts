@@ -31,6 +31,10 @@ export function verifyToken(token: string): AuthToken | null {
 	}
 }
 
+// Pump and vendor logins start with this password (CSV import) and go back to it when the admin
+// or a plant manager resets them; the change is forced at the next sign-in.
+export const DEFAULT_PASSWORD = 'Test1234!';
+
 export async function hashPassword(plain: string): Promise<string> {
 	return bcrypt.hash(plain, 10);
 }

@@ -154,7 +154,7 @@ async function resetAccount(role: 'vendor' | 'pump', request: Request, locals: A
 	return {
 		formKind: 'reset',
 		success: true,
-		message: 'Temporary password issued. It is shown once; the user must replace it at sign-in.',
+		message: `Password reset to the default (${issued.password}). The user must choose their own at the next sign-in.`,
 		credentials: issued
 	};
 }

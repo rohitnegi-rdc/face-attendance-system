@@ -3,13 +3,15 @@
 //   /reset-password sets the new password. The page answers the same whether or not the address
 //   has an account, so it cannot be used to find out who has one. Not for pump logins: crews
 //   have no official mailbox, so their plant manager resets them.
-// - Temporary password: the admin (any account) or a plant manager (pumps of their plants)
-//   issues one; the user must replace it at the next sign-in (/change-password).
+// - Reset by someone else: the admin (any account) or a plant manager (pumps of their plants).
+//   Pump and vendor logins go back to the default password (DEFAULT_PASSWORD, the same one the
+//   CSV import gives them); a plant manager or admin login gets a random temporary password.
+//   Either way the user must replace it at the next sign-in (/change-password).
 // Every reset is written to password_reset_log.
 import { createHash, randomBytes } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { resolve } from '$app/paths';
-import { findAccountByEmail, hashPassword, type Role } from '$lib/server/auth';
+import { DEFAULT_PASSWORD, findAccountByEmail, hashPassword, type Role } from '$lib/server/auth';
 import { pool, query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
 import { escapeHtml, mailEnabled, mailer, mailFrom } from '$lib/server/mail';
@@ -26,8 +28,8 @@ export const ACCOUNT_TABLES: Record<Role, { table: string; email: string }> = {
 
 // The same rule for every way of setting a password.
 export function passwordProblem(password: string, confirmation: string) {
-	if (password.length < 12 || password.length > 128) {
-		return 'Choose a password between 12 and 128 characters.';
+	if (password.length < 8 || password.length > 128) {
+		return 'Choose a password between 8 and 128 characters.';
 	}
 	if (password !== confirmation) return 'The passwords do not match.';
 	return null;
@@ -157,14 +159,15 @@ export async function resetPasswordWithToken(token: string, password: string) {
 	}
 }
 
-// A temporary password for an account, shown once to whoever issued it. null when the account
-// does not exist.
+// A temporary password for an account, shown to whoever issued it: the default password for a
+// pump or vendor login, a random one otherwise. null when the account does not exist.
 export async function issueTemporaryPassword(
 	role: Role,
 	accountId: string,
 	by: { role: Role; id: string }
 ) {
-	const password = randomBytes(12).toString('base64url');
+	const password =
+		role === 'pump' || role === 'vendor' ? DEFAULT_PASSWORD : randomBytes(12).toString('base64url');
 	const client = await pool.connect();
 	try {
 		await client.query('BEGIN');

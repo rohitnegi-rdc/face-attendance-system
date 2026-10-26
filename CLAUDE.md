@@ -48,7 +48,7 @@ Person records never merge across pumps — same human at two pumps = two Person
 | DB access | `src/lib/server/db.ts` |
 | Logging (one JSON line shape for app, worker, ai-service; warn/error also in `system_logs`, shown at `/admin/logs`, kept `LOG_RETENTION_DAYS`=30) | `src/lib/server/log.ts`, `log()` in `worker/index.js` |
 | IST time helpers | `src/lib/server/time.ts`, `src/lib/date.ts` |
-| Forgot password (one-use email link, 30 min) and temporary passwords by admin / plant manager, all logged in `password_reset_log`; SMTP shared in `mail.ts` | `src/lib/server/passwordReset.ts`, `src/lib/server/mail.ts` |
+| Forgot password (one-use email link, 30 min) and resets by admin / plant manager (pump and vendor logins go back to the default password `DEFAULT_PASSWORD` in `auth.ts`, plant managers get a random one; change forced at sign-in), all logged in `password_reset_log`; SMTP shared in `mail.ts` | `src/lib/server/passwordReset.ts`, `src/lib/server/mail.ts` |
 | CSV vendor/pump/plant import | `src/lib/server/csvImport.ts` |
 | Attendance evidence/review (flagged guests, merge, fraud) | `src/lib/server/attendanceReview.ts` |
 | Admin face fixes (move face, mark present, undo merge, close flagged errors at `/admin/review-flags`) | `src/lib/server/faceFixes.ts` |

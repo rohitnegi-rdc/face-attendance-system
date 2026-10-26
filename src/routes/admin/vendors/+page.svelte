@@ -20,7 +20,11 @@
 	{/if}
 	{#if form?.credentials}
 		<div class="credential-notice" role="status">
-			<strong>Copy these one-time credentials now. The password cannot be viewed again.</strong>
+			<strong
+				>{form.formKind === 'reset'
+					? 'Password reset to the default. Give these to the user.'
+					: 'Copy these one-time credentials now. The password cannot be viewed again.'}</strong
+			>
 			<code>{form.credentials.email}</code><code>{form.credentials.password}</code>
 		</div>
 	{/if}
@@ -103,7 +107,10 @@
 		<div class="table-wrap bounded-table-frame">
 			<table class="data-table">
 				<thead>
-					<tr><th>Vendor</th><th>Scope</th><th>Login email</th><th>Pumps</th><th>Access</th><th></th></tr>
+					<tr
+						><th>Vendor</th><th>Scope</th><th>Login email</th><th>Pumps</th><th>Access</th><th
+						></th></tr
+					>
 				</thead>
 				<tbody>
 					{#each data.vendors as vendor}
@@ -112,9 +119,25 @@
 							<td>{vendor.area_name ?? 'National'}</td>
 							<td>{vendor.email}</td>
 							<td>{vendor.pump_count}</td>
-							<td><form method="POST" action="?/resetVendorPassword"><input type="hidden" name="id" value={vendor.id} /><button class="button button--secondary" type="submit" onclick={(e) => { if (!confirm(`Reset the password of ${vendor.name}? The current password stops working at once.`)) e.preventDefault(); }}>Reset password</button></form></td>
 							<td
-								><a class="button button--secondary" href={resolve(`/admin/vendors/${vendor.id}`)}>View</a
+								><form method="POST" action="?/resetVendorPassword">
+									<input type="hidden" name="id" value={vendor.id} /><button
+										class="button button--secondary"
+										type="submit"
+										onclick={(e) => {
+											if (
+												!confirm(
+													`Reset the password of ${vendor.name}? The current password stops working at once.`
+												)
+											)
+												e.preventDefault();
+										}}>Reset password</button
+									>
+								</form></td
+							>
+							<td
+								><a class="button button--secondary" href={resolve(`/admin/vendors/${vendor.id}`)}
+									>View</a
 								></td
 							>
 						</tr>
@@ -128,16 +151,45 @@
 	</section>
 
 	<section class="section">
-		<div class="section-header"><div><h2>Pump accounts</h2><p class="supporting-text">Reset a pump login when its user cannot sign in.</p></div></div>
-		<div class="table-wrap bounded-table-frame"><table class="data-table">
-			<thead><tr><th>Pump</th><th>Vendor</th><th>Plant</th><th>Login email</th><th>Access</th></tr></thead>
-			<tbody>
-				{#each data.pumps as pump}
-					<tr><td>{pump.pump_code}</td><td>{pump.vendor_name}</td><td>{pump.plant_name}</td><td>{pump.login_email}</td><td><form method="POST" action="?/resetPumpPassword"><input type="hidden" name="id" value={pump.id} /><button class="button button--secondary" type="submit" onclick={(e) => { if (!confirm(`Reset the password of ${pump.pump_code}? The current password stops working at once.`)) e.preventDefault(); }}>Reset password</button></form></td></tr>
-				{/each}
-				{#if !data.pumps.length}<tr><td colspan="5">No pump accounts.</td></tr>{/if}
-			</tbody>
-		</table></div>
+		<div class="section-header">
+			<div>
+				<h2>Pump accounts</h2>
+				<p class="supporting-text">Reset a pump login when its user cannot sign in.</p>
+			</div>
+		</div>
+		<div class="table-wrap bounded-table-frame">
+			<table class="data-table">
+				<thead
+					><tr><th>Pump</th><th>Vendor</th><th>Plant</th><th>Login email</th><th>Access</th></tr
+					></thead
+				>
+				<tbody>
+					{#each data.pumps as pump}
+						<tr
+							><td>{pump.pump_code}</td><td>{pump.vendor_name}</td><td>{pump.plant_name}</td><td
+								>{pump.login_email}</td
+							><td
+								><form method="POST" action="?/resetPumpPassword">
+									<input type="hidden" name="id" value={pump.id} /><button
+										class="button button--secondary"
+										type="submit"
+										onclick={(e) => {
+											if (
+												!confirm(
+													`Reset the password of ${pump.pump_code}? The current password stops working at once.`
+												)
+											)
+												e.preventDefault();
+										}}>Reset password</button
+									>
+								</form></td
+							></tr
+						>
+					{/each}
+					{#if !data.pumps.length}<tr><td colspan="5">No pump accounts.</td></tr>{/if}
+				</tbody>
+			</table>
+		</div>
 	</section>
 </div>
 
@@ -187,8 +239,18 @@
 	.alert {
 		margin-bottom: var(--space-3);
 	}
-	.credential-notice { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); padding: var(--space-3); background: var(--surface-muted); border-left: 3px solid var(--brand-teal); }
-	.credential-notice code { user-select: all; overflow-wrap: anywhere; }
+	.credential-notice {
+		display: grid;
+		gap: var(--space-2);
+		margin-bottom: var(--space-4);
+		padding: var(--space-3);
+		background: var(--surface-muted);
+		border-left: 3px solid var(--brand-teal);
+	}
+	.credential-notice code {
+		user-select: all;
+		overflow-wrap: anywhere;
+	}
 	.bounded-table-frame {
 		max-height: 32rem;
 		overflow: auto;

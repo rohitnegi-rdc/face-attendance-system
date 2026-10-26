@@ -1,7 +1,8 @@
 // PWD: forgot password and resets by someone else. The email link (/forgot-password, then
 // /reset-password) works once for 30 minutes; the page answers the same for unknown emails; logins
 // made by the system (.rdc) have no mailbox and are sent to the plant manager or the admin, who
-// issue a temporary password the user must replace at sign-in.
+// reset a pump or vendor to the default password (a plant manager to a random temporary one);
+// the user must replace it at sign-in.
 import { createHash } from 'node:crypto';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import {
@@ -13,6 +14,7 @@ import {
 	createArea,
 	createPlantManager,
 	createPump,
+	createVendor,
 	db,
 	login,
 	logLines,
@@ -20,6 +22,8 @@ import {
 } from './helpers';
 
 const NEW_PASSWORD = 'Brand-New-Pass-456';
+// DEFAULT_PASSWORD in src/lib/server/auth.ts: what a reset gives a pump or vendor login.
+const DEFAULT_PASSWORD = 'Test1234!';
 // A form action answers JSON unless the request asks for the page, as a browser does.
 const HTML = { accept: 'text/html' };
 
@@ -180,7 +184,9 @@ test('PWD-05 a plant manager resets a pump of their own plant, not of another', 
 		'pump-temp-password'
 	);
 	expect(issued.email).toBe(pump.email);
-	const signedIn = await signIn(pump.email, issued.password);
+	expect(issued.password).toBe(DEFAULT_PASSWORD);
+	expect((await signIn(pump.email, PASSWORD)).status).toBe(401);
+	const signedIn = await signIn(pump.email, DEFAULT_PASSWORD);
 	expect(signedIn.status).toBe(200);
 	expect(signedIn.body.mustChangePassword).toBe(true);
 	expect(
@@ -195,6 +201,27 @@ test('PWD-05 a plant manager resets a pump of their own plant, not of another', 
 	});
 	expect(refused.status).toBe(404);
 	expect((await signIn(otherPump.email, PASSWORD)).status).toBe(200);
+});
+
+test('PWD-09 the admin resets a vendor and a pump to the default password', async () => {
+	const { plantId } = await createArea();
+	const vendor = await createVendor();
+	const pump = await createPump(plantId, vendor.id);
+	const admin = await login((await createAdmin()).email);
+
+	for (const [path, account] of [
+		['/admin/vendors?/resetVendorPassword', vendor],
+		['/admin/vendors?/resetPumpPassword', pump]
+	] as const) {
+		const response = await admin.post(path, { form: { id: account.id }, headers: HTML });
+		const html = await response.text();
+		expect(html).toContain('Password reset to the default');
+		expect(html).toMatch(new RegExp(`<code[^>]*>${DEFAULT_PASSWORD}</code>`));
+		expect((await signIn(account.email, PASSWORD)).status).toBe(401);
+		const signedIn = await signIn(account.email, DEFAULT_PASSWORD);
+		expect(signedIn.status).toBe(200);
+		expect(signedIn.body.mustChangePassword).toBe(true);
+	}
 });
 
 test('PWD-06 the admin resets a plant manager; an open email link stops working', async () => {

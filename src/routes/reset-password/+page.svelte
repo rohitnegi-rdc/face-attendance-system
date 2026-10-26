@@ -34,7 +34,7 @@
 		<div class="auth-heading">
 			<h1 id="reset-title">Set a new password</h1>
 			<p>
-				For <strong data-testid="reset-email">{data.email}</strong>. Use at least 12 characters.
+				For <strong data-testid="reset-email">{data.email}</strong>. Use at least 8 characters.
 			</p>
 		</div>
 		<form
@@ -56,7 +56,7 @@
 						type={show ? 'text' : 'password'}
 						name="password"
 						autocomplete="new-password"
-						minlength="12"
+						minlength="8"
 						maxlength="128"
 						required
 						data-testid="reset-password"
@@ -78,7 +78,7 @@
 					type={show ? 'text' : 'password'}
 					name="confirmation"
 					autocomplete="new-password"
-					minlength="12"
+					minlength="8"
 					maxlength="128"
 					required
 					data-testid="reset-confirmation"

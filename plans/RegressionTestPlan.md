@@ -63,7 +63,7 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 | AUTH-04 | Disabled pump login | 403 "Account disabled" | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-05 | Disabled pump with a token that is still valid submits a photo | 403, no session row created | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-06 | First login with `must_change_password` | Every page redirects to `/change-password`. Every API returns 403 except password and logout | 1 | P0 | Covered (auth-rbac.spec) |
-| AUTH-07 | Change password: under 12 characters, mismatch, valid | 400, 400, 200 + new 7-day cookie, flag cleared | 1 | P0 | Covered (auth-rbac.spec) |
+| AUTH-07 | Change password: 7 characters, mismatch, valid at 8 (minimum 8 since 2026-10-26) | 400, 400, 200 + new 7-day cookie, flag cleared | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-08 | Temporary token expires after 15 min | Redirected to login | 1 | P2 | Missing |
 | AUTH-09 | Tampered or expired JWT | Treated as logged out | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-10 | Logout | Cookie removed, protected page redirects to login | 1, 2 | P0 | Covered (`interactive-ui-audit`) |
@@ -424,10 +424,11 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | PWD-02 | Unknown email | Same "Check your email" answer and help, no email | 1 | P0 | Covered (password-reset.spec) |
 | PWD-03 | System login ending in `.rdc` (no mailbox) | Vendor `.rdc`: "Ask for a reset", plant manager or admin; `@pumps.rdc`: "Ask your plant manager"; no link created | 1 | P1 | Covered (password-reset.spec) |
 | PWD-04 | Expired or made-up link | "This link no longer works", reset refused, old password still works | 1 | P0 | Covered (password-reset.spec) |
-| PWD-05 | Plant manager resets a pump password | Own plant: temporary password shown once, the pump must change it at sign-in, logged; another plant's pump: 404, unchanged | 1 | P0 | Covered (password-reset.spec) |
+| PWD-05 | Plant manager resets a pump password | Own plant: reset to the default password (`Test1234!`, the old one stops working), the pump must change it at sign-in, logged; another plant's pump: 404, unchanged | 1 | P0 | Covered (password-reset.spec) |
 | PWD-06 | Admin resets a plant manager password | Temporary password, change forced at sign-in; any open email link stops working | 1 | P1 | Covered (password-reset.spec) |
 | PWD-07 | Pump login with a real-looking address (added 2026-10-23) | The form says pump logins are reset by the plant manager; submitting the pump's address answers "Ask your plant manager", no link is created or logged | 1 | P0 | Covered (password-reset.spec) |
 | PWD-08 | Sign-in page with a pump login typed (added 2026-10-26) | The "Forgot password?" link disappears and a note says to ask the plant manager; any other address shows the link again | 1 | P1 | Covered (password-reset.spec) |
+| PWD-09 | Admin resets a vendor or a pump password (added 2026-10-26) | Back to the default password `Test1234!`, shown on the page; the old password stops working; change forced at sign-in | 1 | P0 | Covered (password-reset.spec) |
 
 ### ACC: model accuracy (Tier 3, existing gate)
 

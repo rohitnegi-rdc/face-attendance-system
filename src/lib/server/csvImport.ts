@@ -3,7 +3,7 @@
 // See plans/MasterPlan.md §8/§8a/§8b.
 import { parse } from 'csv-parse/sync';
 import { query, queryOne } from './db';
-import { hashPassword } from './auth';
+import { DEFAULT_PASSWORD, hashPassword } from './auth';
 
 // Vendors that get one login PER AREA instead of a single national account (§8b).
 const AREA_SPLIT_VENDORS = ['RDC Concrete (India) Ltd'];
@@ -101,7 +101,7 @@ export async function importCsv(csvText: string): Promise<ImportSummary> {
 				]);
 				if (!vendor) {
 					const email = `${slugify(vendorName)}-${slugify(areaName)}@vendors.rdc`;
-					const passwordHash = await hashPassword('Test1234!');
+					const passwordHash = await hashPassword(DEFAULT_PASSWORD);
 					vendor = await queryOne<any>(
 						`INSERT INTO vendors (name, email, password_hash, area_id, group_name)
 						 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
@@ -115,7 +115,7 @@ export async function importCsv(csvText: string): Promise<ImportSummary> {
 				]);
 				if (!vendor) {
 					const email = `${slugify(vendorName)}@vendors.rdc`;
-					const passwordHash = await hashPassword('Test1234!');
+					const passwordHash = await hashPassword(DEFAULT_PASSWORD);
 					vendor = await queryOne<any>(
 						`INSERT INTO vendors (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id`,
 						[vendorName, email, passwordHash]
@@ -146,7 +146,7 @@ export async function importCsv(csvText: string): Promise<ImportSummary> {
 				summary.pumps_updated++;
 			} else {
 				const loginEmail = `${slugifyLogin(pumpCode)}@pumps.rdc`;
-				const passwordHash = await hashPassword('Test1234!');
+				const passwordHash = await hashPassword(DEFAULT_PASSWORD);
 				await query(
 					`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash)
 					 VALUES ($1, $2, $3, $4, $5)`,

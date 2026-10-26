@@ -54,7 +54,7 @@
 						bind:value={password}
 						type={show ? 'text' : 'password'}
 						autocomplete="new-password"
-						minlength="12"
+						minlength="8"
 						maxlength="128"
 						required
 						data-testid="new-password"
@@ -76,7 +76,7 @@
 					bind:value={confirmation}
 					type={show ? 'text' : 'password'}
 					autocomplete="new-password"
-					minlength="12"
+					minlength="8"
 					maxlength="128"
 					required
 					data-testid="confirm-password"

@@ -20,7 +20,7 @@
 	</header>
 	{#if form?.credentials}
 		<div class="credential-notice" role="status" data-testid="pump-temp-password">
-			<strong>Give these to the pump operator now. The password cannot be viewed again.</strong>
+			<strong>Password reset to the default. Give these to the pump operator.</strong>
 			<span>They sign in with it and choose their own password straight away.</span>
 			<code>{form.credentials.email}</code>
 			<code>{form.credentials.password}</code>
