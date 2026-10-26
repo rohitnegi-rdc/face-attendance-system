@@ -27,6 +27,35 @@ const HI: Record<string, string> = {
 	// Shell
 	'Face Attendance': 'फेस अटेंडेंस',
 	'Sign out': 'साइन आउट',
+	Help: 'मदद',
+
+	// First sign-in guide (PumpGuide.svelte); button names are filled from the entries below
+	'Upload the Pump Operator photo': 'पंप ऑपरेटर की फोटो अपलोड करें',
+	'Tap the "{button}" button. Make sure only the Pump Operator is in the photo, with the face close, clear and fully visible.':
+		'"{button}" बटन दबाएँ। ध्यान रखें कि फोटो में केवल पंप ऑपरेटर हों और उनका चेहरा पास से, साफ़ और पूरा दिखाई दे।',
+	'Click the photo': 'फोटो खींचें',
+	'When the face of the Pump Operator is clear and fully visible on the screen, tap the "{button}" button.':
+		'पंप ऑपरेटर का चेहरा स्क्रीन पर साफ़ और पूरा दिखाई दे, तब "{button}" बटन दबाएँ।',
+	'Upload the Pump Members photo': 'पंप मेंबर्स की फोटो अपलोड करें',
+	'Tap the "{button}" button. Make sure every Pump Member is in the photo and every face is clear.':
+		'"{button}" बटन दबाएँ। ध्यान रखें कि सभी पंप मेंबर्स फोटो में हों और सबके चेहरे साफ़ दिखाई दें।',
+	'Send the photos': 'फोटो भेजें',
+	'Tap the "{button}" button. After sending, wait a little and do not close the page.':
+		'"{button}" बटन दबाएँ। फोटो भेजने के बाद थोड़ा इंतज़ार करें और पेज बंद न करें।',
+	'Write the names': 'नाम लिखें',
+	'Write the full name of every Pump Member. Then tap the "{button}" button. Your shift will then start.':
+		'सभी पंप मेंबर्स के पूरे नाम लिखें। फिर "{button}" बटन दबाएँ। इसके बाद आपकी शिफ्ट शुरू हो जाएगी।',
+	'Close the shift': 'शिफ्ट बंद करें',
+	'After 9 hours, take and upload the photos of the Pump Operator and all Pump Members again. Then tap the "{button}" button. Your shift will close.':
+		'9 घंटे बाद पंप ऑपरेटर और सभी पंप मेंबर्स की दोबारा फोटो लें और अपलोड करें। फिर "{button}" बटन दबाएँ। आपकी शिफ्ट बंद हो जाएगी।',
+	'Any problem? Tap the "Help" button at the top.': 'कोई परेशानी हो? ऊपर "मदद" बटन दबाएँ।',
+	'Ramesh Kumar': 'रमेश कुमार',
+	'Step {n} of {total}': 'स्टेप {n} / {total}',
+	Listen: 'सुनें',
+	Next: 'आगे',
+	Back: 'पीछे',
+	'Close guide': 'गाइड बंद करें',
+	'How to use the app': 'ऐप कैसे चलाएँ',
 
 	// Heading and status
 	'Shift attendance': 'शिफ्ट अटेंडेंस',
@@ -46,33 +75,30 @@ const HI: Record<string, string> = {
 	'Start shift': 'शिफ्ट स्टार्ट करें',
 
 	// Group photo
-	'Group photo': 'ग्रुप फोटो',
-	'Keep every face visible and inside the frame.': 'हर चेहरा साफ़ और फ्रेम के अंदर रखें।',
-	'Stand where the whole group is evenly lit and facing the camera.':
-		'ऐसी जगह खड़े हों जहाँ पूरे ग्रुप पर बराबर रोशनी हो और सब कैमरे की तरफ देखें।',
+	'Pump Members photo': 'पंप मेंबर्स फोटो',
+	'Every Pump Member in the photo, every face clear and inside the frame.':
+		'हर पंप मेंबर फोटो में हो, हर चेहरा साफ़ और फ्रेम के अंदर।',
+	'Stand where all Pump Members are in good light and facing the camera.':
+		'ऐसी जगह खड़े हों जहाँ सभी पंप मेंबर्स पर अच्छी रोशनी हो और सब कैमरे की तरफ देखें।',
 	'Take photo': 'फोटो लें',
-	'Capture video call': 'वीडियो कॉल से फोटो लें',
-	'Keep the complete group inside the frame.': 'पूरा ग्रुप फ्रेम के अंदर रखें।',
-	'Keep every worker visible before capturing the photo.':
-		'फोटो लेने से पहले हर वर्कर दिखना चाहिए।',
-	'Keep every worker visible in the WhatsApp call before capturing.':
-		'फोटो लेने से पहले व्हाट्सऐप कॉल में हर वर्कर दिखना चाहिए।',
+	'Take Pump Members photo': 'पंप मेंबर्स फोटो लें',
+	'Keep all Pump Members inside the frame.': 'सभी पंप मेंबर्स फ्रेम के अंदर रखें।',
+	'Every Pump Member must be visible before you take the photo.':
+		'फोटो लेने से पहले हर पंप मेंबर दिखना चाहिए।',
 
 	// Operator photo
-	'Operator photo': 'ऑपरेटर फोटो',
-	'The pump operator alone, face clearly visible. Needed with every shift photo.':
+	'Pump Operator photo': 'पंप ऑपरेटर फोटो',
+	'Only the Pump Operator, face clearly visible. Needed with every shift photo.':
 		'सिर्फ पंप ऑपरेटर, चेहरा साफ़ दिखे। हर शिफ्ट फोटो के साथ ज़रूरी है।',
-	'Retake operator photo': 'ऑपरेटर फोटो दोबारा लें',
-	'Only the operator, face clearly visible.': 'सिर्फ ऑपरेटर, चेहरा साफ़ दिखे।',
+	'Retake Pump Operator photo': 'पंप ऑपरेटर फोटो दोबारा लें',
+	'Only the Pump Operator, face clearly visible.': 'सिर्फ पंप ऑपरेटर, चेहरा साफ़ दिखे।',
 	'Hold the phone at face height in good light.': 'अच्छी रोशनी में फ़ोन चेहरे की ऊँचाई पर रखें।',
-	'Ask the operator to face the camera alone in the call.':
-		'ऑपरेटर से कहें कि कॉल में अकेले कैमरे की तरफ देखें।',
-	'Start with the operator': 'पहले ऑपरेटर की फोटो',
-	'Now the group photo': 'अब ग्रुप फोटो',
-	'Take the group photo first': 'पहले ग्रुप फोटो लें',
-	'Take a photo of the pump operator alone, so their attendance is marked too.':
+	'Start with the Pump Operator': 'पहले पंप ऑपरेटर की फोटो',
+	'Now the Pump Members photo': 'अब पंप मेंबर्स की फोटो',
+	'Take the Pump Members photo first': 'पहले पंप मेंबर्स की फोटो लें',
+	'Take a photo of the Pump Operator alone, so their attendance is marked too.':
 		'पंप ऑपरेटर की अकेले फोटो लें, ताकि उनकी अटेंडेंस भी लगे।',
-	'Take operator photo': 'ऑपरेटर फोटो लें',
+	'Take Pump Operator photo': 'पंप ऑपरेटर फोटो लें',
 	'Submit photos': 'फोटो भेजें',
 	Cancel: 'रद्द करें',
 
@@ -85,8 +111,6 @@ const HI: Record<string, string> = {
 	'Switch to rear camera': 'रियर कैमरा चालू करें',
 	'Use front camera': 'फ्रंट कैमरा',
 	'Use rear camera': 'रियर कैमरा',
-	'Use this frame': 'यह फ्रेम लें',
-	'Stop sharing': 'शेयरिंग बंद करें',
 	'Camera capture is not supported in this browser.': 'इस ब्राउज़र में कैमरा नहीं चलता।',
 	'Camera permission was blocked. Allow camera access in the browser.':
 		'कैमरा परमिशन ब्लॉक है। ब्राउज़र में कैमरा की अनुमति दें।',
@@ -95,14 +119,6 @@ const HI: Record<string, string> = {
 	'The camera preview is not ready yet.': 'कैमरा अभी तैयार नहीं है।',
 	'Could not capture the camera frame.': 'कैमरा से फोटो नहीं ली जा सकी।',
 	'Could not create a photo from the camera frame.': 'कैमरा फ्रेम से फोटो नहीं बन सकी।',
-	'Screen capture is not supported in this browser. Use Chrome or Edge.':
-		'इस ब्राउज़र में स्क्रीन कैप्चर नहीं चलता। क्रोम या एज इस्तेमाल करें।',
-	'Screen capture permission was cancelled.': 'स्क्रीन कैप्चर की परमिशन रद्द हो गई।',
-	'Could not start screen capture. Please select the WhatsApp call window again.':
-		'स्क्रीन कैप्चर शुरू नहीं हुआ। व्हाट्सऐप कॉल की विंडो फिर से चुनें।',
-	'The selected video window is not ready yet.': 'चुनी गई वीडियो विंडो अभी तैयार नहीं है।',
-	'Could not capture the selected window.': 'चुनी गई विंडो की फोटो नहीं ली जा सकी।',
-	'Could not create a photo from the selected window.': 'चुनी गई विंडो से फोटो नहीं बन सकी।',
 
 	// Processing
 	Uploading: 'अपलोड हो रहा है',
@@ -185,7 +201,7 @@ const HI: Record<string, string> = {
 	'{n} need review.': '{n} का रिव्यू ज़रूरी।',
 	'Check the marked faces before completing attendance.':
 		'अटेंडेंस पूरी करने से पहले मार्क किए चेहरे चेक करें।',
-	'Submitted group photo': 'भेजी गई ग्रुप फोटो',
+	'Submitted Pump Members photo': 'भेजी गई पंप मेंबर्स फोटो',
 	Matched: 'मिले हुए',
 	'New people': 'नए लोग',
 	'Needs review': 'रिव्यू ज़रूरी',
@@ -216,16 +232,26 @@ const HI: Record<string, string> = {
 	'Session status': 'सेशन स्टेटस',
 	Date: 'तारीख',
 	Today: 'आज',
+	'Shift date': 'शिफ्ट की तारीख',
+	'Shift details': 'शिफ्ट की जानकारी',
+	Sunday: 'रविवार',
+	Monday: 'सोमवार',
+	Tuesday: 'मंगलवार',
+	Wednesday: 'बुधवार',
+	Thursday: 'गुरुवार',
+	Friday: 'शुक्रवार',
+	Saturday: 'शनिवार',
 	Started: 'शुरू हुई',
 	'Next step': 'अगला कदम',
 	'Shift ended without an end photo. The next shift starts tomorrow.':
 		'एंड फोटो के बिना शिफ्ट खत्म हुई। अगली शिफ्ट कल शुरू होगी।',
 	'Shift recorded. The next shift starts tomorrow.': 'शिफ्ट दर्ज हो गई। अगली शिफ्ट कल शुरू होगी।',
-	'Finish reviewing the submitted group photo': 'भेजी गई ग्रुप फोटो का रिव्यू पूरा करें',
+	'Finish reviewing the submitted Pump Members photo':
+		'भेजी गई पंप मेंबर्स फोटो का रिव्यू पूरा करें',
 	'Retry the photo that could not be processed': 'जो फोटो प्रोसेस नहीं हुई, उसे दोबारा भेजें',
 	'Shift end opens {time}': 'शिफ्ट एंड {time} पर खुलेगा',
-	'Submit the group photo to end the shift': 'शिफ्ट एंड करने के लिए ग्रुप फोटो भेजें',
-	'Submit the group photo to start the shift': 'शिफ्ट स्टार्ट करने के लिए ग्रुप फोटो भेजें',
+	'Send the photos to end the shift': 'शिफ्ट एंड करने के लिए फोटो भेजें',
+	'Send the photos to start the shift': 'शिफ्ट स्टार्ट करने के लिए फोटो भेजें',
 	'Missed the end photo? End the shift here so your next photo starts a new one.':
 		'एंड फोटो छूट गई? शिफ्ट यहाँ खत्म करें ताकि अगली फोटो से नई शिफ्ट शुरू हो।',
 	'Ending session': 'सेशन खत्म हो रहा है',

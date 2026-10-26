@@ -129,7 +129,9 @@ test('PWD-07 a pump login is never reset by email, even with a real-looking addr
 	const form = await (await (await anonymous()).get('/forgot-password')).text();
 	expect(form).toContain('data-testid="forgot-pump-note"');
 	const html = await (
-		await (await anonymous()).post('/forgot-password', { form: { email: pump.email }, headers: HTML })
+		await (
+			await anonymous()
+		).post('/forgot-password', { form: { email: pump.email }, headers: HTML })
 	).text();
 	expect(html).toContain('data-testid="reset-pump"');
 	expect(html).toContain('plant manager');
@@ -218,4 +220,16 @@ test('PWD-06 the admin resets a plant manager; an open email link stops working'
 	expect(await (await (await anonymous()).get(`/reset-password?token=${token}`)).text()).toContain(
 		'data-testid="reset-expired"'
 	);
+});
+
+test('PWD-08 the sign-in page offers no "Forgot password?" for a pump login', async ({ page }) => {
+	await page.goto('/login');
+	const link = page.getByTestId('forgot-password-link');
+	await expect(link).toBeVisible();
+	await page.getByTestId('login-email').fill('aslp01@pumps.rdc');
+	await expect(link).toHaveCount(0);
+	await expect(page.getByTestId('login-pump-reset-note')).toContainText('plant manager');
+	await page.getByTestId('login-email').fill('owner@vendor-mail.in');
+	await expect(link).toBeVisible();
+	await expect(page.getByTestId('login-pump-reset-note')).toHaveCount(0);
 });

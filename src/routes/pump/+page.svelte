@@ -7,7 +7,6 @@
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Maximize from '@lucide/svelte/icons/maximize';
 	import Minimize from '@lucide/svelte/icons/minimize';
-	import MonitorUp from '@lucide/svelte/icons/monitor-up';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import SwitchCamera from '@lucide/svelte/icons/switch-camera';
@@ -15,6 +14,7 @@
 	import UserRound from '@lucide/svelte/icons/user-round';
 	import Users from '@lucide/svelte/icons/users';
 	import X from '@lucide/svelte/icons/x';
+	import { dateKey, formatDate, formatDateTime, formatDayLabel, todayStr } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 	import { t, tLabel } from '$lib/pumpLang.svelte';
 	import { showErrorToast, toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
@@ -76,10 +76,30 @@
 	// The operator photo, required with every shift photo: the pump operator alone.
 	let operatorFile = $state<File | null>(null);
 	let operatorPreviewUrl = $state('');
-	// Which photo the open camera or screen capture is taking.
+	// Which photo the open camera is taking.
 	let captureTarget = $state<'group' | 'operator'>('group');
 	let result = $state<any>(null);
 	let today = $state<any>(null);
+	// The date at the top right: the shift's own date (an end photo after midnight still
+	// belongs to the start's date), labelled so the operator knows which date it is.
+	const WEEKDAYS: Record<string, string> = {
+		Sun: 'Sunday',
+		Mon: 'Monday',
+		Tue: 'Tuesday',
+		Wed: 'Wednesday',
+		Thu: 'Thursday',
+		Fri: 'Friday',
+		Sat: 'Saturday'
+	};
+	const shownDate = $derived(dateKey(today?.shift_date || today?.today || new Date()));
+	const shownDateIsToday = $derived(shownDate === todayStr());
+	// No photo can be sent now (shift done, or the end not open yet): the photo card goes away
+	// instead of showing grey buttons, and the shift details say why and when.
+	const captureClosed = $derived(
+		status === 'idle' &&
+			!operatorPreviewUrl &&
+			(today?.state === 'locked' || today?.can_submit === false)
+	);
 	let todayLoading = $state(true);
 	let processingStep = $state(0);
 	let currentSessionId = $state('');
@@ -120,11 +140,56 @@
 		cameraFullscreen = Boolean(document.fullscreenElement);
 		if (!cameraFullscreen) screen.orientation?.unlock?.();
 	}
-	let screenStream = $state<MediaStream | null>(null);
-	let screenPreview = $state<HTMLVideoElement>();
-	let screenCaptureActive = $state(false);
-	let screenCaptureReady = $state(false);
-	let screenCaptureError = $state('');
+
+	// How the phone is held, from gravity: 0 upright, 90 turned left (top to the left), 180 upside
+	// down, 270 turned right; null while lying flat or without a motion sensor. The camera frame
+	// follows the screen, not the phone: with auto-rotate off (or outside full screen, where the
+	// screen is not locked to landscape) a phone held sideways gave a sideways photo, and the
+	// face detector misses sideways faces. The capture turns the photo by the difference.
+	let phoneAngle: number | null = null;
+	const gravitySign =
+		typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) ? -1 : 1;
+
+	function readGravity(event: DeviceMotionEvent) {
+		const gravity = event.accelerationIncludingGravity;
+		if (gravity?.x == null || gravity?.y == null) return;
+		// iOS reports gravity with the opposite sign to Android and the W3C spec.
+		const x = gravity.x * gravitySign;
+		const y = gravity.y * gravitySign;
+		if (Math.max(Math.abs(x), Math.abs(y)) < 4) {
+			phoneAngle = null;
+			return;
+		}
+		phoneAngle = Math.abs(y) >= Math.abs(x) ? (y > 0 ? 0 : 180) : x > 0 ? 90 : 270;
+	}
+
+	// iOS asks for motion permission, and only inside a tap: call before any await.
+	function watchPhoneAngle() {
+		if (typeof DeviceMotionEvent === 'undefined') return;
+		const motion = DeviceMotionEvent as typeof DeviceMotionEvent & {
+			requestPermission?: () => Promise<'granted' | 'denied'>;
+		};
+		const listen = () => window.addEventListener('devicemotion', readGravity);
+		if (motion.requestPermission) {
+			motion
+				.requestPermission()
+				.then((answer) => answer === 'granted' && listen())
+				.catch(() => {});
+		} else listen();
+	}
+
+	function stopWatchingPhoneAngle() {
+		if (typeof window !== 'undefined') window.removeEventListener('devicemotion', readGravity);
+		phoneAngle = null;
+	}
+
+	// Degrees the frame is turned against the world: the phone's angle minus the screen's.
+	function frameTurn() {
+		if (phoneAngle === null) return 0;
+		const legacy = (window as Window & { orientation?: number }).orientation;
+		const screenAngle = screen.orientation?.angle ?? legacy ?? 0;
+		return (((phoneAngle - screenAngle) % 360) + 360) % 360;
+	}
 
 	const processingLabels = ['Photo received', 'Detecting faces', 'Matching attendance'];
 
@@ -132,7 +197,6 @@
 	onDestroy(() => {
 		clearPreview();
 		stopCameraCapture();
-		stopScreenCapture();
 	});
 
 	// Text for a failed request. API routes answer JSON { error }, but SvelteKit's CSRF check,
@@ -232,15 +296,6 @@
 		}
 	}
 
-	function stopScreenCapture() {
-		if (screenStream) {
-			for (const track of screenStream.getTracks()) track.stop();
-		}
-		screenStream = null;
-		screenCaptureActive = false;
-		screenCaptureReady = false;
-	}
-
 	function stopCameraCapture() {
 		if (typeof document !== 'undefined' && document.fullscreenElement) {
 			document.exitFullscreen().catch(() => {});
@@ -248,6 +303,7 @@
 		if (cameraStream) {
 			for (const track of cameraStream.getTracks()) track.stop();
 		}
+		stopWatchingPhoneAngle();
 		cameraStream = null;
 		cameraCaptureActive = false;
 		cameraCaptureReady = false;
@@ -272,16 +328,13 @@
 		retryingSession = false;
 		approvingReview = false;
 		cameraCaptureError = '';
-		screenCaptureError = '';
 		status = 'idle';
 		stopCameraCapture();
-		stopScreenCapture();
 		loadToday();
 	}
 
 	async function startCameraCapture(target: 'group' | 'operator' = captureTarget) {
 		cameraCaptureError = '';
-		screenCaptureError = '';
 		errorMsg = '';
 		result = null;
 		selectedWorkerPreview = null;
@@ -289,8 +342,8 @@
 		clearTarget(target);
 		cameraCaptureReady = false;
 		canSwitchCamera = false;
-		stopScreenCapture();
 		stopCameraCapture();
+		watchPhoneAngle();
 
 		if (!navigator.mediaDevices?.getUserMedia) {
 			cameraCaptureError = 'Camera capture is not supported in this browser.';
@@ -352,16 +405,30 @@
 
 		const sourceWidth = cameraPreview.videoWidth;
 		const sourceHeight = cameraPreview.videoHeight;
+		const turn = frameTurn();
+		const sideways = turn === 90 || turn === 270;
 		const canvas = document.createElement('canvas');
-		canvas.width = sourceWidth;
-		canvas.height = sourceHeight;
+		canvas.width = sideways ? sourceHeight : sourceWidth;
+		canvas.height = sideways ? sourceWidth : sourceHeight;
 		const context = canvas.getContext('2d');
 		if (!context) {
 			cameraCaptureError = 'Could not capture the camera frame.';
 			return;
 		}
 
-		context.drawImage(cameraPreview, 0, 0, sourceWidth, sourceHeight);
+		// The rear camera sees the scene turned against the phone; the front camera sees it
+		// mirrored, so a quarter turn goes the other way. Half turns are the same for both.
+		const facing = cameraStream?.getVideoTracks()[0]?.getSettings().facingMode ?? cameraFacingMode;
+		const degrees = facing === 'user' ? turn : -turn;
+		context.translate(canvas.width / 2, canvas.height / 2);
+		context.rotate((degrees * Math.PI) / 180);
+		context.drawImage(
+			cameraPreview,
+			-sourceWidth / 2,
+			-sourceHeight / 2,
+			sourceWidth,
+			sourceHeight
+		);
 		const blob = await new Promise<Blob | null>((resolve) =>
 			canvas.toBlob(resolve, 'image/jpeg', 0.92)
 		);
@@ -381,82 +448,6 @@
 		stopCameraCapture();
 	}
 
-	async function startScreenCapture(target: 'group' | 'operator' = captureTarget) {
-		cameraCaptureError = '';
-		screenCaptureError = '';
-		errorMsg = '';
-		result = null;
-		selectedWorkerPreview = null;
-		status = 'idle';
-		clearTarget(target);
-		screenCaptureReady = false;
-		stopCameraCapture();
-		stopScreenCapture();
-
-		if (!navigator.mediaDevices?.getDisplayMedia) {
-			screenCaptureError = 'Screen capture is not supported in this browser. Use Chrome or Edge.';
-			return;
-		}
-
-		try {
-			screenStream = await navigator.mediaDevices.getDisplayMedia({
-				video: { frameRate: { ideal: 10, max: 15 } },
-				audio: false
-			});
-			screenCaptureActive = true;
-			const [track] = screenStream.getVideoTracks();
-			track?.addEventListener('ended', () => {
-				screenStream = null;
-				screenCaptureActive = false;
-			});
-			await tick();
-			if (screenPreview) {
-				screenPreview.srcObject = screenStream;
-				await screenPreview.play().catch(() => {});
-				screenCaptureReady = Boolean(screenPreview.videoWidth && screenPreview.videoHeight);
-			}
-		} catch (error) {
-			screenCaptureError =
-				error instanceof DOMException && error.name === 'NotAllowedError'
-					? 'Screen capture permission was cancelled.'
-					: 'Could not start screen capture. Please select the WhatsApp call window again.';
-		}
-	}
-
-	async function captureScreenFrame() {
-		if (!screenPreview || !screenPreview.videoWidth || !screenPreview.videoHeight) {
-			screenCaptureError = 'The selected video window is not ready yet.';
-			return;
-		}
-
-		const canvas = document.createElement('canvas');
-		canvas.width = screenPreview.videoWidth;
-		canvas.height = screenPreview.videoHeight;
-		const context = canvas.getContext('2d');
-		if (!context) {
-			screenCaptureError = 'Could not capture the selected window.';
-			return;
-		}
-
-		context.drawImage(screenPreview, 0, 0, canvas.width, canvas.height);
-		const blob = await new Promise<Blob | null>((resolve) =>
-			canvas.toBlob(resolve, 'image/jpeg', 0.92)
-		);
-		if (!blob) {
-			screenCaptureError = 'Could not create a photo from the selected window.';
-			return;
-		}
-
-		const sessionName = today?.state === 'evening' ? 'shift-end' : 'shift-start';
-		const file = new File([blob], `video-call-${captureTarget}-${sessionName}-${Date.now()}.jpg`, {
-			type: 'image/jpeg'
-		});
-
-		useCapturedFile(file);
-		screenCaptureError = '';
-		status = 'idle';
-		stopScreenCapture();
-	}
 	async function submitPhoto() {
 		if (!selectedFile || !operatorFile) return;
 		errorMsg = '';
@@ -570,9 +561,12 @@
 			if (res.status === 409 || res.status === 422) {
 				const body = await res.json().catch(() => ({}));
 				nameError = body.duplicate
-					? t('"{name}" is already the name of another worker at this pump. Add the father\'s name or village.', {
-							name: body.duplicate
-						})
+					? t(
+							'"{name}" is already the name of another worker at this pump. Add the father\'s name or village.',
+							{
+								name: body.duplicate
+							}
+						)
 					: body.unnamed
 						? t('Write a name for every worker before completing.')
 						: t(body.error || 'Could not complete this attendance review.');
@@ -688,11 +682,7 @@
 
 	function formatIST(value: string | null | undefined) {
 		if (!value) return '';
-		return new Intl.DateTimeFormat('en-IN', {
-			dateStyle: 'medium',
-			timeStyle: 'short',
-			timeZone: 'Asia/Kolkata'
-		}).format(new Date(value));
+		return formatDateTime(value);
 	}
 
 	async function openWorkerPreview(
@@ -823,76 +813,53 @@
 	</div>
 {/snippet}
 
-{#snippet screenCapturePanel(note: string)}
-	<div class="screen-capture-panel">
-		<div class="screen-preview">
-			<video
-				bind:this={screenPreview}
-				autoplay
-				muted
-				playsinline
-				onloadedmetadata={() => (screenCaptureReady = true)}
-				oncanplay={() => (screenCaptureReady = true)}
-				aria-label="Selected video call preview"
-			></video>
-		</div>
-		<div class="screen-actions">
-			<button
-				class="button button--primary"
-				type="button"
-				onclick={captureScreenFrame}
-				disabled={!screenCaptureReady}
-			>
-				<Camera size={18} />
-				{t('Use this frame')}
-			</button>
-			<button class="button button--secondary" type="button" onclick={stopScreenCapture}>
-				{t('Stop sharing')}
-			</button>
-		</div>
-		<p class="capture-note">{note}</p>
-		{#if screenCaptureError}<p class="capture-error">{t(screenCaptureError)}</p>{/if}
-	</div>
-{/snippet}
-
 <div class="capture-page">
 	<header class="capture-heading">
-		<div>
-			<p class="eyebrow">{t('Shift attendance')}</p>
+		<div class="heading-main">
 			<h1 data-testid="session-title">{t(sessionTitle)}</h1>
 			<p>
 				{today?.pump_code
-					? `${today.pump_code} - ${today.plant_name}`
+					? `${today.pump_code} · ${today.plant_name}`
 					: t('Group photo attendance')}
 			</p>
 		</div>
-		{#if todayLoading}
-			<span class="status-badge"><LoaderCircle class="spin" size={14} /> {t('Checking')}</span>
-		{:else if today?.state === 'locked'}
-			{#if today?.shift_outcome === 'start_only'}
-				<span class="status-badge" data-testid="shift-badge">{t('Start only')}</span>
+		<div class="heading-side">
+			<div class="heading-date" data-testid="heading-date">
+				<span>
+					{shownDateIsToday ? t('Today') : t('Shift date')} · {t(
+						WEEKDAYS[formatDayLabel(shownDate).weekday]
+					)}
+				</span>
+				<strong>{formatDate(shownDate)}</strong>
+			</div>
+			{#if todayLoading}
+				<span class="status-badge"><LoaderCircle class="spin" size={14} /> {t('Checking')}</span>
+			{:else if today?.state === 'locked'}
+				{#if today?.shift_outcome === 'start_only'}
+					<span class="status-badge" data-testid="shift-badge">{t('Start only')}</span>
+				{:else}
+					<span class="status-badge status-badge--success" data-testid="shift-badge"
+						><Check size={14} /> {t('Complete')}</span
+					>
+				{/if}
 			{:else}
-				<span class="status-badge status-badge--success" data-testid="shift-badge"
-					><Check size={14} /> {t('Complete')}</span
-				>
+				<span class="status-badge">
+					{today?.can_submit === false
+						? t('Waiting')
+						: t(today?.state === 'evening' ? t('End open') : t('Start open'))}
+				</span>
 			{/if}
-		{:else}
-			<span class="status-badge">
-				{today?.can_submit === false
-					? t('Waiting')
-					: t(today?.state === 'evening' ? t('End open') : t('Start open'))}
-			</span>
-		{/if}
+		</div>
 	</header>
 
 	<div class="capture-layout">
-		{#if !(status === 'completed' && result)}
+		{#if !(status === 'completed' && result) && !captureClosed}
 			<section class="capture-workspace" aria-labelledby="photo-heading">
 				<div class="section-heading">
 					<div>
-						<h2 id="photo-heading">{t('Operator photo')}</h2>
+						<h2 id="photo-heading">{t('Pump Operator photo')}</h2>
 						<p>
-							{t('The pump operator alone, face clearly visible. Needed with every shift photo.')}
+							{t('Only the Pump Operator, face clearly visible. Needed with every shift photo.')}
 						</p>
 					</div>
 				</div>
@@ -900,7 +867,7 @@
 				<div data-testid="operator-photo">
 					{#if operatorPreviewUrl}
 						<div class="photo-preview operator-preview">
-							<img src={operatorPreviewUrl} alt="Selected operator" />
+							<img src={operatorPreviewUrl} alt="Selected Pump Operator" />
 							{#if status === 'submitting' || status === 'processing'}
 								<div class="processing-overlay" aria-hidden="true">
 									<LoaderCircle class="spin" size={30} />
@@ -910,47 +877,24 @@
 						{#if status === 'idle'}
 							<button class="button button--secondary" type="button" onclick={startOperatorCamera}>
 								<Camera size={18} />
-								{t('Retake operator photo')}
+								{t('Retake Pump Operator photo')}
 							</button>
 						{/if}
 					{:else if cameraCaptureActive && captureTarget === 'operator'}
 						{@render cameraCapturePanel(
-							t('Only the operator, face clearly visible.'),
+							t('Only the Pump Operator, face clearly visible.'),
 							t('Hold the phone at face height in good light.')
-						)}
-					{:else if screenCaptureActive && captureTarget === 'operator'}
-						{@render screenCapturePanel(
-							t('Ask the operator to face the camera alone in the call.')
 						)}
 					{:else}
 						<div class="capture-empty operator-empty">
 							<span class="capture-icon"><UserRound size={30} strokeWidth={1.6} /></span>
-							<strong>{t('Start with the operator')}</strong>
-							<p>
-								{t('Take a photo of the pump operator alone, so their attendance is marked too.')}
-							</p>
 							<div class="capture-choices">
-								<button
-									class="button button--primary"
-									type="button"
-									onclick={startOperatorCamera}
-									disabled={today?.state === 'locked' || today?.can_submit === false}
-								>
+								<button class="button button--primary" type="button" onclick={startOperatorCamera}>
 									<Camera size={18} />
-									{t('Take operator photo')}
-								</button>
-								<button
-									class="button button--secondary"
-									type="button"
-									onclick={() => startScreenCapture('operator')}
-									disabled={today?.state === 'locked' || today?.can_submit === false}
-								>
-									<MonitorUp size={18} />
-									{t('Capture video call')}
+									{t('Take Pump Operator photo')}
 								</button>
 							</div>
 							{#if cameraCaptureError}<p class="capture-error">{t(cameraCaptureError)}</p>{/if}
-							{#if screenCaptureError}<p class="capture-error">{t(screenCaptureError)}</p>{/if}
 						</div>
 					{/if}
 				</div>
@@ -959,8 +903,11 @@
 					<div class="second-step" data-testid="group-photo">
 						<div class="section-heading">
 							<div>
-								<h2>{t('Group photo')}</h2>
-								<p>{t('Keep every face visible and inside the frame.')}</p>
+								<h2>{t('Pump Members photo')}</h2>
+								<p>
+									{t('Every Pump Member in the photo, every face clear and inside the frame.')}
+									{t('Stand where all Pump Members are in good light and facing the camera.')}
+								</p>
 							</div>
 						</div>
 						{#if previewUrl}
@@ -980,40 +927,19 @@
 							</div>
 						{:else if cameraCaptureActive && captureTarget === 'group'}
 							{@render cameraCapturePanel(
-								t('Keep the complete group inside the frame.'),
-								t('Keep every worker visible before capturing the photo.')
-							)}
-						{:else if screenCaptureActive && captureTarget === 'group'}
-							{@render screenCapturePanel(
-								t('Keep every worker visible in the WhatsApp call before capturing.')
+								t('Keep all Pump Members inside the frame.'),
+								t('Every Pump Member must be visible before you take the photo.')
 							)}
 						{:else}
 							<div class="capture-empty">
 								<span class="capture-icon"><Users size={34} strokeWidth={1.6} /></span>
-								<strong>{t('Now the group photo')}</strong>
-								<p>{t('Stand where the whole group is evenly lit and facing the camera.')}</p>
 								<div class="capture-choices">
-									<button
-										class="button button--primary"
-										type="button"
-										onclick={startGroupCamera}
-										disabled={today?.state === 'locked' || today?.can_submit === false}
-									>
+									<button class="button button--primary" type="button" onclick={startGroupCamera}>
 										<Camera size={18} />
-										{t('Take photo')}
-									</button>
-									<button
-										class="button button--secondary"
-										type="button"
-										onclick={() => startScreenCapture('group')}
-										disabled={today?.state === 'locked' || today?.can_submit === false}
-									>
-										<MonitorUp size={18} />
-										{t('Capture video call')}
+										{t('Take Pump Members photo')}
 									</button>
 								</div>
 								{#if cameraCaptureError}<p class="capture-error">{t(cameraCaptureError)}</p>{/if}
-								{#if screenCaptureError}<p class="capture-error">{t(screenCaptureError)}</p>{/if}
 							</div>
 						{/if}
 					</div>
@@ -1024,7 +950,6 @@
 		<aside class="session-panel" aria-live="polite">
 			{#if status === 'submitting' || status === 'processing'}
 				<div data-testid={status === 'submitting' ? 'status-submitting' : 'status-processing'}>
-					<p class="eyebrow">{status === 'submitting' ? t('Uploading') : t('Processing')}</p>
 					<h2>{status === 'submitting' ? t('Sending the photo') : t('Reading attendance')}</h2>
 					<ol class="processing-list">
 						{#each processingLabels as label, index (label)}
@@ -1069,7 +994,6 @@
 							<span class="result-icon"><ShieldAlert size={25} /></span>
 						{/if}
 						<div>
-							<p class="eyebrow">{t('Review before completing')}</p>
 							<h2 data-testid="result-heading">
 								{t(peopleFound === 1 ? '{n} person marked present' : '{n} people marked present', {
 									n: peopleFound
@@ -1109,7 +1033,7 @@
 					{/if}
 					{#if result.photo_url}
 						<div class="review-photo">
-							<p class="eyebrow">{t('Submitted group photo')}</p>
+							<p class="photo-caption">{t('Submitted Pump Members photo')}</p>
 							<img src={result.photo_url} alt="Corrected group attendance" />
 						</div>
 					{/if}
@@ -1276,13 +1200,13 @@
 							<h3>
 								{t('Name your workers')}
 								<span data-testid="names-left"
-									>{namesLeft
-										? t('{n} left', { n: namesLeft })
-										: t('All named')}</span
+									>{namesLeft ? t('{n} left', { n: namesLeft }) : t('All named')}</span
 								>
 							</h3>
 							<p class="name-help">
-								{t('Write the full name of each worker. Attendance cannot be completed without it.')}
+								{t(
+									'Write the full name of each worker. Attendance cannot be completed without it.'
+								)}
 							</p>
 							<ul class="name-list">
 								{#each unnamedWorkers as person (person.person_id)}
@@ -1348,13 +1272,8 @@
 				</div>
 			{:else}
 				<div class="session-details">
-					<p class="eyebrow">{t('Session status')}</p>
-					<h2>{t(sessionTitle)}</h2>
+					<h2>{t('Shift details')}</h2>
 					<dl>
-						<div>
-							<dt>{t('Date')}</dt>
-							<dd>{today?.shift_date || today?.today || t('Today')}</dd>
-						</div>
 						{#if today?.shift_started_at}
 							<div>
 								<dt>{t('Started')}</dt>
@@ -1369,14 +1288,14 @@
 										? t('Shift ended without an end photo. The next shift starts tomorrow.')
 										: t('Shift recorded. The next shift starts tomorrow.')
 									: today?.state === 'review'
-										? t('Finish reviewing the submitted group photo')
+										? t('Finish reviewing the submitted Pump Members photo')
 										: today?.state === 'failed'
 											? t('Retry the photo that could not be processed')
 											: today?.state === 'evening' && today?.can_submit === false
 												? t('Shift end opens {time}', { time: formatIST(today?.next_allowed_at) })
 												: today?.state === 'evening'
-													? t('Submit the group photo to end the shift')
-													: t('Submit the group photo to start the shift')}
+													? t('Send the photos to end the shift')
+													: t('Send the photos to start the shift')}
 							</dd>
 						</div>
 					</dl>
@@ -1411,7 +1330,7 @@
 				disabled={!selectedFile}
 			>
 				<Upload size={18} />
-				{selectedFile ? t('Submit photos') : t('Take the group photo first')}
+				{selectedFile ? t('Submit photos') : t('Take the Pump Members photo first')}
 			</button>
 			<button class="button button--ghost" type="button" onclick={resetCapture}
 				>{t('Cancel')}</button
@@ -1437,8 +1356,8 @@
 		>
 			<header class="worker-preview-header">
 				<div>
-					<p class="eyebrow">{selectedWorkerPreview.statusLabel}</p>
 					<h2 id="worker-preview-title">{selectedWorkerPreview.label}</h2>
+					<p class="preview-status">{selectedWorkerPreview.statusLabel}</p>
 				</div>
 				<button
 					bind:this={workerPreviewCloseButton}
@@ -1515,24 +1434,57 @@
 		gap: var(--space-4);
 	}
 
+	/* Page heading: what to do now and which pump on the left; the date and the shift state
+	   on the right, both columns starting on the same top line. */
 	.capture-heading {
-		margin-bottom: var(--space-6);
+		align-items: flex-start;
+		margin-bottom: var(--space-5);
+	}
+	.heading-main {
+		display: grid;
+		gap: var(--space-1);
+		min-width: 0;
+	}
+	.heading-side {
+		display: grid;
+		flex-shrink: 0;
+		justify-items: end;
+		gap: var(--space-2);
+	}
+	.heading-date {
+		display: grid;
+		justify-items: end;
+		gap: 0.125rem;
+		text-align: right;
+		line-height: 1.2;
+	}
+	.heading-date span {
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
+		font-weight: 700;
+	}
+	.heading-date strong {
+		color: var(--ink-strong);
+		font-size: var(--text-lg);
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
 	}
 	.capture-heading h1 {
-		margin: var(--space-1) 0;
+		margin: 0;
 		font-size: var(--text-3xl);
+		line-height: 1.15;
 	}
-	.capture-heading p:last-child,
+	.heading-main p,
 	.section-heading p {
 		margin: 0;
 		color: var(--ink-muted);
 	}
-	.eyebrow {
-		margin: 0;
+	.preview-status {
+		margin: var(--space-1) 0 0;
 		color: var(--ink-muted);
-		font-size: var(--text-xs);
-		font-weight: 700;
-		text-transform: uppercase;
+		font-size: var(--text-sm);
+		font-weight: 600;
 	}
 
 	.capture-layout {
@@ -1540,6 +1492,14 @@
 		grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 0.8fr);
 		gap: var(--space-5);
 		align-items: start;
+	}
+	/* Only the shift details are left (no photo can be sent now): one column, the same width as
+	   the heading above it, sized to its content. */
+	.capture-layout:not(:has(.capture-workspace)) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.capture-layout:not(:has(.capture-workspace)) .session-panel {
+		min-height: 0;
 	}
 
 	.capture-workspace,
@@ -1559,6 +1519,10 @@
 	.section-heading {
 		margin-bottom: var(--space-4);
 	}
+	.section-heading > div {
+		display: grid;
+		gap: var(--space-1);
+	}
 	.section-heading h2,
 	.session-panel h2 {
 		margin: 0;
@@ -1567,20 +1531,17 @@
 
 	.capture-empty {
 		display: grid;
-		min-height: 25rem;
+		min-height: 16rem;
 		place-items: center;
 		align-content: center;
-		padding: var(--space-7);
+		gap: var(--space-5);
+		padding: var(--space-6);
 		text-align: center;
 		background: var(--surface-subtle);
 		border: 1px dashed var(--brand-steel);
 		border-radius: var(--radius-md);
 	}
 
-	.capture-empty strong {
-		margin-top: var(--space-3);
-		font-size: var(--text-lg);
-	}
 	.capture-empty p {
 		max-width: 27rem;
 		margin: var(--space-2) auto var(--space-5);
@@ -1770,8 +1731,11 @@
 		gap: var(--space-2);
 		margin: var(--space-4) 0;
 	}
-	.review-photo .eyebrow {
+	.photo-caption {
 		margin: 0;
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
+		font-weight: 600;
 	}
 	.review-photo img {
 		display: block;
@@ -2072,22 +2036,25 @@
 		text-align: right;
 	}
 
+	/* Label and value rows share one label column, so every value starts on the same line and
+	   a long value wraps under itself, not under its label. */
 	.session-details dl {
 		display: grid;
-		gap: var(--space-3);
-		margin: var(--space-6) 0 0;
+		grid-template-columns: minmax(5.5rem, max-content) minmax(0, 1fr);
+		margin: var(--space-4) 0 0;
 	}
 	.session-details dl div {
 		display: grid;
-		grid-template-columns: 6rem 1fr;
-		gap: var(--space-3);
-		padding-top: var(--space-3);
+		grid-column: 1 / -1;
+		grid-template-columns: subgrid;
+		column-gap: var(--space-4);
+		padding: var(--space-3) 0;
 		border-top: 1px solid var(--brand-mist);
 	}
 	.end-session {
 		display: grid;
-		gap: var(--space-2);
-		margin-top: var(--space-5);
+		gap: var(--space-3);
+		margin-top: 0;
 		padding-top: var(--space-4);
 		border-top: 1px solid var(--brand-mist);
 	}
@@ -2101,7 +2068,9 @@
 	}
 	.session-details dd {
 		margin: 0;
-		text-align: right;
+		color: var(--ink-strong);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.sticky-submit {
@@ -2143,15 +2112,12 @@
 			padding: var(--space-4);
 		}
 		.capture-empty {
-			min-height: 21rem;
+			min-height: 13rem;
 			padding: var(--space-5);
 		}
 		.session-panel {
 			min-height: auto;
-			padding: var(--space-3);
-		}
-		.session-details dl {
-			margin-top: var(--space-4);
+			padding: var(--space-4);
 		}
 	}
 
@@ -2232,6 +2198,11 @@
 	@media (max-width: 30rem) {
 		.capture-heading h1 {
 			font-size: var(--text-2xl);
+		}
+		/* The page heading leads; card headings sit one step below it. */
+		.section-heading h2,
+		.session-panel h2 {
+			font-size: var(--text-lg);
 		}
 		.capture-choices {
 			width: 100%;

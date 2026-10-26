@@ -409,6 +409,8 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | UI-06 | Accessibility (axe) on login, pump and admin home | No serious violations | 2 | P1 | Covered |
 | UI-07 | Session expires while a page is open, then the user clicks an action | Sent to login, no silent failure | 2 | P2 | Missing |
 | UI-08 | Pump screen language (added 2026-10-22) | Hindi (Devanagari, everyday English work words kept) by default; one EN / हिंदी toggle switches to English and is remembered after reload; only the pump screens | 1 | P1 | Covered (pump-language.spec) |
+| UI-13 | Pump first sign-in guide (added 2026-10-23) | A new pump's first visit opens a 6-step animated guide (starting with the Pump Operator photo, ending with "Close the shift" after 9 hours, Hindi text as given by the user on 2026-10-26) that cannot be closed (no close button, Escape and Back do nothing); हिंदी / English switch on every step; finishing it sets `pumps.guide_done_at` so it does not open again; the Help button reopens it, closable. Pumps with attendance before migration 037 count as done | 1 | P1 | Covered (pump-guide.spec) |
+| UI-14 | Dates are DD-MM-YYYY everywhere (added 2026-10-26) | Screens, Excel reports and emails show dates as DD-MM-YYYY in India time; no source file formats a date another way (no `DD Mon`, `MMM`, `toLocaleString`, `Intl.DateTimeFormat`); the pump screen shows the date bold at the top right, labelled Today (or Shift date) and the weekday | 1 | P1 | Covered (date-format.spec, nav-badges.spec) |
 | UI-09 | Session log with five workers (added 2026-10-22) | Every worker shown inline by name (a chip; the face opens on click, UI-10) next to View group, in a fixed-height scroll area; no fold-out list; plant manager Attendance has no Person records table | 1 | P1 | Covered (nav-badges.spec) |
 
 ### PWD: forgot password and resets (added 2026-10-22)
@@ -422,6 +424,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | PWD-05 | Plant manager resets a pump password | Own plant: temporary password shown once, the pump must change it at sign-in, logged; another plant's pump: 404, unchanged | 1 | P0 | Covered (password-reset.spec) |
 | PWD-06 | Admin resets a plant manager password | Temporary password, change forced at sign-in; any open email link stops working | 1 | P1 | Covered (password-reset.spec) |
 | PWD-07 | Pump login with a real-looking address (added 2026-10-23) | The form says pump logins are reset by the plant manager; submitting the pump's address answers "Ask your plant manager", no link is created or logged | 1 | P0 | Covered (password-reset.spec) |
+| PWD-08 | Sign-in page with a pump login typed (added 2026-10-26) | The "Forgot password?" link disappears and a note says to ask the plant manager; any other address shows the link again | 1 | P1 | Covered (password-reset.spec) |
 
 ### ACC: model accuracy (Tier 3, existing gate)
 

@@ -13,6 +13,9 @@
 	let error = $state('');
 	let isSubmitting = $state(false);
 	let showPassword = $state(false);
+	// Pump logins (made up by the system, @pumps.rdc) have no mailbox: the plant manager resets
+	// them, so they get no "Forgot password?" link. Same rule as passwordReset.ts.
+	const pumpLogin = $derived(/@pumps\./i.test(email.trim()));
 	// Until the page is interactive a click on Sign in is a plain form submit, which silently
 	// reloads /login with empty fields (slow phones, and the live E2E run).
 	let ready = $state(false);
@@ -89,9 +92,10 @@
 
 		<label class="field">
 			<span class="password-label"
-				>Password <a href={resolve('/forgot-password')} data-testid="forgot-password-link"
-					>Forgot password?</a
-				></span
+				>Password {#if !pumpLogin}<a
+						href={resolve('/forgot-password')}
+						data-testid="forgot-password-link">Forgot password?</a
+					>{/if}</span
 			>
 			<span class="password-field">
 				<input
@@ -112,6 +116,12 @@
 				</button>
 			</span>
 		</label>
+
+		{#if pumpLogin}
+			<p class="pump-reset-note" data-testid="login-pump-reset-note">
+				Forgot the pump password? Ask your plant manager for a new one.
+			</p>
+		{/if}
 
 		{#if error}
 			<p class="alert alert--error" role="alert" data-testid="login-error">{error}</p>
@@ -148,6 +158,12 @@
 	.password-label a {
 		color: var(--brand-teal);
 		font-weight: 600;
+	}
+
+	.pump-reset-note {
+		margin: 0;
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
 	}
 
 	.password-field {

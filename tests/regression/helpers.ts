@@ -50,14 +50,20 @@ export async function createVendor() {
 	return { id: rows[0].id as string, email };
 }
 
-export async function createPump(plantId: string, vendorId?: string): Promise<Pump> {
+// guideDone: false leaves the first sign-in guide to open on the pump screen (UI-13); every
+// other scenario starts past it.
+export async function createPump(
+	plantId: string,
+	vendorId?: string,
+	{ guideDone = true }: { guideDone?: boolean } = {}
+): Promise<Pump> {
 	const owner = vendorId ?? (await createVendor()).id;
 	const code = tag('P');
 	const email = `${code.toLowerCase()}@pumps.regression`;
 	const { rows } = await db.query(
-		`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash, must_change_password)
-		 VALUES ($1, $2, $3, $4, $5, FALSE) RETURNING id`,
-		[plantId, owner, code, email, await hash()]
+		`INSERT INTO pumps (plant_id, vendor_id, pump_code, login_email, password_hash, must_change_password, guide_done_at)
+		 VALUES ($1, $2, $3, $4, $5, FALSE, CASE WHEN $6 THEN now() END) RETURNING id`,
+		[plantId, owner, code, email, await hash(), guideDone]
 	);
 	return { id: rows[0].id, code, email, vendorId: owner, plantId };
 }
