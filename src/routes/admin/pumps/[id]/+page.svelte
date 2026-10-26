@@ -430,10 +430,12 @@
 		<p class="test-count" data-testid="test-session-count">
 			{#if data.testSessions.sessions}
 				<strong>{data.testSessions.sessions}</strong>
-				{data.testSessions.sessions === 1 ? 'photo' : 'photos'} taken in test mode{#if data.testSessions.first && data.testSessions.last},
-					from {formatDateTime(data.testSessions.first)} to {formatDateTime(
-						data.testSessions.last
-					)}{/if}.
+				{data.testSessions.sessions === 1 ? 'photo' : 'photos'} taken in test mode{#if data.testSessions.sessions === 1 && data.testSessions.first},
+					on {formatDateTime(
+						data.testSessions.first
+					)}{:else if data.testSessions.first && data.testSessions.last}, from {formatDateTime(
+						data.testSessions.first
+					)} to {formatDateTime(data.testSessions.last)}{/if}.
 			{:else}
 				No shifts taken in test mode. Genuine records can only be deleted one shift at a time from
 				the Session log.
