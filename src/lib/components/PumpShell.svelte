@@ -4,8 +4,9 @@
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import CircleHelp from '@lucide/svelte/icons/circle-help';
 	import PumpGuide from '$lib/components/PumpGuide.svelte';
+	import PumpInstall from '$lib/components/PumpInstall.svelte';
 	import PumpReminders from '$lib/components/PumpReminders.svelte';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 	import { loadPumpLang, pumpLang, setPumpHindi, t } from '$lib/pumpLang.svelte';
 
@@ -26,8 +27,18 @@
 	let guideFinished = $state(startedDone);
 	let guideOpen = $state(true);
 	let guideForced = $state(!startedDone);
+	// A phone that has not answered about reminders sees the Enable notifications sheet first
+	// (PumpReminders); the guide waits behind it. Neither is known before the page runs in the
+	// browser, so the guide appears once the sheet has decided, never flashing in and out.
+	let remindersHold = $state(false);
+	let decided = $state(false);
+	const guideShown = $derived(decided && guideOpen && !remindersHold);
 
-	onMount(loadPumpLang);
+	onMount(async () => {
+		loadPumpLang();
+		await tick();
+		decided = true;
+	});
 
 	async function closeGuide() {
 		guideOpen = false;
@@ -55,7 +66,7 @@
 </script>
 
 <div class="pump-shell" lang={pumpLang.hindi ? 'hi' : 'en'}>
-	<header class="pump-topbar" inert={guideOpen}>
+	<header class="pump-topbar" inert={guideShown}>
 		<a class="pump-brand" href={resolve('/pump')} aria-label="Face Attendance pump home">
 			<span class="pump-brand__mark"><ScanFace size={21} /></span>
 			<span>
@@ -93,11 +104,12 @@
 			</form>
 		</div>
 	</header>
-	<main id="main-content" inert={guideOpen}>
-		<PumpReminders />
+	<main id="main-content" inert={guideShown}>
+		<PumpInstall />
+		<PumpReminders onhold={(hold) => (remindersHold = hold)} />
 		{@render children()}
 	</main>
-	{#if guideOpen}
+	{#if guideShown}
 		<PumpGuide forced={guideForced} onclose={closeGuide} />
 	{/if}
 </div>

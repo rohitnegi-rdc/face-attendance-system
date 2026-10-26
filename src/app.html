@@ -7,6 +7,17 @@
 		<!-- Lets a phone add the pump screen to its Home Screen: on an iPhone the shift end
 		     reminders work only from there. -->
 		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/icons/apple-touch-icon.png" />
+		<meta name="theme-color" content="#05ad98" />
+		<script>
+			// Chrome says "this app can be installed" once, often before the pump screen has
+			// loaded; keep it for the Install app card (PumpInstall.svelte).
+			window.addEventListener('beforeinstallprompt', function (event) {
+				event.preventDefault();
+				window.__installPrompt = event;
+				window.dispatchEvent(new Event('install-ready'));
+			});
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

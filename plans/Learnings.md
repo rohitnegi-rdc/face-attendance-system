@@ -145,3 +145,12 @@ Test mode (fraud check off) worked only while the server env `TEST_MODE=true`, s
 - Fix: a pump login is asked on the Sign in tap itself (a tap, so every browser allows it) and the login page waits for the answer before moving on, because leaving the page drops the question. A phone still undecided is asked as the pump screen opens, and on its first tap there.
 - Rule: ask for a permission at the user's first deliberate tap in the flow (here Sign in), not at a later screen; and verify permission prompts on a real phone before calling it done, since Playwright answers them itself.
 
+### 2026-10-27: Chrome called the shift end reminder "possible spam"
+- After reminders finally reached the user's Android phone, Chrome showed them with "this notification might be spam". The site had no app icon and was a plain browser tab, so Chrome had nothing that marked it as an app the user trusts.
+- Fix: the pump screen is installable (manifest with the RDC truck icons, an Install app card when Chrome offers it) and every reminder carries the RDC icon and a badge. Notifications from an installed app are the documented way past the flag, but Chrome decides on its own, so it is not guaranteed.
+- Rule: anything that sends notifications ships with real icons and an install path from day one; a bare site sending repeated reminders looks like spam to the browser.
+
+### 2026-10-27: asking for notifications by itself gave way to an Enable notifications button
+- The earlier guess was "ask as early as possible": on the Sign in tap, then on page open, then on the first tap anywhere. Chrome treats a question the person did not clearly ask for as unwanted: it may show only the quiet bell, and repeated dismissals pause asking for a week, so asking early cost more answers than it won.
+- Fix (user's flow): sign in, an Enable notifications sheet with one line of why, the button opens Chrome's question, the subscription is saved only once allowed. The guide waits behind the sheet.
+- Rule: a permission question follows a tap on a button that names it, after a short reason; never piggyback on an unrelated tap.

@@ -18,6 +18,9 @@ sw.addEventListener('push', (event) => {
 			// A second reminder with the same tag replaces the first and still alerts.
 			renotify: Boolean(data.tag),
 			requireInteraction: true,
+			// The RDC truck: the app icon in the notification, its outline in the status bar.
+			icon: new URL('icons/icon-192.png', sw.registration.scope).href,
+			badge: new URL('icons/badge-96.png', sw.registration.scope).href,
 			data: { url: new URL(data.url ?? 'pump', sw.registration.scope).href }
 		} as NotificationOptions)
 	);

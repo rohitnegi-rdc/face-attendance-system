@@ -30,25 +30,19 @@ const HI: Record<string, string> = {
 	Help: 'मदद',
 
 	// First sign-in guide (PumpGuide.svelte); button names are filled from the entries below
-	'Upload the Pump Operator photo': 'पंप ऑपरेटर की फोटो अपलोड करें',
-	'Tap the "{button}" button. Make sure only the Pump Operator is in the photo, with the face close, clear and fully visible.':
-		'"{button}" बटन दबाएँ। ध्यान रखें कि फोटो में केवल पंप ऑपरेटर हों और उनका चेहरा पास से, साफ़ और पूरा दिखाई दे।',
-	'Click the photo': 'फोटो खींचें',
-	'When the face of the Pump Operator is clear and fully visible on the screen, tap the "{button}" button.':
-		'पंप ऑपरेटर का चेहरा स्क्रीन पर साफ़ और पूरा दिखाई दे, तब "{button}" बटन दबाएँ।',
-	'Upload the Pump Members photo': 'पंप मेंबर्स की फोटो अपलोड करें',
-	'Tap the "{button}" button. Make sure every Pump Member is in the photo and every face is clear.':
-		'"{button}" बटन दबाएँ। ध्यान रखें कि सभी पंप मेंबर्स फोटो में हों और सबके चेहरे साफ़ दिखाई दें।',
-	'Send the photos': 'फोटो भेजें',
-	'Tap the "{button}" button. After sending, wait a little and do not close the page.':
-		'"{button}" बटन दबाएँ। फोटो भेजने के बाद थोड़ा इंतज़ार करें और पेज बंद न करें।',
-	'Write the names': 'नाम लिखें',
-	'Write the full name of every Pump Member. Then tap the "{button}" button. Your shift will then start.':
-		'सभी पंप मेंबर्स के पूरे नाम लिखें। फिर "{button}" बटन दबाएँ। इसके बाद आपकी शिफ्ट शुरू हो जाएगी।',
-	'Close the shift': 'शिफ्ट बंद करें',
-	'After 9 hours, take and upload the photos of the Pump Operator and all Pump Members again. Then tap the "{button}" button. Your shift will close.':
-		'9 घंटे बाद पंप ऑपरेटर और सभी पंप मेंबर्स की दोबारा फोटो लें और अपलोड करें। फिर "{button}" बटन दबाएँ। आपकी शिफ्ट बंद हो जाएगी।',
-	'Any problem? Tap the "Help" button at the top.': 'कोई परेशानी हो? ऊपर "मदद" बटन दबाएँ।',
+	'Take the Pump Operator photo': 'पंप ऑपरेटर की फोटो लें',
+	'Tap "{button}". Only the operator should be in the photo, with the face clearly visible.':
+		'"{button}" दबाएँ। फोटो में सिर्फ ऑपरेटर हों और चेहरा साफ़ दिखे।',
+	'Take the photo of all Pump Members': 'सभी पंप मेंबर्स की फोटो लें',
+	'Tap "{button}". Every member\'s face should be clearly visible.':
+		'"{button}" दबाएँ। सभी मेंबर्स के चेहरे साफ़ दिखने चाहिए।',
+	'Send the photos and write the names': 'फोटो भेजें और नाम लिखें',
+	'Tap "{send}" and wait. Then write the names of all members and tap "{button}". Your shift will start.':
+		'"{send}" दबाएँ और इंतज़ार करें। फिर सभी मेंबर्स के नाम लिखकर "{button}" दबाएँ। आपकी शिफ्ट शुरू हो जाएगी।',
+	'Close the shift after 9 hours': '9 घंटे बाद शिफ्ट बंद करें',
+	'After 9 hours, take everyone\'s photo again and tap "{button}". The shift will close.':
+		'9 घंटे बाद दोबारा सभी की फोटो लें और "{button}" दबाएँ। शिफ्ट बंद हो जाएगी।',
+	'Any problem? Tap "Help".': 'कोई परेशानी हो? "मदद" दबाएँ।',
 	'Ramesh Kumar': 'रमेश कुमार',
 	'Step {n} of {total}': 'स्टेप {n} / {total}',
 	Listen: 'सुनें',
@@ -288,7 +282,8 @@ const HI: Record<string, string> = {
 	'Turn on reminders': 'रिमाइंडर चालू करें',
 	'Get a reminder on this phone when it is time to end the shift.':
 		'शिफ्ट एंड करने का समय होने पर इस फ़ोन पर रिमाइंडर पाएँ।',
-	'Allow reminders': 'रिमाइंडर की अनुमति दें',
+	'Enable notifications': 'नोटिफिकेशन चालू करें',
+	'Tap the button, then tap "Allow".': 'बटन दबाएँ, फिर "अनुमति दें" (Allow) दबाएँ।',
 	'Not now': 'अभी नहीं',
 	Close: 'बंद करें',
 	'Reminders are on.': 'रिमाइंडर चालू हैं।',
@@ -298,6 +293,11 @@ const HI: Record<string, string> = {
 	'To turn them on, allow notifications for this site in the browser settings.':
 		'चालू करने के लिए ब्राउज़र की सेटिंग में इस साइट के नोटिफिकेशन की अनुमति दें।',
 	'Reminders could not be turned on.': 'रिमाइंडर चालू नहीं हो पाए।',
+	// Install the app (PumpInstall.svelte)
+	'Install the app': 'ऐप इंस्टॉल करें',
+	'Open attendance from the Home screen and get reminders without a spam warning.':
+		'होम स्क्रीन से अटेंडेंस खोलें और रिमाइंडर बिना स्पैम चेतावनी के पाएँ।',
+	'Install app': 'ऐप इंस्टॉल करें',
 	'Check the internet and open the app again.': 'इंटरनेट चेक करें और ऐप फिर से खोलें।',
 	'Reminders need the secure (https) address.': 'रिमाइंडर के लिए सुरक्षित (https) पता चाहिए।',
 	'Open the app with its https:// address to get reminders.':

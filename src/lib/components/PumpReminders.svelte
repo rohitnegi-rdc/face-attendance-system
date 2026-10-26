@@ -1,28 +1,29 @@
 <script lang="ts">
-	// Asks the pump to allow shift end reminders (Web Push, worker/endReminders.js). Browsers only
-	// show their permission question after a tap, so it opens on the first tap anywhere on the
-	// pump screen; the card explains and its button asks again.
-	// Once allowed, every visit quietly re-saves this phone's subscription and the card stays
-	// away. Not now hides it until the next visit. On an iPhone, push needs the app on the Home
-	// Screen first, so the card says how.
+	// Shift end reminders (Web Push, worker/endReminders.js), in Chrome's recommended flow: a
+	// phone that has not answered sees an "Enable notifications" sheet with a short explanation
+	// before the guide; only a tap on its button opens Chrome's question, and only once allowed is
+	// the phone's subscription saved. Not now hides it until the next visit. An allowed phone
+	// re-saves its subscription quietly on every visit, no card. Decisions: $lib/pushReminders.
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import BellRing from '@lucide/svelte/icons/bell-ring';
 	import X from '@lucide/svelte/icons/x';
 	import { t } from '$lib/pumpLang.svelte';
+	import {
+		enable,
+		holdsGuide,
+		keyBytes,
+		openingState,
+		resave,
+		type ReminderState
+	} from '$lib/pushReminders';
+
+	// The guide waits while the sheet is open (PumpShell).
+	let { onhold }: { onhold?: (hold: boolean) => void } = $props();
 
 	const LATER_KEY = 'pump-reminders-later';
-	type State =
-		| 'hidden'
-		| 'ask'
-		| 'asking'
-		| 'on'
-		| 'blocked'
-		| 'iphone'
-		| 'failed'
-		| 'insecure'
-		| 'unsupported';
-	let state = $state<State>('hidden');
+	let state = $state<ReminderState>('hidden');
+	$effect(() => onhold?.(holdsGuide(state)));
 
 	function laterThisVisit() {
 		try {
@@ -39,13 +40,6 @@
 		} catch {
 			// Blocked storage: the card comes back on the next page load.
 		}
-	}
-
-	function keyBytes(base64url: string) {
-		const base64 = (base64url + '='.repeat((4 - (base64url.length % 4)) % 4))
-			.replace(/-/g, '+')
-			.replace(/_/g, '/');
-		return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 	}
 
 	// SvelteKit registers the service worker; wait for it, but not forever.
@@ -67,7 +61,7 @@
 			(await registration.pushManager.getSubscription()) ??
 			(await registration.pushManager.subscribe({
 				userVisibleOnly: true,
-				applicationServerKey: keyBytes(publicKey)
+				applicationServerKey: keyBytes(publicKey) as BufferSource
 			}));
 		const saved = await fetch(resolve('/api/pump/push'), {
 			method: 'POST',
@@ -80,62 +74,47 @@
 	async function allow() {
 		if (state === 'asking') return;
 		state = 'asking';
-		const permission = await Notification.requestPermission().catch(
-			() => 'default' as NotificationPermission
-		);
-		if (permission !== 'granted') {
-			state = permission === 'denied' ? 'blocked' : 'ask';
-			return;
-		}
-		try {
-			await subscribe();
-			state = 'on';
-		} catch {
-			state = 'failed';
-		}
+		state = await enable(() => Notification.requestPermission(), subscribe);
 	}
 
 	onMount(() => {
-		// Browsers allow notifications only on an https address; on http they are switched off
-		// entirely, so say so instead of hiding the card.
-		if (!window.isSecureContext) {
-			state = 'insecure';
-			return;
-		}
 		const supported =
 			'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
-		if (!supported) {
-			const iphone = /iPhone|iPad|iPod/.test(navigator.userAgent);
-			state = iphone ? 'iphone' : 'unsupported';
-			return;
-		}
-		if (Notification.permission === 'granted') {
-			subscribe().catch(() => {});
-			return;
-		}
-		if (Notification.permission === 'denied') {
-			state = 'blocked';
-			return;
-		}
-		// A phone that has not answered yet (normally it was asked at Sign in): the browser's own
-		// question opens at once, before the guide is even read. Browsers that only ask after a
-		// tap answer "default" without showing anything; then the first tap anywhere on the pump
-		// screen (closing the guide counts) asks. The card stays as the fallback. Not now on the
-		// card stops both for this visit.
-		if (laterThisVisit()) return;
-		state = 'ask';
-		void allow();
-		const firstTap = (event: MouseEvent) => {
-			// The card's own buttons answer for themselves (Not now must not ask).
-			if ((event.target as Element | null)?.closest?.('[data-testid="pump-reminders"]')) return;
-			if (Notification.permission === 'default') void allow();
+		const phone = {
+			secure: window.isSecureContext,
+			supported,
+			iphone: /iPhone|iPad|iPod/.test(navigator.userAgent),
+			permission: supported ? Notification.permission : ('default' as NotificationPermission),
+			notNow: laterThisVisit()
 		};
-		document.addEventListener('click', firstTap, { capture: true, once: true });
-		return () => document.removeEventListener('click', firstTap, { capture: true });
+		state = openingState(phone);
+		if (resave(phone)) subscribe().catch(() => {});
 	});
 </script>
 
-{#if state !== 'hidden'}
+{#if state === 'ask' || state === 'asking'}
+	<div class="reminders-sheet" role="dialog" aria-modal="true" aria-labelledby="reminders-title">
+		<section class="reminders-sheet__card" data-testid="pump-reminders" data-state={state}>
+			<span class="reminders-sheet__icon" aria-hidden="true"><BellRing size={34} /></span>
+			<h2 id="reminders-title">{t('Enable notifications')}</h2>
+			<p>{t('Get a reminder on this phone when it is time to end the shift.')}</p>
+			<p class="reminders-sheet__hint">{t('Tap the button, then tap "Allow".')}</p>
+			<button
+				class="button button--primary reminders-sheet__enable"
+				type="button"
+				onclick={allow}
+				disabled={state === 'asking'}
+				data-testid="reminders-allow"><BellRing size={20} /> {t('Enable notifications')}</button
+			>
+			<button
+				class="button button--ghost"
+				type="button"
+				onclick={hide}
+				data-testid="reminders-later">{t('Not now')}</button
+			>
+		</section>
+	</div>
+{:else if state !== 'hidden'}
 	<section
 		class="reminders"
 		class:reminders--quiet={state === 'blocked' ||
@@ -163,33 +142,18 @@
 			{:else if state === 'unsupported'}
 				<strong>{t('This browser cannot show reminders.')}</strong>
 				<p>{t('Open the app in Chrome to get reminders.')}</p>
-			{:else if state === 'iphone'}
+			{:else}
 				<strong>{t('Turn on reminders')}</strong>
 				<p>
 					{t(
 						'On iPhone, tap Share, then "Add to Home Screen", and open the app from the Home Screen.'
 					)}
 				</p>
-			{:else}
-				<strong>{t('Turn on reminders')}</strong>
-				<p>{t('Get a reminder on this phone when it is time to end the shift.')}</p>
-				<div class="reminders__actions">
-					<button
-						class="button button--primary"
-						type="button"
-						onclick={allow}
-						disabled={state === 'asking'}
-						data-testid="reminders-allow">{t('Allow reminders')}</button
-					>
-					<button class="button button--ghost" type="button" onclick={hide}>{t('Not now')}</button>
-				</div>
 			{/if}
 		</div>
-		{#if state !== 'ask' && state !== 'asking'}
-			<button class="reminders__close" type="button" onclick={hide} aria-label={t('Close')}
-				><X size={20} /></button
-			>
-		{/if}
+		<button class="reminders__close" type="button" onclick={hide} aria-label={t('Close')}
+			><X size={20} /></button
+		>
 	</section>
 {/if}
 
@@ -238,11 +202,76 @@
 		font-size: var(--text-sm);
 	}
 
-	.reminders__actions {
-		display: flex;
-		flex-wrap: wrap;
+	/* Same place and look as the guide's sheet, which waits behind it. */
+	.reminders-sheet {
+		position: fixed;
+		inset: 0;
+		z-index: var(--z-drawer);
+		display: grid;
+		align-items: end;
+		justify-items: center;
+		padding: var(--space-3);
+		padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
+		background: rgb(16 39 37 / 72%);
+	}
+
+	@media (min-width: 40rem) {
+		.reminders-sheet {
+			align-items: center;
+		}
+	}
+
+	.reminders-sheet__card {
+		display: grid;
+		width: min(100%, 30rem);
+		gap: var(--space-3);
+		padding: var(--space-6) var(--space-4) var(--space-4);
+		text-align: center;
+		background: var(--surface-raised);
+		border-radius: 1.25rem;
+		box-shadow: 0 1.25rem 3rem rgb(0 0 0 / 30%);
+	}
+
+	.reminders-sheet__icon {
+		display: grid;
+		width: 4.5rem;
+		height: 4.5rem;
+		margin: 0 auto;
+		place-items: center;
+		color: var(--primary-on);
+		background: var(--brand-teal);
+		border-radius: 999px;
+	}
+
+	.reminders-sheet__card h2 {
+		margin: 0;
+		color: var(--ink-strong);
+		font-size: 1.5rem;
+	}
+
+	.reminders-sheet__card p {
+		margin: 0;
+		color: var(--ink-default);
+		font-size: 1.125rem;
+	}
+
+	.reminders-sheet__card .reminders-sheet__hint {
+		color: var(--ink-muted);
+		font-size: 1rem;
+	}
+
+	.reminders-sheet__card .button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		gap: var(--space-2);
+		width: 100%;
+	}
+
+	.reminders-sheet__enable {
+		min-height: 3.5rem;
 		margin-top: var(--space-2);
+		font-size: 1.125rem;
 	}
 
 	.reminders__close {

@@ -10,9 +10,7 @@
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Camera from '@lucide/svelte/icons/camera';
 	import Check from '@lucide/svelte/icons/check';
-	import CircleHelp from '@lucide/svelte/icons/circle-help';
 	import Pointer from '@lucide/svelte/icons/pointer';
-	import Send from '@lucide/svelte/icons/send';
 	import Volume2 from '@lucide/svelte/icons/volume-2';
 	import X from '@lucide/svelte/icons/x';
 	import { pumpLang, setPumpHindi, t } from '$lib/pumpLang.svelte';
@@ -20,54 +18,44 @@
 	let { forced, onclose }: { forced: boolean; onclose: () => void } = $props();
 
 	type Step = {
-		scene: 'operator' | 'click' | 'group' | 'send' | 'names' | 'end';
+		scene: 'operator' | 'group' | 'names' | 'end';
 		title: string;
 		body: string;
-		// The button drawn in the scene; tap is a button only named in the text.
-		button?: string;
-		tap?: string;
+		// The button drawn in the scene ({button}); send is a second button named in the text.
+		button: string;
+		send?: string;
 	};
-	// Straight to the first action. Button names are the screen's own words, so the step names
-	// exactly what to tap. The 9 hours is the default shift-end gap (EVENING_MIN_GAP_MINUTES).
+	// The four steps as the user wrote them on 2026-10-27 (Hindi in pumpLang). Button names are
+	// the screen's own words, so the step names exactly what to tap. The 9 hours is the default
+	// shift-end gap (EVENING_MIN_GAP_MINUTES).
 	const STEPS: Step[] = [
 		{
 			scene: 'operator',
-			title: 'Upload the Pump Operator photo',
-			body: 'Tap the "{button}" button. Make sure only the Pump Operator is in the photo, with the face close, clear and fully visible.',
+			title: 'Take the Pump Operator photo',
+			body: 'Tap "{button}". Only the operator should be in the photo, with the face clearly visible.',
 			button: 'Take Pump Operator photo'
 		},
 		{
-			scene: 'click',
-			title: 'Click the photo',
-			body: 'When the face of the Pump Operator is clear and fully visible on the screen, tap the "{button}" button.',
-			button: 'Use this photo'
-		},
-		{
 			scene: 'group',
-			title: 'Upload the Pump Members photo',
-			body: 'Tap the "{button}" button. Make sure every Pump Member is in the photo and every face is clear.',
+			title: 'Take the photo of all Pump Members',
+			body: 'Tap "{button}". Every member\'s face should be clearly visible.',
 			button: 'Take Pump Members photo'
 		},
 		{
-			scene: 'send',
-			title: 'Send the photos',
-			body: 'Tap the "{button}" button. After sending, wait a little and do not close the page.',
-			button: 'Submit photos'
-		},
-		{
 			scene: 'names',
-			title: 'Write the names',
-			body: 'Write the full name of every Pump Member. Then tap the "{button}" button. Your shift will then start.',
+			title: 'Send the photos and write the names',
+			body: 'Tap "{send}" and wait. Then write the names of all members and tap "{button}". Your shift will start.',
+			send: 'Submit photos',
 			button: 'Done reviewing'
 		},
 		{
 			scene: 'end',
-			title: 'Close the shift',
-			body: 'After 9 hours, take and upload the photos of the Pump Operator and all Pump Members again. Then tap the "{button}" button. Your shift will close.',
-			tap: 'Done reviewing'
+			title: 'Close the shift after 9 hours',
+			body: 'After 9 hours, take everyone\'s photo again and tap "{button}". The shift will close.',
+			button: 'Done reviewing'
 		}
 	];
-	const HELP_NOTE = 'Any problem? Tap the "Help" button at the top.';
+	const HELP_NOTE = 'Any problem? Tap "Help".';
 	const SHIRTS = ['#05ad98', '#f08a4b', '#4c7bd9', '#9b5fc0'];
 
 	let index = $state(0);
@@ -75,7 +63,7 @@
 	let nextButton = $state<HTMLButtonElement>();
 	const step = $derived(STEPS[index]);
 	const last = $derived(index === STEPS.length - 1);
-	const body = $derived(t(step.body, { button: t(step.button ?? step.tap ?? '') }));
+	const body = $derived(t(step.body, { button: t(step.button), send: t(step.send ?? '') }));
 	const reducedMotion =
 		typeof window !== 'undefined' &&
 		window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -90,7 +78,7 @@
 	function speak() {
 		if (!canSpeak) return;
 		stopSpeaking();
-		const text = [t(step.title), body, last ? t(HELP_NOTE) : ''].join('. ').replace(/"/g, '');
+		const text = [t(step.title), body, t(HELP_NOTE)].join('. ').replace(/"/g, '');
 		const utterance = new SpeechSynthesisUtterance(text);
 		utterance.lang = pumpLang.hindi ? 'hi-IN' : 'en-IN';
 		utterance.rate = 0.9;
@@ -251,26 +239,6 @@
 							<g clip-path="url(#guide-operator-clip)">{@render person(140, 86, 1.9)}</g>
 							{@render brackets(100, 34, 80, 78, 'zoom')}
 							<rect class="flash" x="20" y="10" width="240" height="140" rx="12" fill="#fff" />
-						{:else if step.scene === 'click'}
-							<rect x="62" y="6" width="156" height="148" rx="16" fill="#162625" />
-							<defs>
-								<clipPath id="guide-screen-clip">
-									<rect x="70" y="16" width="140" height="104" rx="6" />
-								</clipPath>
-							</defs>
-							<rect x="70" y="16" width="140" height="104" rx="6" fill="#e4f7f4" />
-							<g clip-path="url(#guide-screen-clip)">{@render person(140, 72, 1.5)}</g>
-							{@render brackets(108, 34, 64, 62, 'steady')}
-							<circle
-								class="shutter"
-								cx="140"
-								cy="137"
-								r="11"
-								fill="#fff"
-								stroke="#05ad98"
-								stroke-width="3"
-							/>
-							<rect class="flash" x="70" y="16" width="140" height="104" rx="6" fill="#fff" />
 						{:else if step.scene === 'group'}
 							<rect x="10" y="10" width="260" height="140" rx="12" fill="#e4f7f4" />
 							<defs>
@@ -287,46 +255,6 @@
 									</g>
 								{/each}
 							</g>
-						{:else if step.scene === 'send'}
-							<rect x="40" y="110" width="200" height="14" rx="7" fill="#e4f7f4" />
-							<rect class="bar" x="40" y="110" width="200" height="14" rx="7" fill="#05ad98" />
-							<g class="fly">
-								<rect
-									x="44"
-									y="34"
-									width="56"
-									height="48"
-									rx="6"
-									fill="#fff"
-									stroke="#bbbfbf"
-									stroke-width="2"
-								/>
-								{@render person(72, 56, 0.7)}
-							</g>
-							<g class="fly fly-2">
-								<rect
-									x="108"
-									y="34"
-									width="56"
-									height="48"
-									rx="6"
-									fill="#fff"
-									stroke="#bbbfbf"
-									stroke-width="2"
-								/>
-								{@render person(126, 56, 0.6, '#f08a4b')}
-								{@render person(146, 56, 0.6)}
-							</g>
-							<circle
-								class="ring"
-								cx="212"
-								cy="58"
-								r="20"
-								fill="none"
-								stroke="#05ad98"
-								stroke-width="3"
-							/>
-							{@render checkMark(212, 58, 'done')}
 						{:else if step.scene === 'names'}
 							<defs>
 								<clipPath id="guide-face-clip"><circle cx="66" cy="80" r="30" /></clipPath>
@@ -421,34 +349,23 @@
 							</g>
 						{/if}
 					</svg>
-					{#if step.button}
-						<div class="mock-row">
-							<span class="mock-target">
-								<span class="button button--primary mock-button">
-									{#if step.scene === 'send'}<Send
-											size={18}
-										/>{:else if step.scene === 'names'}<Check size={18} />{:else}<Camera
-											size={18}
-										/>{/if}
-									{t(step.button)}
-								</span>
-								<span class="tap-hand"><Pointer size={34} strokeWidth={1.8} /></span>
+					<div class="mock-row">
+						<span class="mock-target">
+							<span class="button button--primary mock-button">
+								{#if step.scene === 'names' || step.scene === 'end'}<Check
+										size={18}
+									/>{:else}<Camera size={18} />{/if}
+								{t(step.button)}
 							</span>
-						</div>
-					{:else if step.scene === 'end'}
-						<div class="mock-row">
-							<span class="mock-target">
-								<span class="help-chip"><CircleHelp size={18} /> {t('Help')}</span>
-								<span class="tap-hand"><Pointer size={34} strokeWidth={1.8} /></span>
-							</span>
-						</div>
-					{/if}
+							<span class="tap-hand"><Pointer size={34} strokeWidth={1.8} /></span>
+						</span>
+					</div>
 				</div>
 
 				<div class="guide-text">
 					<h2 id="guide-title" data-testid="guide-title">{t(step.title)}</h2>
 					<p id="guide-body">{body}</p>
-					{#if last}<p class="guide-help-note">{t(HELP_NOTE)}</p>{/if}
+					<p class="guide-help-note">{t(HELP_NOTE)}</p>
 				</div>
 			</div>
 		{/key}
@@ -690,19 +607,6 @@
 		animation: press 2.4s ease-in-out infinite;
 	}
 
-	.help-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		padding: var(--space-2) var(--space-3);
-		color: var(--ink-strong);
-		font-weight: 700;
-		background: var(--brand-white);
-		border: 1px solid var(--brand-mist);
-		border-radius: 999px;
-		animation: press 2.4s ease-in-out infinite;
-	}
-
 	.tap-hand {
 		position: absolute;
 		right: -1.25rem;
@@ -717,13 +621,8 @@
 	.sun,
 	.pop,
 	.zoom,
-	.shutter,
 	.seq,
 	.seq-check,
-	.bar,
-	.fly,
-	.done,
-	.ring,
 	.type-rect,
 	.hand-minute,
 	.hand-hour,
@@ -748,17 +647,9 @@
 		animation: zoom 2.4s ease-out infinite;
 	}
 
-	.steady {
-		animation: blink 1.2s ease-in-out infinite;
-	}
-
 	.flash {
 		opacity: 0;
 		animation: flash 2.4s ease-out infinite;
-	}
-
-	.shutter {
-		animation: shutter 2.4s ease-in-out infinite;
 	}
 
 	.seq {
@@ -769,28 +660,6 @@
 	.seq-check {
 		animation: seq-check 4s ease-out infinite;
 		animation-delay: calc(var(--i) * 0.5s);
-	}
-
-	.bar {
-		transform-origin: left center;
-		animation: bar 3.2s ease-in-out infinite;
-	}
-
-	.fly {
-		animation: fly 3.2s ease-in infinite;
-	}
-
-	.fly-2 {
-		animation-delay: 0.25s;
-	}
-
-	.done {
-		animation: done 3.2s ease-out infinite;
-	}
-
-	.ring {
-		opacity: 0;
-		animation: ring 3.2s ease-out infinite;
 	}
 
 	.type-rect {
@@ -929,18 +798,6 @@
 		}
 	}
 
-	@keyframes shutter {
-		0%,
-		44%,
-		60%,
-		100% {
-			transform: scale(1);
-		}
-		50% {
-			transform: scale(0.75);
-		}
-	}
-
 	@keyframes seq {
 		0% {
 			opacity: 0;
@@ -963,66 +820,6 @@
 		100% {
 			opacity: 1;
 			transform: scale(1);
-		}
-	}
-
-	@keyframes bar {
-		0% {
-			transform: scaleX(0);
-		}
-		60%,
-		100% {
-			transform: scaleX(1);
-		}
-	}
-
-	@keyframes fly {
-		0% {
-			transform: translate(0, 0);
-			opacity: 1;
-		}
-		55% {
-			transform: translate(90px, -10px) scale(0.3);
-			opacity: 0;
-		}
-		56%,
-		100% {
-			opacity: 0;
-		}
-	}
-
-	@keyframes done {
-		0%,
-		58% {
-			transform: scale(0);
-		}
-		68% {
-			transform: scale(1.3);
-		}
-		75%,
-		100% {
-			transform: scale(1);
-		}
-	}
-
-	@keyframes ring {
-		0%,
-		62% {
-			opacity: 0;
-			transform: scale(0.6);
-		}
-		70% {
-			opacity: 1;
-		}
-		100% {
-			opacity: 0;
-			transform: scale(1.6);
-		}
-	}
-
-	@keyframes blink {
-		50% {
-			opacity: 0.35;
 		}
 	}
 

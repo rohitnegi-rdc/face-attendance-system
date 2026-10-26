@@ -161,10 +161,10 @@ test('REM-01 a shift that already ended gets no reminder', async () => {
 	expect(await pushesTo(phone)).toBe(0);
 });
 
-// A pump phone still undecided when the pump screen opens (signed in earlier) is asked at once;
-// a browser that will not ask without a tap answers "default" without showing anything, and
-// then the first tap (closing the guide) asks. Signing in to another role never asks.
-test('REM-01 asked as the pump screen opens, again on the first tap, never for other roles', async ({
+// Chrome's recommended flow: nothing asks on its own. A pump phone that has not answered sees
+// the Enable notifications sheet before the guide; only its button opens Chrome's question; Not
+// now lets the guide through. Signing in (any role) never asks.
+test('REM-01 only the Enable notifications button asks, the sheet comes before the guide', async ({
 	page
 }) => {
 	await page.addInitScript(() => {
@@ -188,27 +188,33 @@ test('REM-01 asked as the pump screen opens, again on the first tap, never for o
 
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);
-	const response = await page.request.post('/api/auth/login', {
-		data: { email: pump.email, password: PASSWORD },
-		headers: { origin: BASE_URL }
-	});
-	expect(response.status()).toBe(200);
-	await page.goto('/pump');
-	await expect.poll(asked).toBe(1);
-	await expect(page.getByTestId('pump-reminders')).toHaveAttribute('data-state', 'ask');
-	await page.getByTestId('guide-close').click();
-	await expect.poll(asked).toBe(2);
-	// The card's button asks once per tap.
+	await page.goto('/login');
+	await page.getByTestId('login-email').fill(pump.email);
+	await page.getByTestId('login-password').fill(PASSWORD);
+	await page.getByTestId('login-submit').click();
+	await page.waitForURL(/\/pump$/);
+	const sheet = page.getByTestId('pump-reminders');
+	await expect(sheet).toHaveAttribute('data-state', 'ask');
+	await expect(page.getByTestId('pump-guide')).toHaveCount(0);
+	// A tap elsewhere asks nothing; only the button does, once per tap.
+	await page.mouse.click(10, 300);
+	expect(await asked()).toBe(0);
 	await page.getByTestId('reminders-allow').click();
-	await expect.poll(asked).toBe(3);
+	await expect.poll(asked).toBe(1);
+	// No answer: the button stays. Not now lets the guide through.
+	await expect(sheet).toHaveAttribute('data-state', 'ask');
+	await page.getByTestId('reminders-later').click();
+	await expect(sheet).toHaveCount(0);
+	await expect(page.getByTestId('pump-guide')).toBeVisible();
+	expect(await asked()).toBe(1);
 });
 
-// The whole chain in a phone-sized browser: a new pump phone is asked on the Sign in tap (before
-// the pump screen and its guide), allows, its subscription is saved, the worker sends the four reminders on time, each
+// The whole chain in a phone-sized browser: a new pump phone signs in, sees the Enable
+// notifications sheet before the guide, taps it, allows, its subscription is saved, the worker sends the four reminders on time, each
 // decrypts to the right words, and the app's service worker shows it as a notification. Chromium
 // under Playwright has no push service of its own, so the subscription points at the stub and
 // each message is handed to the service worker as a real push event (DevTools protocol).
-test('REM-02 end to end: asked at sign in, reminders sent and shown on the phone', async ({}, testInfo) => {
+test('REM-02 end to end: Enable notifications, reminders sent and shown on the phone', async ({}, testInfo) => {
 	const browser = await chromium.launch({ channel: 'chromium' });
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);
@@ -257,7 +263,8 @@ test('REM-02 end to end: asked at sign in, reminders sent and shown on the phone
 			on: sessionStorage.getItem('askedOn')
 		}));
 
-	// 1. The question comes on the Sign in tap, before the pump screen and its guide.
+	// 1. Sign in asks nothing; the pump screen shows Enable notifications before the guide, and
+	// its button opens the browser's question.
 	const page = await context.newPage();
 	await page.goto('/login');
 	await page.getByTestId('login-email').fill(pump.email);
@@ -265,18 +272,16 @@ test('REM-02 end to end: asked at sign in, reminders sent and shown on the phone
 	await page.screenshot({ path: testInfo.outputPath('1-sign-in.png') });
 	await page.getByTestId('login-submit').click();
 	await page.waitForURL(/\/pump$/);
-	expect(await asked()).toEqual({ times: 1, on: '/login' });
-	// Allowed at sign in: the pump screen saves this phone quietly, no card in the way.
-	await expect
-		.poll(async () =>
-			(
-				await db.query('SELECT pump_id FROM push_subscriptions WHERE endpoint = $1', [endpoint])
-			).rows.map((row) => row.pump_id)
-		)
-		.toEqual([pump.id]);
-	await expect(page.getByTestId('pump-reminders')).toHaveCount(0);
-	await page.screenshot({ path: testInfo.outputPath('2-pump-screen-after-sign-in.png') });
-	// Answered once, never asked again.
+	expect((await asked()).times).toBe(0);
+	await expect(page.getByTestId('pump-reminders')).toHaveAttribute('data-state', 'ask');
+	await expect(page.getByTestId('pump-guide')).toHaveCount(0);
+	await page.screenshot({ path: testInfo.outputPath('2-enable-notifications.png') });
+	await page.getByTestId('reminders-allow').click();
+	await expect.poll(asked).toEqual({ times: 1, on: '/pump' });
+	await expect(page.getByTestId('pump-reminders')).toHaveAttribute('data-state', 'on');
+	// Answered: the guide comes next, and nothing asks again.
+	await expect(page.getByTestId('pump-guide')).toBeVisible();
+	await page.screenshot({ path: testInfo.outputPath('3-guide-after-enable.png') });
 	await page.getByTestId('guide-close').click();
 	expect((await asked()).times).toBe(1);
 
@@ -311,6 +316,8 @@ test('REM-02 end to end: asked at sign in, reminders sent and shown on the phone
 				title: n.title,
 				body: n.body,
 				tag: n.tag,
+				icon: n.icon,
+				badge: (n as Notification & { badge?: string }).badge,
 				url: n.data?.url as string | undefined
 			}));
 		});
@@ -359,6 +366,9 @@ test('REM-02 end to end: asked at sign in, reminders sent and shown on the phone
 		expect(notification.body).toBe(content.body);
 		expect(notification.tag).toBe(`shift-end-${start}`);
 		expect(notification.url).toBe(new URL('pump', BASE_URL + '/').href);
+		// The RDC truck as the notification's picture and status bar badge.
+		expect(notification.icon).toBe(new URL('icons/icon-192.png', BASE_URL + '/').href);
+		expect(notification.badge).toBe(new URL('icons/badge-96.png', BASE_URL + '/').href);
 		seen.push({ title: notification.title, body: notification.body });
 	}
 
