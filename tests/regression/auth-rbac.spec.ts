@@ -67,7 +67,7 @@ test('AUTH-15 a fresh database gets the default admin, forced to change its pass
 	expect(await response.json()).toMatchObject({ role: 'admin', mustChangePassword: true });
 });
 
-test('AUTH-16 a fresh database gets the pumps from the CSV migration, forced to change password', async () => {
+test('AUTH-16 a fresh database gets the pumps from the CSV migration, never asked to change password', async () => {
 	const { rows } = await db.query(
 		`SELECT count(*)::int AS imports FROM csv_imports WHERE filename = '027_pump_vendors.csv (migration)'`
 	);
@@ -77,7 +77,7 @@ test('AUTH-16 a fresh database gets the pumps from the CSV migration, forced to 
 		data: { email: 'aslpwwi2@pumps.rdc', password: 'Test1234!' }
 	});
 	expect(response.status()).toBe(200);
-	expect(await response.json()).toMatchObject({ role: 'pump', mustChangePassword: true });
+	expect(await response.json()).toMatchObject({ role: 'pump', mustChangePassword: false });
 });
 
 test('AUTH-17 a fresh database gets Google-only plant managers and the Mumbai location check', async () => {
@@ -126,16 +126,21 @@ test('AUTH-04/05 a disabled pump cannot log in, and an existing token cannot sub
 	expect(rows).toHaveLength(0);
 });
 
-test('AUTH-06/07 first login is forced through a password change', async () => {
+test('AUTH-06/07 first login is forced through a password change, never for a pump', async () => {
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);
 	await db.query('UPDATE pumps SET must_change_password = TRUE WHERE id = $1', [pump.id]);
-	const context = await login(pump.email);
+	const pumpContext = await login(pump.email);
+	expect((await pumpContext.get('/pump', { maxRedirects: 0 })).status()).toBe(200);
+	expect((await pumpContext.get('/api/attendance/today')).status()).toBe(200);
 
-	const page = await context.get('/pump', { maxRedirects: 0 });
+	const vendor = await createVendor();
+	await db.query('UPDATE vendors SET must_change_password = TRUE WHERE id = $1', [vendor.id]);
+	const context = await login(vendor.email);
+	const page = await context.get('/vendor', { maxRedirects: 0 });
 	expect(page.status()).toBe(302);
 	expect(page.headers().location).toContain('/change-password');
-	expect((await context.get('/api/attendance/today')).status()).toBe(403);
+	expect((await context.get('/api/vendor/pumps')).status()).toBe(403);
 
 	const short = await context.post('/api/auth/password', {
 		data: { password: 'Seven-7', confirmation: 'Seven-7' }
@@ -150,8 +155,8 @@ test('AUTH-06/07 first login is forced through a password change', async () => {
 		data: { password: 'Eight-08', confirmation: 'Eight-08' }
 	});
 	expect(changed.status()).toBe(200);
-	expect((await context.get('/api/attendance/today')).status()).toBe(200);
-	await login(pump.email, 'Eight-08');
+	expect((await context.get('/vendor', { maxRedirects: 0 })).status()).toBe(200);
+	await login(vendor.email, 'Eight-08');
 });
 
 test('AUTH-09 a tampered session cookie counts as logged out', async () => {
@@ -265,9 +270,8 @@ test('RBAC-09 a vendor cannot run admin actions', async () => {
 test('AUTH-18 the eye shows and hides the password on sign-in and first sign-in', async ({
 	browser
 }) => {
-	const { plantId } = await createArea();
-	const pump = await createPump(plantId);
-	await db.query('UPDATE pumps SET must_change_password = TRUE WHERE id = $1', [pump.id]);
+	const vendor = await createVendor();
+	await db.query('UPDATE vendors SET must_change_password = TRUE WHERE id = $1', [vendor.id]);
 	const context = await browser.newContext({ baseURL: BASE_URL });
 	const page = await context.newPage();
 
@@ -281,7 +285,7 @@ test('AUTH-18 the eye shows and hides the password on sign-in and first sign-in'
 	await page.getByRole('button', { name: 'Hide password' }).click();
 	await expect(password).toHaveAttribute('type', 'password');
 
-	await page.getByTestId('login-email').fill(pump.email);
+	await page.getByTestId('login-email').fill(vendor.email);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	await page.waitForURL('**/change-password');
 	const fresh = page.getByTestId('new-password');

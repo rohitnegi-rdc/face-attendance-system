@@ -188,7 +188,8 @@ test('PWD-05 a plant manager resets a pump of their own plant, not of another', 
 	expect((await signIn(pump.email, PASSWORD)).status).toBe(401);
 	const signedIn = await signIn(pump.email, DEFAULT_PASSWORD);
 	expect(signedIn.status).toBe(200);
-	expect(signedIn.body.mustChangePassword).toBe(true);
+	// A pump keeps the default password; it is never asked to change it.
+	expect(signedIn.body.mustChangePassword).toBe(false);
 	expect(
 		await count(
 			`SELECT 1 FROM password_reset_log WHERE account_id = $1 AND by_role = 'plant-manager'`,
@@ -220,7 +221,7 @@ test('PWD-09 the admin resets a vendor and a pump to the default password', asyn
 		expect((await signIn(account.email, PASSWORD)).status).toBe(401);
 		const signedIn = await signIn(account.email, DEFAULT_PASSWORD);
 		expect(signedIn.status).toBe(200);
-		expect(signedIn.body.mustChangePassword).toBe(true);
+		expect(signedIn.body.mustChangePassword).toBe(account === vendor);
 	}
 });
 

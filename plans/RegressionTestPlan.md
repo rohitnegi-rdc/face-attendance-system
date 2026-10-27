@@ -62,7 +62,7 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 | AUTH-03 | Email case-insensitive (`ADMIN@x` logs in as `admin@x`) | 200 | 1 | P1 | Covered (auth-rbac.spec) |
 | AUTH-04 | Disabled pump login | 403 "Account disabled" | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-05 | Disabled pump with a token that is still valid submits a photo | 403, no session row created | 1 | P0 | Covered (auth-rbac.spec) |
-| AUTH-06 | First login with `must_change_password` | Every page redirects to `/change-password`. Every API returns 403 except password and logout | 1 | P0 | Covered (auth-rbac.spec) |
+| AUTH-06 | First login with `must_change_password` | Every page redirects to `/change-password`. Every API returns 403 except password and logout. A pump is never asked, even with the flag set (changed 2026-10-27) | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-07 | Change password: 7 characters, mismatch, valid at 8 (minimum 8 since 2026-10-26) | 400, 400, 200 + new 7-day cookie, flag cleared | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-08 | Temporary token expires after 15 min | Redirected to login | 1 | P2 | Missing |
 | AUTH-09 | Tampered or expired JWT | Treated as logged out | 1 | P0 | Covered (auth-rbac.spec) |
@@ -72,7 +72,7 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 | AUTH-13 | Brute force: 20 wrong passwords for one email in 1 min | Throttled (429) | 1 | P1 | Won't do (decided 2026-10-08, no rate limit for v1) |
 | AUTH-14 | Admin resets a vendor or pump password | Old password fails; new one forces a password change | 1 | P1 | Missing |
 | AUTH-15 | Fresh database (migration 026) | `admin@attendance.rdc` / `Admin1234!` exists, logs in with `mustChangePassword: true`. A database that already has an admin gets none | 1 | P0 | Covered (auth-rbac.spec) |
-| AUTH-16 | Fresh database (migration 027) | Pumps, plants, areas and vendors from `027_pump_vendors.csv` exist; `aslpwwi2@pumps.rdc` / `Test1234!` logs in as a pump with `mustChangePassword: true`. A database that already has pumps gets no import | 1 | P0 | Covered (auth-rbac.spec) |
+| AUTH-16 | Fresh database (migration 027) | Pumps, plants, areas and vendors from `027_pump_vendors.csv` exist; `aslpwwi2@pumps.rdc` / `Test1234!` logs in as a pump with `mustChangePassword: false` (pumps are never asked since 2026-10-27). A database that already has pumps gets no import | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-17 | Fresh database (migrations 028, 029) | Plant managers from `028_plant_managers.csv` are assigned to their plants (e.g. MUM-Deonar) as Google-only accounts: no password, no forced change, password login refused. The Mumbai area has the location check on, so a held shift start emails its plant manager | 1 | P0 | Covered (auth-rbac.spec) |
 | AUTH-18 | Eye button on sign-in and first sign-in (`/change-password`) | Shows the typed password, hides it again; on first sign-in it shows both boxes | 1 | P1 | Covered (auth-rbac.spec, browser) |
 

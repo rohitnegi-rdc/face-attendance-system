@@ -19,7 +19,10 @@ export interface AuthToken {
 	mustChangePassword?: boolean;
 }
 
-export function signToken(payload: AuthToken, expiresIn: jwt.SignOptions['expiresIn'] = '7d'): string {
+export function signToken(
+	payload: AuthToken,
+	expiresIn: jwt.SignOptions['expiresIn'] = '7d'
+): string {
 	return jwt.sign(payload, getJwtSecret(), { expiresIn });
 }
 
@@ -70,8 +73,10 @@ export async function findAccountByEmail(email: string): Promise<{
 	);
 	if (plantManager) return { role: 'plant-manager', ...plantManager };
 
+	// Pumps are never asked to update their password (removed 2026-10-27): operators keep the
+	// password they were given, including the default after a reset.
 	const pump = await queryOne<any>(
-		'SELECT id, login_email AS email, password_hash, status, must_change_password FROM pumps WHERE lower(login_email) = lower($1)',
+		'SELECT id, login_email AS email, password_hash, status, FALSE AS must_change_password FROM pumps WHERE lower(login_email) = lower($1)',
 		[email]
 	);
 	if (pump) return { role: 'pump', ...pump };
