@@ -46,22 +46,10 @@ async function inPhoto(client: PoolClient, sessionId: string, personId: string) 
 	return rowCount === 1;
 }
 
-async function nameTaken(client: PoolClient, pumpId: string, name: string) {
-	const { rowCount } = await client.query(
-		`SELECT 1 FROM persons WHERE pump_id = $1 AND lower(name) = lower($2)
-		   AND status IN ('active', 'pending_review')`,
-		[pumpId, name]
-	);
-	return rowCount === 1;
-}
-
 // A worker the admin creates is active at once: the admin has looked at the face or the photo.
 async function createWorker(client: PoolClient, pumpId: string, rawName: unknown) {
 	const name = rawName == null || rawName === '' ? null : cleanPersonName(rawName);
 	if (rawName && !name) throw new FaceFixError('Enter a name of 2 to 60 letters.');
-	if (name && (await nameTaken(client, pumpId, name))) {
-		throw new FaceFixError(`Another worker at this pump is already named ${name}.`);
-	}
 	const { rows } = await client.query<{ id: string }>(
 		`INSERT INTO persons (pump_id, status, display_seq, name, named_by, named_at)
 		 VALUES ($1, 'active', (SELECT COALESCE(MAX(display_seq), 0) + 1 FROM persons WHERE pump_id = $1),
@@ -244,13 +232,9 @@ export async function undoMerge(client: PoolClient, mergeLogId: string, adminId:
 	const kept = log.kept_person_id as string;
 	const merged = log.merged_person_id as string;
 
-	// A name another worker took since the merge is cleared; the admin can rename them.
-	const keepName = Boolean(log.name) && !(await nameTaken(client, log.pump_id, log.name));
 	await client.query(
-		`UPDATE persons SET status = 'active', merged_into_person_id = NULL,
-		        name = CASE WHEN $2 THEN name ELSE NULL END
-		 WHERE id = $1`,
-		[merged, keepName]
+		`UPDATE persons SET status = 'active', merged_into_person_id = NULL WHERE id = $1`,
+		[merged]
 	);
 
 	const { rows: sessions } = await client.query<Session>(

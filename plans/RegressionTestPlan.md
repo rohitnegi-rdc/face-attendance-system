@@ -364,7 +364,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | ID | Scenario | Expected | Tier | Pri | Status |
 |---|---|---|---|---|---|
 | NAME-01 | Pump completes a photo with unnamed workers (migration 033) | 422 with the unnamed ids until every worker has a usable name (2 to 60 letters, Hindi allowed, spaces tidied); then 200, `named_by = pump`; the next photo of the same workers shows the names and needs none | 1 | P0 | Covered |
-| NAME-02 | Same name twice at one pump | 409 naming the clash (case-insensitive); the same name at another pump is fine | 1 | P1 | Covered |
+| NAME-02 | Same name twice at one pump (changed 2026-10-28) | Accepted: a second worker, or two new faces in one photo, may take a name already used at the pump (any case); each keeps its own worker number (#N, shown beside the name), and an admin rename to a used name succeeds. Migration 041 dropped the unique-name index | 1 | P1 | Covered (names-corrections.spec) |
 | NAME-03 | Vendor or admin corrects a name | Vendor renames its own worker, another vendor gets 404; admin rename sets `named_by = admin` and writes `rename_person` with from/to to `admin_audit_log` | 1 | P1 | Covered |
 | RPT-06 | Vendor downloads the attendance report | `/vendor/attendance/export` holds only the vendor's pumps with the Name column; headcount works; plant manager and pump get 403 | 1 | P1 | Covered |
 | CORR-01 | Pump missed the shift start, so the day shows "Start only" | Plant manager opens Fix attendance from the session log, marks start and end present with a reason (required); day becomes full; correction stored with `corrected_by_manager_id`; another plant's manager gets 404 | 1 | P0 | Covered |

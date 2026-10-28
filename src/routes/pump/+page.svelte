@@ -558,16 +558,9 @@
 			});
 			if (res.status === 409 || res.status === 422) {
 				const body = await res.json().catch(() => ({}));
-				nameError = body.duplicate
-					? t(
-							'"{name}" is already the name of another worker at this pump. Add the father\'s name or village.',
-							{
-								name: body.duplicate
-							}
-						)
-					: body.unnamed
-						? t('Write a name for every worker before completing.')
-						: t(body.error || 'Could not complete this attendance review.');
+				nameError = body.unnamed
+					? t('Write a name for every worker before completing.')
+					: t(body.error || 'Could not complete this attendance review.');
 				approvingReview = false;
 				return;
 			}

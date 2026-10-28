@@ -107,10 +107,9 @@ test('NAME-01 the operator cannot complete a photo until every worker has a name
 	expect((await context.post(`/api/attendance/approve/${end}`)).status()).toBe(200);
 });
 
-test('NAME-02 a name is used once per pump; another pump may use it', async () => {
+test('NAME-02 two workers at one pump may share a name; the number tells them apart', async () => {
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId);
-	const other = await createPump(plantId);
 	const context = await login(pump.email);
 	const first = await submitAndWait(context, ['NAME02A']);
 	const [a] = await personIds(first);
@@ -119,31 +118,27 @@ test('NAME-02 a name is used once per pump; another pump may use it', async () =
 	});
 	expect(named.status()).toBe(200);
 
-	// A new face at the same pump given the same name (any case): refused, naming the clash.
+	// A new face at the same pump given the same name (any case) is accepted, and so are two new
+	// faces in one photo with one name; each stays its own worker with its own number.
 	await shiftBack(first, 600);
-	const second = await submitAndWait(context, ['NAME02A', 'NAME02B']);
-	const [b] = (await personIds(second)).filter((id) => id !== a);
-	const clash = await context.post(`/api/attendance/approve/${second}`, {
-		data: { names: { [b]: 'mohan lal' } }
+	const second = await submitAndWait(context, ['NAME02A', 'NAME02B', 'NAME02C']);
+	const [b, c] = (await personIds(second)).filter((id) => id !== a);
+	const same = await context.post(`/api/attendance/approve/${second}`, {
+		data: { names: { [b]: 'mohan lal', [c]: 'Mohan Lal' } }
 	});
-	expect(clash.status()).toBe(409);
-	expect((await clash.json()).duplicate).toBe('Mohan Lal');
-	expect(
-		(
-			await context.post(`/api/attendance/approve/${second}`, {
-				data: { names: { [b]: 'Mohan Lal Sharma' } }
-			})
-		).status()
-	).toBe(200);
+	expect(same.status(), await same.text()).toBe(200);
+	const { rows } = await db.query(
+		`SELECT display_seq FROM persons WHERE pump_id = $1 AND lower(name) = 'mohan lal'`,
+		[pump.id]
+	);
+	expect(rows).toHaveLength(3);
+	expect(new Set(rows.map((row) => row.display_seq)).size).toBe(3);
 
-	// The same name at another pump is fine.
-	const otherContext = await login(other.email);
-	const elsewhere = await submitAndWait(otherContext, ['NAME02C']);
-	const [c] = await personIds(elsewhere);
-	const ok = await otherContext.post(`/api/attendance/approve/${elsewhere}`, {
-		data: { names: { [c]: 'Mohan Lal' } }
+	// An admin rename to a name another worker has is accepted too.
+	const admin = await login((await createAdmin()).email);
+	expect(await action(admin, `/admin/persons/${b}?/rename`, { name: 'Mohan Lal' })).toMatchObject({
+		type: 'success'
 	});
-	expect(ok.status()).toBe(200);
 });
 
 test('NAME-03 the vendor and the admin correct a name; others cannot', async () => {

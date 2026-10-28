@@ -270,8 +270,6 @@ const HI: Record<string, string> = {
 	'Write a name for every worker before completing.': 'पूरा करने से पहले हर वर्कर का नाम लिखें।',
 	'"{name}" is written twice. Each worker needs a different name.':
 		'"{name}" दो बार लिखा है। हर वर्कर का नाम अलग होना चाहिए।',
-	'"{name}" is already the name of another worker at this pump. Add the father\'s name or village.':
-		'"{name}" इस पंप पर किसी और वर्कर का नाम है। पिता का नाम या गाँव जोड़ें।',
 	'{n} names still to write above.': 'ऊपर {n} नाम लिखने बाकी हैं।',
 
 	// Shift end reminders (PumpReminders.svelte)

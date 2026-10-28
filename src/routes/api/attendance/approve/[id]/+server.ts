@@ -57,24 +57,6 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 				{ status: 422 }
 			);
 		}
-		const lower = names.map((person) => person.name!.toLowerCase());
-		const taken = await client.query<{ name: string }>(
-			`SELECT name FROM persons
-			 WHERE pump_id = $1 AND lower(name) = ANY($2::text[]) AND status IN ('active', 'pending_review')`,
-			[session.pump_id, lower]
-		);
-		const repeated = lower.find((name, i) => lower.indexOf(name) !== i);
-		if (taken.rowCount || repeated) {
-			await client.query('ROLLBACK');
-			const name = taken.rows[0]?.name ?? names[lower.indexOf(repeated!)].name;
-			return json(
-				{
-					error: `"${name}" is already the name of another worker at this pump. Add something to tell them apart, for example the father's name or village.`,
-					duplicate: name
-				},
-				{ status: 409 }
-			);
-		}
 		for (const person of names) {
 			await client.query(
 				`UPDATE persons SET name = $2, named_by = 'pump', named_at = now() WHERE id = $1`,
@@ -82,7 +64,9 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 			);
 		}
 
-		await client.query(`UPDATE attendance_sessions SET status = 'completed' WHERE id = $1`, [session.id]);
+		await client.query(`UPDATE attendance_sessions SET status = 'completed' WHERE id = $1`, [
+			session.id
+		]);
 		await client.query(
 			`UPDATE persons
 			 SET status = 'active', last_seen_at = now()
@@ -114,11 +98,12 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 				// shift a 1 January shift into the previous year.
 				const year: number = session.session_year;
 				for (const row of attendance) {
-					const column: RollupColumn = row.morning_matched && row.evening_matched
-						? 'days_present'
-						: row.morning_matched
-							? 'days_morning_only'
-							: 'days_evening_only';
+					const column: RollupColumn =
+						row.morning_matched && row.evening_matched
+							? 'days_present'
+							: row.morning_matched
+								? 'days_morning_only'
+								: 'days_evening_only';
 					await client.query(
 						`INSERT INTO person_attendance_yearly (person_id, year, ${column})
 						 VALUES ($1, $2, 1)
@@ -139,13 +124,6 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 	} catch (err: any) {
 		await client.query('ROLLBACK').catch(() => {});
 		if (err?.status) throw err;
-		// The same name saved by a parallel request between the check and the update.
-		if (err?.code === '23505') {
-			return json(
-				{ error: 'That name is already the name of another worker at this pump.' },
-				{ status: 409 }
-			);
-		}
 		logger.error(
 			{ pumpId: locals.user?.id, sessionId: params.id, error: String(err?.message || err) },
 			'attendance review approval failed'

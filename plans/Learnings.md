@@ -154,3 +154,9 @@ Test mode (fraud check off) worked only while the server env `TEST_MODE=true`, s
 - The earlier guess was "ask as early as possible": on the Sign in tap, then on page open, then on the first tap anywhere. Chrome treats a question the person did not clearly ask for as unwanted: it may show only the quiet bell, and repeated dismissals pause asking for a week, so asking early cost more answers than it won.
 - Fix (user's flow): sign in, an Enable notifications sheet with one line of why, the button opens Chrome's question, the subscription is saved only once allowed. The guide waits behind the sheet.
 - Rule: a permission question follows a tap on a button that names it, after a short reason; never piggyback on an unrelated tap.
+
+## 2026-10-28: worker names are not unique per pump
+
+- Migration 033 made names unique per pump, guessing that a repeated name is one person split in two by the matcher. Real crews have two Rajus, so the operator was refused and told to add a father's name or village. That is an operator decision, which the app avoids.
+- Why the guess was wrong: it used the name as an identity signal. The face is the identity; the name is only a label. Splits are found by face similarity in the admin merge review, not by names.
+- Now (migration 041): same names are allowed. Every label keeps the worker number beside the name (`personShortLabel`: "Raju (#3)"), and the face shows next to it, so same-named workers stay apart.

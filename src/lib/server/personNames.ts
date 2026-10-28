@@ -9,7 +9,10 @@ export async function renamePerson(actor: Actor, personId: string, rawName: unkn
 	if (!/^[0-9a-f-]{36}$/i.test(personId)) return { status: 404, error: 'Worker not found' };
 	const name = cleanPersonName(rawName);
 	if (!name) {
-		return { status: 400, error: "Write a name of 2 to 60 letters (digits, space, . ' - allowed)." };
+		return {
+			status: 400,
+			error: "Write a name of 2 to 60 letters (digits, space, . ' - allowed)."
+		};
 	}
 	const client = await pool.connect();
 	try {
@@ -26,18 +29,6 @@ export async function renamePerson(actor: Actor, personId: string, rawName: unkn
 			await client.query('ROLLBACK');
 			return { status: 404, error: 'Worker not found' };
 		}
-		const taken = await client.query(
-			`SELECT 1 FROM persons WHERE pump_id = $1 AND id <> $2 AND lower(name) = lower($3)
-			 AND status IN ('active', 'pending_review')`,
-			[person.pump_id, personId, name]
-		);
-		if (taken.rowCount) {
-			await client.query('ROLLBACK');
-			return {
-				status: 409,
-				error: `"${name}" is already the name of another worker at this pump. If it is the same person, ask the admin to merge them.`
-			};
-		}
 		await client.query(
 			`UPDATE persons SET name = $2, named_by = $3, named_at = now() WHERE id = $1`,
 			[personId, name, actor.role]
@@ -53,9 +44,6 @@ export async function renamePerson(actor: Actor, personId: string, rawName: unkn
 		return { status: 200, name };
 	} catch (err: any) {
 		await client.query('ROLLBACK').catch(() => {});
-		if (err?.code === '23505') {
-			return { status: 409, error: 'That name is already the name of another worker at this pump.' };
-		}
 		throw err;
 	} finally {
 		client.release();
