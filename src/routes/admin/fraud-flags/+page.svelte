@@ -3,6 +3,8 @@
 	import Check from '@lucide/svelte/icons/check';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import UserCheck from '@lucide/svelte/icons/user-check';
+	import Save from '@lucide/svelte/icons/save';
+	import { enhance } from '$app/forms';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import WorkerPicker from '$lib/components/WorkerPicker.svelte';
@@ -14,6 +16,13 @@
 	// Review queues open on the first few cards; the rest are one tap away.
 	const PAGE = 6;
 	let shown = $state(PAGE);
+	// The flag just decided or renamed stays first: a decided flag otherwise sorts after the open
+	// ones, out of view, with the name box the admin needs next.
+	const flags = $derived.by(() => {
+		const keep = form?.decidedFlagId ?? form?.flagId;
+		const first = keep && data.flags.find((flag: any) => flag.id === keep);
+		return first ? [first, ...data.flags.filter((flag: any) => flag.id !== keep)] : data.flags;
+	});
 </script>
 
 <svelte:head><title>Fraud review | Face Attendance</title></svelte:head>
@@ -30,13 +39,13 @@
 		>
 	</header>
 
-	{#if form?.message}
+	{#if form?.message && !form?.flagId}
 		<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
 	{/if}
 
 	{#if data.flags.length}
 		<div class="review-list" data-testid="fraud-flags-table">
-			{#each data.flags.slice(0, shown) as flag (flag.id)}
+			{#each flags.slice(0, shown) as flag (flag.id)}
 				<article class="review-item">
 					<div class="review-item__header">
 						<div>
@@ -172,17 +181,58 @@
 								? ` by ${flag.resolved_by_email}`
 								: ''}{flag.resolved_at ? ` on ${formatDate(flag.resolved_at)}` : ''}
 						</p>
+						{#if flag.resolution === 'not_fraud' && flag.can_rename}
+							{@const saved = form?.flagId === flag.id ? form : null}
+							<form
+								method="POST"
+								action="?/rename"
+								class="rename"
+								class:rename--empty={!flag.resolved_name}
+								data-testid="fraud-rename"
+								use:enhance={() =>
+									async ({ update }) =>
+										update({ reset: false })}
+							>
+								<input type="hidden" name="flag_id" value={flag.id} />
+								<input type="hidden" name="person_id" value={flag.resolved_person_id} />
+								<label for="rename-{flag.id}">
+									{flag.resolved_name
+										? `Name of this worker at ${flag.flagged_at_pump}`
+										: `Give this worker at ${flag.flagged_at_pump} a name`}
+								</label>
+								<div class="rename__row">
+									<input
+										id="rename-{flag.id}"
+										name="name"
+										value={flag.resolved_name ?? ''}
+										placeholder="Worker #{flag.resolved_seq}"
+										autocomplete="off"
+										minlength="2"
+										maxlength="60"
+										required
+									/>
+									<button class="button button--primary" type="submit"
+										><Save size={17} /> Save name</button
+									>
+								</div>
+								{#if saved}
+									<p class="rename__note" class:rename__note--error={!saved.success} role="status">
+										{saved.message}
+									</p>
+								{/if}
+							</form>
+						{/if}
 					{/if}
 				</article>
 			{/each}
 		</div>
-		{#if data.flags.length > shown}
+		{#if flags.length > shown}
 			<button
 				type="button"
 				class="button button--secondary show-more"
 				onclick={() => (shown += PAGE)}
 			>
-				Show {Math.min(PAGE, data.flags.length - shown)} more ({data.flags.length - shown} flags left)
+				Show {Math.min(PAGE, flags.length - shown)} more ({flags.length - shown} flags left)
 			</button>
 		{/if}
 	{:else}
@@ -313,6 +363,50 @@
 		margin: var(--space-4) 0 0;
 		color: var(--ink-muted);
 		font-size: var(--text-sm);
+	}
+	.rename {
+		display: grid;
+		gap: var(--space-2);
+		margin-top: var(--space-3);
+		padding: var(--space-3);
+		background: var(--surface-raised);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+	}
+	.rename--empty {
+		border-left: 4px solid #b45309;
+	}
+	.rename label {
+		font-size: var(--text-sm);
+		font-weight: 700;
+	}
+	.rename__row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+	.rename__row input {
+		flex: 1 1 12rem;
+		min-width: 0;
+		min-height: 2.75rem;
+		padding: 0 var(--space-3);
+		font: inherit;
+		border: 1px solid var(--brand-steel);
+		border-radius: var(--radius-md);
+	}
+	.rename__note {
+		margin: 0;
+		color: #047857;
+		font-size: var(--text-sm);
+		font-weight: 700;
+	}
+	.rename__note--error {
+		color: var(--alert);
+	}
+	@media (max-width: 48rem) {
+		.rename__row .button {
+			width: 100%;
+		}
 	}
 	.review-actions p {
 		margin: 0;

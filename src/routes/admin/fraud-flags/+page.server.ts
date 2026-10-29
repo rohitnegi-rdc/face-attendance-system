@@ -4,6 +4,7 @@ import { pool, query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
 import { ResolutionError, confirmFraud, markNotFraud } from '$lib/server/fraudResolution';
 import { pumpWorkers } from '$lib/server/pumpWorkers';
+import { renamePerson } from '$lib/server/personNames';
 
 export const load: PageServerLoad = async () => {
 	const flags = await query<any>(
@@ -19,7 +20,9 @@ export const load: PageServerLoad = async () => {
 		        (s.photo_url IS NOT NULL) AS flagged_photo_available,
 		        (matched_session.photo_url IS NOT NULL) AS matched_photo_available,
 		        pfv.source_photo_crop_url, (ff.face_embedding IS NOT NULL) AS can_restore,
-		        resolver.email AS resolved_by_email, s.pump_id AS flagged_pump_id
+		        resolver.email AS resolved_by_email, s.pump_id AS flagged_pump_id,
+		        ff.resolved_person_id, rp.name AS resolved_name, rp.display_seq AS resolved_seq,
+		        (rp.status IN ('active', 'pending_review')) AS can_rename
 		 FROM fraud_flags ff
 		 JOIN persons p ON p.id = ff.person_id
 		 JOIN attendance_sessions s ON s.id = ff.session_id
@@ -37,6 +40,7 @@ export const load: PageServerLoad = async () => {
 		   WHERE person_id = p.id ORDER BY created_at DESC LIMIT 1
 		 ) pfv ON true
 		 LEFT JOIN admins resolver ON resolver.id = ff.resolved_by_admin_id
+		 LEFT JOIN persons rp ON rp.id = ff.resolved_person_id
 		 ORDER BY ff.reviewed ASC, ff.created_at DESC LIMIT 200`
 	);
 	// Open flags raised before faces were stored on flags: the admin picks the worker instead.
@@ -90,10 +94,12 @@ async function resolveFlag(
 		logger.warn({ adminId, flagId, decision, ...outcome }, 'fraud flag resolved');
 		return {
 			success: true,
+			// Kept at the top of the list, so its name box is in view (rename below).
+			decidedFlagId: flagId,
 			message:
 				decision === 'not_fraud'
 					? outcome?.createdPerson
-						? 'Marked not fraud. A new worker was added at the flagged pump and marked present.'
+						? 'Marked not fraud. A new worker was added at the flagged pump and marked present. Give them a name on the card.'
 						: 'Marked not fraud. The worker is marked present at the flagged pump.'
 					: 'Confirmed as fraud. The worker stays absent at the flagged pump.'
 		};
@@ -112,5 +118,18 @@ async function resolveFlag(
 export const actions: Actions = {
 	// Kept as "review" so existing links/tests keep working; it now records "confirmed fraud".
 	review: async ({ request, locals }) => resolveFlag(request, locals.user!.id, 'confirmed_fraud'),
-	notFraud: async ({ request, locals }) => resolveFlag(request, locals.user!.id, 'not_fraud')
+	notFraud: async ({ request, locals }) => resolveFlag(request, locals.user!.id, 'not_fraud'),
+	// After Not fraud: name (or correct the name of) the worker marked present at the flagged
+	// pump, right on the card. A new worker made by Not fraud has no name yet.
+	rename: async ({ request, locals }) => {
+		const form = await request.formData();
+		const flagId = String(form.get('flag_id') || '');
+		const result = await renamePerson(
+			{ role: 'admin', id: locals.user!.id },
+			String(form.get('person_id') || ''),
+			form.get('name')
+		);
+		if (result.error) return fail(result.status, { success: false, flagId, message: result.error });
+		return { success: true, flagId, message: `Name saved: ${result.name}` };
+	}
 };
