@@ -177,6 +177,7 @@
 				shifts={data.shifts}
 				page={data.sessionPagination.page}
 				pageSize={data.sessionPagination.pageSize}
+				allowRename
 				fixHref={(shift, day) =>
 					resolve(`/plant-manager/attendance/correct?pump=${shift.pump_id}&day=${day}`)}
 				fraudCaseHref={(id) => resolve('/plant-manager/approvals/fraud/[id]', { id })}

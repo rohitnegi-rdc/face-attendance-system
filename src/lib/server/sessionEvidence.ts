@@ -36,14 +36,17 @@ export async function attachSessionEvidence<T extends SessionRow>(sessions: T[])
 	const [faces, fraudRows] = sessionIds.length
 		? await Promise.all([
 				query<any>(
-					`SELECT afe.id, afe.session_id, afe.person_id, (afe.face_crop_url IS NOT NULL) AS has_crop,
+					// A merged worker's faces show as the worker they were merged into (samePeople.ts).
+					`SELECT afe.id, afe.session_id, p.id AS person_id, (afe.face_crop_url IS NOT NULL) AS has_crop,
 					        p.display_seq, p.is_operator, p.name,
 					        EXISTS (
 					          SELECT 1 FROM attendance_review_flags arf
 					          WHERE arf.session_id = afe.session_id
 					            AND arf.person_id = afe.person_id AND arf.status = 'open'
 					        ) AS flagged
-					 FROM attendance_face_evidence afe JOIN persons p ON p.id = afe.person_id
+					 FROM attendance_face_evidence afe JOIN persons seen ON seen.id = afe.person_id
+					 JOIN persons p ON p.id = CASE WHEN seen.status = 'merged'
+					   THEN COALESCE(seen.merged_into_person_id, seen.id) ELSE seen.id END
 					 WHERE afe.session_id = ANY($1)
 					 ORDER BY p.is_operator DESC, p.display_seq`,
 					[sessionIds]
@@ -72,6 +75,7 @@ export async function attachSessionEvidence<T extends SessionRow>(sessions: T[])
 		people.push({
 			personId: face.person_id,
 			label: personShortLabel(face.display_seq, face.is_operator, face.name),
+			name: face.name as string | null,
 			// Loaded only when the face is opened; fraud crops below stay inline.
 			cropUrl: face.has_crop ? resolve('/api/attendance/face/[id]', { id: face.id }) : null,
 			flagged: face.flagged

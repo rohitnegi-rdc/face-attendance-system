@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { invalidateAll } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Flag from '@lucide/svelte/icons/flag';
 	import ScanFace from '@lucide/svelte/icons/scan-face';
@@ -10,6 +12,7 @@
 	type PersonEvidence = {
 		personId: string;
 		label: string;
+		name?: string | null;
 		cropUrl: string | null;
 		flagged?: boolean;
 	};
@@ -45,6 +48,7 @@
 		url: string;
 		flagged: boolean;
 		fraud?: FraudEvidence;
+		name?: string | null;
 	};
 
 	// Fraud faces show as image tiles; every other worker as a name chip whose face loads when
@@ -55,11 +59,14 @@
 		session,
 		showUnavailable = true,
 		allowFlag = true,
+		allowRename = false,
 		fraudCaseHref
 	}: {
 		session: SessionEvidence;
 		showUnavailable?: boolean;
 		allowFlag?: boolean;
+		// A name box under a worker's face (POST /api/persons/[id]/name).
+		allowRename?: boolean;
 		// The read-only side-by-side page for a fraud case, where the role has one.
 		fraudCaseHref?: (flagId: string) => string;
 	} = $props();
@@ -71,12 +78,42 @@
 
 	function openEvidence(evidence: SelectedEvidence) {
 		selected = evidence;
+		renameStatus = null;
 		dialog.showModal();
 	}
 
 	function close() {
 		dialog.close();
 		selected = null;
+	}
+
+	// Rename from the popup: saved, then the page reloads its data so every label shows the name.
+	let renameStatus = $state<{ ok: boolean; text: string } | null>(null);
+	let renaming = $state(false);
+	async function rename(event: SubmitEvent) {
+		event.preventDefault();
+		if (!selected?.personId) return;
+		const name = String(new FormData(event.currentTarget as HTMLFormElement).get('name') ?? '');
+		renaming = true;
+		try {
+			const response = await fetch(resolve('/api/persons/[id]/name', { id: selected.personId }), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ name })
+			});
+			const body = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				renameStatus = { ok: false, text: body.error ?? 'Could not save the name. Try again.' };
+				return;
+			}
+			renameStatus = { ok: true, text: `Name saved: ${body.name}` };
+			selected = { ...selected, name: body.name };
+			await invalidateAll();
+		} catch {
+			renameStatus = { ok: false, text: 'Could not save the name. Check the connection.' };
+		} finally {
+			renaming = false;
+		}
 	}
 
 	function fraudTitle(item: FraudEvidence) {
@@ -179,7 +216,8 @@
 								title: person.label,
 								description: `${shiftTypeLabel(session.sessionType)} face detected in this group`,
 								url: person.cropUrl!,
-								flagged: Boolean(person.flagged)
+								flagged: Boolean(person.flagged),
+								name: person.name ?? null
 							})}
 					>
 						<ScanFace size={15} aria-hidden="true" />
@@ -221,6 +259,32 @@
 			<img src={selected.url} alt={selected.title} />
 		</div>
 
+		{#if allowRename && selected.personId && !selected.fraud}
+			<form class="rename-form" onsubmit={rename} data-testid="popup-rename">
+				<label class="field">
+					<span>Name of this worker</span>
+					<input
+						name="name"
+						value={selected.name ?? ''}
+						maxlength="60"
+						required
+						autocomplete="off"
+						placeholder="Full name"
+					/>
+				</label>
+				<button class="button button--primary" type="submit" disabled={renaming}
+					>{renaming ? 'Saving...' : 'Save name'}</button
+				>
+				{#if renameStatus}<p
+						class="rename-form__status"
+						class:rename-form__status--error={!renameStatus.ok}
+						role="status"
+					>
+						{renameStatus.text}
+					</p>{/if}
+			</form>
+		{/if}
+
 		{#if selected.fraud}
 			<p class="fraud-note" class:fraud-note--cleared={selected.fraud.state === 'cleared'}>
 				<TriangleAlert size={16} />
@@ -261,6 +325,26 @@
 </dialog>
 
 <style>
+	.rename-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: end;
+		gap: var(--space-2);
+		margin-bottom: var(--space-3);
+	}
+	.rename-form .field {
+		flex: 1 1 12rem;
+	}
+	.rename-form__status {
+		flex-basis: 100%;
+		margin: 0;
+		color: var(--brand-teal);
+		font-size: var(--text-sm);
+		font-weight: 600;
+	}
+	.rename-form__status--error {
+		color: var(--alert);
+	}
 	/* Group photo button on top, faces below: five per row, then the area scrolls. */
 	.evidence-actions {
 		display: flex;
@@ -278,7 +362,8 @@
 	/* Fixed height: a big group scrolls inside the cell instead of stretching the row. */
 	.evidence-people {
 		display: grid;
-		grid-template-columns: repeat(5, minmax(3.75rem, 1fr));
+		/* Wide enough for "Name (#1) (Operator)" in three lines; as many columns as fit. */
+		grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
 		width: 100%;
 		max-width: 30rem;
 		align-items: start;

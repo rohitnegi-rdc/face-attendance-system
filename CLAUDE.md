@@ -53,6 +53,8 @@ Person records never merge across pumps — same human at two pumps = two Person
 | CSV vendor/pump/plant import | `src/lib/server/csvImport.ts` |
 | Attendance evidence/review (flagged guests, merge, fraud) | `src/lib/server/attendanceReview.ts` |
 | Admin face fixes (move face, mark present, undo merge, remove a worker for good, close flagged errors at `/admin/review-flags`) | `src/lib/server/faceFixes.ts` |
+| Fix attendance (one page for admin and plant manager, the manager limited to their plants: Same people?, ticks, rename, counted twice + undo, add a missed worker; migration 043). Rename also in the shift card's face popup (`POST /api/persons/[id]/name`) and on the People pages (`PeopleList.svelte`, vendor and plant manager) | `src/lib/server/fixAttendance.ts`, `src/lib/components/FixAttendance.svelte`, `src/lib/server/personNames.ts` |
+| "Same people?" (start crew detected as new workers at the end): asked on both Fix attendance pages (no badge on the shift card since 2026-10-29), side-by-side pairing (admin and plant manager), real merge per pair; merge log records an admin or a plant manager (migration 042) | `src/lib/server/samePeople.ts`, `src/lib/components/SamePeople.svelte`, `mergeWorkers` in `faceFixes.ts` |
 | Background worker (job claiming, fraud check, matching) | `worker/index.js` — see Architecture.md §9 before touching this |
 | AI microservice (face detection + embeddings) | `ai-service/main.py` (FastAPI, insightface `buffalo_l`, ONNX CPU, no `--workers` set yet — single process today) |
 | DB schema | `db/init.sql` (base) + `db/migrations/00N_*.sql` (incremental, applied via `npm run migrate`) |

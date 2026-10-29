@@ -83,13 +83,14 @@ export const load: PageServerLoad = async ({ params }) => {
 	// Merges into or of this worker, newest first, so a wrong one can be undone (faceFixes.ts).
 	const merges = await query<any>(
 		`SELECT l.id, l.kept_person_id, l.merged_person_id, l.merged_at, l.reversed_at,
-		        adm.email AS merged_by, other.display_seq, other.name, other.is_operator,
+		        COALESCE(adm.email, pm.name) AS merged_by, other.display_seq, other.name, other.is_operator,
 		        merged.status AS merged_status, merged.merged_into_person_id
 		 FROM person_merge_log l
 		 JOIN persons other
 		   ON other.id = CASE WHEN l.kept_person_id = $1 THEN l.merged_person_id ELSE l.kept_person_id END
 		 JOIN persons merged ON merged.id = l.merged_person_id
 		 LEFT JOIN admins adm ON adm.id = l.admin_id
+		 LEFT JOIN plant_managers pm ON pm.id = l.merged_by_manager_id
 		 WHERE l.kept_person_id = $1 OR l.merged_person_id = $1
 		 ORDER BY l.merged_at DESC LIMIT 20`,
 		[params.id]

@@ -46,17 +46,23 @@ async function inPhoto(client: PoolClient, sessionId: string, personId: string) 
 	return rowCount === 1;
 }
 
-// A worker the admin creates is active at once: the admin has looked at the face or the photo.
-async function createWorker(client: PoolClient, pumpId: string, rawName: unknown) {
+// A worker the admin or plant manager creates is active at once: they have looked at the face or
+// the photo.
+async function createWorker(
+	client: PoolClient,
+	pumpId: string,
+	rawName: unknown,
+	namedBy: FixActor['role'] = 'admin'
+) {
 	const name = rawName == null || rawName === '' ? null : cleanPersonName(rawName);
 	if (rawName && !name) throw new FaceFixError('Enter a name of 2 to 60 letters.');
 	const { rows } = await client.query<{ id: string }>(
 		`INSERT INTO persons (pump_id, status, display_seq, name, named_by, named_at)
 		 VALUES ($1, 'active', (SELECT COALESCE(MAX(display_seq), 0) + 1 FROM persons WHERE pump_id = $1),
-		         $2::text, CASE WHEN $2::text IS NULL THEN NULL ELSE 'admin' END,
+		         $2::text, CASE WHEN $2::text IS NULL THEN NULL ELSE $3 END,
 		         CASE WHEN $2::text IS NULL THEN NULL ELSE now() END)
 		 RETURNING id`,
-		[pumpId, name]
+		[pumpId, name, namedBy]
 	);
 	return rows[0].id;
 }
@@ -117,17 +123,24 @@ async function retireIfEmpty(client: PoolClient, personId: string) {
 	);
 }
 
+// A plant manager's fix is logged with no admin and the manager in `by`.
 async function audit(
 	client: PoolClient,
-	adminId: string,
+	by: string | FixActor,
 	action: string,
 	targetId: string,
 	details: Record<string, unknown>
 ) {
+	const actor: FixActor = typeof by === 'string' ? { role: 'admin', id: by } : by;
 	await client.query(
 		`INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
 		 VALUES ($1, $2, 'attendance_session', $3, $4)`,
-		[adminId, action, targetId, JSON.stringify(details)]
+		[
+			actor.role === 'admin' ? actor.id : null,
+			action,
+			targetId,
+			JSON.stringify(actor.role === 'admin' ? details : { ...details, by: actor })
+		]
 	);
 }
 
@@ -186,7 +199,7 @@ export async function moveFace(
 // named `name`. There is no face, so nothing is added to any gallery.
 export async function markPresent(
 	client: PoolClient,
-	input: { sessionId: string; personId: string | null; name?: unknown; adminId: string }
+	input: { sessionId: string; personId: string | null; name?: unknown; actor: FixActor }
 ): Promise<{ personId: string; createdPerson: boolean }> {
 	const session = await lockSession(client, input.sessionId);
 	let personId = input.personId;
@@ -198,18 +211,110 @@ export async function markPresent(
 		}
 	} else {
 		if (!input.name) throw new FaceFixError("Enter the new worker's name.");
-		personId = await createWorker(client, session.pump_id, input.name);
+		personId = await createWorker(client, session.pump_id, input.name, input.actor.role);
 	}
 	await client.query(
 		'INSERT INTO attendance_face_evidence (session_id, person_id) VALUES ($1, $2)',
 		[session.id, personId]
 	);
 	await setSlot(client, personId, session, true);
-	await audit(client, input.adminId, 'mark_present', session.id, {
+	await audit(client, input.actor, 'mark_present', session.id, {
 		person_id: personId,
 		created_person: createdPerson
 	});
 	return { personId, createdPerson };
+}
+
+export type FixActor = { role: 'admin' | 'plant-manager'; id: string };
+
+// Merges two workers of one pump who are the same person: the merged worker's days and faces go
+// to the kept worker (a day present in either counts), the merged worker is marked merged, and
+// the kept worker takes the name if it had none. Face evidence stays where it was, so the merge
+// can be undone (undoMerge); the session logs show the kept worker for it.
+export async function mergeWorkers(
+	client: PoolClient,
+	input: { keptId: string; mergedId: string; actor: FixActor; similarity?: number | null }
+) {
+	const { keptId, mergedId, actor } = input;
+	if (keptId === mergedId) throw new FaceFixError('Pick two different workers.');
+	const { rows } = await client.query(
+		`SELECT id, pump_id, name, named_by, is_operator FROM persons
+		 WHERE id = ANY($1::uuid[]) AND status IN ('active', 'pending_review')
+		 FOR UPDATE`,
+		[[keptId, mergedId]]
+	);
+	const kept = rows.find((row) => row.id === keptId);
+	const merged = rows.find((row) => row.id === mergedId);
+	if (!kept || !merged || kept.pump_id !== merged.pump_id) {
+		throw new FaceFixError('These workers were changed meanwhile. Reload the page.');
+	}
+	const { rows: days } = await client.query<{ day: string }>(
+		`SELECT session_date::text AS day FROM daily_person_attendance WHERE person_id = $1`,
+		[mergedId]
+	);
+	await client.query(
+		`INSERT INTO daily_person_attendance
+		   (person_id, pump_id, session_date, morning_matched, evening_matched,
+		    morning_confidence, evening_confidence, updated_at)
+		 SELECT $1, pump_id, session_date, morning_matched, evening_matched,
+		        morning_confidence, evening_confidence, now()
+		 FROM daily_person_attendance WHERE person_id = $2
+		 ON CONFLICT (person_id, session_date) DO UPDATE SET
+		   morning_matched = daily_person_attendance.morning_matched OR EXCLUDED.morning_matched,
+		   evening_matched = daily_person_attendance.evening_matched OR EXCLUDED.evening_matched,
+		   morning_confidence = GREATEST(daily_person_attendance.morning_confidence, EXCLUDED.morning_confidence),
+		   evening_confidence = GREATEST(daily_person_attendance.evening_confidence, EXCLUDED.evening_confidence),
+		   updated_at = now()`,
+		[keptId, mergedId]
+	);
+	await client.query('DELETE FROM daily_person_attendance WHERE person_id = $1', [mergedId]);
+	await client.query('UPDATE person_face_vectors SET person_id = $1 WHERE person_id = $2', [
+		keptId,
+		mergedId
+	]);
+	await trimGallery(client, keptId);
+	await client.query(
+		`UPDATE persons SET status = 'merged', merged_into_person_id = $1 WHERE id = $2`,
+		[keptId, mergedId]
+	);
+	await client.query(
+		`UPDATE persons SET is_operator = is_operator OR $2::boolean,
+		        named_at = CASE WHEN name IS NULL AND $3::text IS NOT NULL THEN now() ELSE named_at END,
+		        named_by = CASE WHEN name IS NULL THEN $4::text ELSE named_by END,
+		        name = COALESCE(name, $3::text)
+		 WHERE id = $1`,
+		[keptId, merged.is_operator, merged.name, merged.named_by]
+	);
+	const isAdmin = actor.role === 'admin';
+	await client.query(
+		`INSERT INTO person_merge_log
+		   (kept_person_id, merged_person_id, admin_id, merged_by_manager_id, similarity_score)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		[
+			keptId,
+			mergedId,
+			isAdmin ? actor.id : null,
+			isAdmin ? null : actor.id,
+			input.similarity ?? null
+		]
+	);
+	if (isAdmin) {
+		const [lower, higher] = [keptId, mergedId].sort();
+		await client.query(
+			`INSERT INTO merge_review_decisions
+			   (lower_person_id, higher_person_id, decision, reviewed_by_admin_id, similarity_score)
+			 VALUES ($1, $2, 'merged', $3, $4)
+			 ON CONFLICT (lower_person_id, higher_person_id) DO UPDATE SET decision = 'merged',
+			   reviewed_by_admin_id = EXCLUDED.reviewed_by_admin_id,
+			   similarity_score = EXCLUDED.similarity_score, reviewed_at = now()`,
+			[lower, higher, actor.id, input.similarity ?? null]
+		);
+	}
+	for (const year of new Set(days.map(({ day }) => day.slice(0, 4)))) {
+		await recalculateYear(client, keptId, `${year}-01-01`);
+		await recalculateYear(client, mergedId, `${year}-01-01`);
+	}
+	return { pumpId: kept.pump_id as string };
 }
 
 // Reverses a merge: the merged worker is active again and gets back the faces and shift slots of
@@ -376,7 +481,7 @@ export async function resolveReviewFlag(
 			sessionId: flag.session_id,
 			personId: fix.personId,
 			name: fix.name,
-			adminId
+			actor: { role: 'admin', id: adminId }
 		}));
 	}
 

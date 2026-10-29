@@ -95,7 +95,12 @@ describe('moveFace', () => {
 		const photo = await session(p, TODAY);
 		await seen(wrong, photo, B);
 
-		await moveFace(client, { sessionId: photo, fromPersonId: wrong, toPersonId: right, adminId });
+		await moveFace(client, {
+			sessionId: photo,
+			fromPersonId: wrong,
+			toPersonId: right,
+			adminId
+		});
 		assert.deepEqual(await evidence(photo), [right]);
 		assert.deepEqual(await days(wrong), [{ date: YESTERDAY, start: true, end: false }]);
 		assert.deepEqual(await days(right), [{ date: TODAY, start: true, end: false }]);
@@ -167,17 +172,26 @@ describe('markPresent', () => {
 		const missed = await person(p);
 		const photo = await session(p, TODAY, 'evening');
 
-		await markPresent(client, { sessionId: photo, personId: missed, adminId });
+		await markPresent(client, {
+			sessionId: photo,
+			personId: missed,
+			actor: { role: 'admin', id: adminId }
+		});
 		assert.deepEqual(await evidence(photo), [missed]);
 		assert.deepEqual(await days(missed), [{ date: TODAY, start: false, end: true }]);
 		assert.deepEqual(await faces(missed), []);
 		await assert.rejects(
-			markPresent(client, { sessionId: photo, personId: missed, adminId }),
+			markPresent(client, {
+				sessionId: photo,
+				personId: missed,
+				actor: { role: 'admin', id: adminId }
+			}),
 			/already counted/
 		);
 	});
 
-	test('adds a never-detected worker by name; a name in use is refused', async () => {
+	// Since migration 041 a name may repeat at a pump; the number tells the workers apart.
+	test('adds a never-detected worker by name; a second worker may share the name', async () => {
 		const { pump: p, adminId } = await setup();
 		const photo = await session(p, TODAY);
 		// A closed start, so the day counts as start only in the yearly total.
@@ -189,14 +203,18 @@ describe('markPresent', () => {
 			sessionId: photo,
 			personId: null,
 			name: 'Ramesh',
-			adminId
+			actor: { role: 'admin', id: adminId }
 		});
 		assert.deepEqual(await status(personId), { status: 'active', name: 'Ramesh' });
 		assert.deepEqual(await yearly(personId), { days_present: 0, days_morning_only: 1 });
-		await assert.rejects(
-			markPresent(client, { sessionId: photo, personId: null, name: 'ramesh', adminId }),
-			/already named/
-		);
+		const second = await markPresent(client, {
+			sessionId: photo,
+			personId: null,
+			name: 'ramesh',
+			actor: { role: 'admin', id: adminId }
+		});
+		assert.notEqual(second.personId, personId);
+		assert.deepEqual(await status(second.personId), { status: 'active', name: 'ramesh' });
 	});
 });
 

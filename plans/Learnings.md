@@ -160,3 +160,15 @@ Test mode (fraud check off) worked only while the server env `TEST_MODE=true`, s
 - Migration 033 made names unique per pump, guessing that a repeated name is one person split in two by the matcher. Real crews have two Rajus, so the operator was refused and told to add a father's name or village. That is an operator decision, which the app avoids.
 - Why the guess was wrong: it used the name as an identity signal. The face is the identity; the name is only a label. Splits are found by face similarity in the admin merge review, not by names.
 - Now (migration 041): same names are allowed. Every label keeps the worker number beside the name (`personShortLabel`: "Raju (#3)"), and the face shows next to it, so same-named workers stay apart.
+
+## 2026-10-29: "Same people?" asked from the wrong side
+
+First version: one row per worker seen only at the shift START, with the end faces to tap. On real data (6 only at start, 1 only at end) the same lone end face repeated in six rows, with jargon ("Not paired", "Merge 1 pair"), and the user found it confusing. The problem the user has is "who is this new face at the end?", so ask exactly that: one question per new face at the END (usually the smaller side), its face big beside the start faces, the likeliest first and picked, "Someone new" as the way out, plain outcome text ("Same person as X" / "Stays a new worker"). Lesson: build a pairing question around the thing that looks wrong (the new face), not around the list that looks normal.
+
+## 2026-10-29: shift card badge for "Same people?" removed
+
+A yellow "Same people? N new faces at shift end" badge sat on every shift card next to Fix attendance. The user asked to drop it: two links to the same page on one card is duplicated UI, and on real data almost every card with a new face at the end showed it, so it read as noise rather than a warning. The question now lives only on Fix attendance (top of the page). The card was tidied at the same time: every tool (Fix attendance, Delete / reset, Fix shift, fraud buttons) is one compact outlined button, the photo tools sit on their own row at the bottom of both halves so start and end line up, and face chips get room for "Name (#1) (Operator)". Lesson: a hint that shows on most rows is not a hint; put it where the fix happens.
+
+## 2026-10-29: two Fix attendance pages drifted apart
+
+The admin and the plant manager each had their own Fix attendance page. Features were added to one at a time: the admin got duplicates, missed workers and whole photos, the plant manager got the friendlier roster (missing a shift first, reason only after a tick changes). Neither had a rename. The user asked for the plant manager to have "the same interface". Now there is one component (`FixAttendance.svelte`) and one server module (`fixAttendance.ts`) taking the actor, so a feature added for one role lands for both, and the plant manager limit is one SQL condition. Same for the People list (vendor and plant manager). Lesson: when two roles do the same task, build one page with an actor, not two pages; copies drift with every change.

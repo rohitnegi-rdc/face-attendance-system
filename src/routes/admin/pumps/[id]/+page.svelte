@@ -220,6 +220,7 @@
 				page={data.sessionPagination.page}
 				pageSize={data.sessionPagination.pageSize}
 				allowFlag
+				allowRename
 				fixHref={(_shift, day) =>
 					resolve(`/admin/attendance/correct?pump=${data.pump.id}&day=${day}`)}
 			>
@@ -500,14 +501,22 @@
 	.shift-fix[open] {
 		flex-basis: 100%;
 	}
+	/* Same compact outlined button as Delete / reset beside it (ShiftLog styles the buttons). */
 	.shift-fix summary {
 		display: inline-flex;
 		align-items: center;
 		min-height: 2.75rem;
+		padding: 0 var(--space-3);
 		cursor: pointer;
 		font-size: var(--text-sm);
 		font-weight: 700;
 		color: var(--brand-teal);
+		background: var(--brand-white);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+	}
+	.shift-fix summary:hover {
+		border-color: var(--brand-teal);
 	}
 	.shift-fix__body {
 		display: grid;

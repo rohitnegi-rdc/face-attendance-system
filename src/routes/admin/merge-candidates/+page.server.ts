@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { pool, query } from '$lib/server/db';
 import { faceMatchThreshold } from '$lib/server/matching';
+import { mergeWorkers } from '$lib/server/faceFixes';
 
 const LOWER_BOUND = 0.2;
 const UPPER_BOUND = faceMatchThreshold();
@@ -48,47 +49,12 @@ export const actions: Actions = {
 		const client = await pool.connect();
 		try {
 			await client.query('BEGIN');
-			const pair = await client.query(
-				`SELECT a.pump_id
-				 FROM persons a JOIN persons b ON b.id = $2
-				 WHERE a.id = $1 AND a.status = 'active' AND b.status = 'active'
-				   AND a.pump_id = b.pump_id
-				 FOR UPDATE OF a, b`,
-				[keptId, mergedId]
-			);
-			if (!pair.rowCount) throw new Error('People must be active and belong to the same pump.');
-
-			await client.query(
-				`INSERT INTO daily_person_attendance
-				   (person_id, pump_id, session_date, morning_matched, evening_matched,
-				    morning_confidence, evening_confidence, updated_at)
-				 SELECT $1, pump_id, session_date, morning_matched, evening_matched,
-				        morning_confidence, evening_confidence, updated_at
-				 FROM daily_person_attendance WHERE person_id = $2
-				 ON CONFLICT (person_id, session_date) DO UPDATE SET
-				   morning_matched = daily_person_attendance.morning_matched OR EXCLUDED.morning_matched,
-				   evening_matched = daily_person_attendance.evening_matched OR EXCLUDED.evening_matched,
-				   morning_confidence = GREATEST(daily_person_attendance.morning_confidence, EXCLUDED.morning_confidence),
-				   evening_confidence = GREATEST(daily_person_attendance.evening_confidence, EXCLUDED.evening_confidence),
-				   updated_at = GREATEST(daily_person_attendance.updated_at, EXCLUDED.updated_at)`,
-				[keptId, mergedId]
-			);
-			await client.query('DELETE FROM daily_person_attendance WHERE person_id = $1', [mergedId]);
-			await client.query('UPDATE person_face_vectors SET person_id = $1 WHERE person_id = $2', [
+			await mergeWorkers(client, {
 				keptId,
-				mergedId
-			]);
-			await client.query(
-				`UPDATE persons SET status = 'merged', merged_into_person_id = $1 WHERE id = $2`,
-				[keptId, mergedId]
-			);
-			await client.query(
-				`INSERT INTO person_merge_log
-				   (kept_person_id, merged_person_id, admin_id, similarity_score)
-				 VALUES ($1, $2, $3, $4)`,
-				[keptId, mergedId, locals.user!.id, similarity]
-			);
-			await recordDecision(client, keptId, mergedId, 'merged', locals.user!.id, similarity);
+				mergedId,
+				actor: { role: 'admin', id: locals.user!.id },
+				similarity
+			});
 			await client.query('COMMIT');
 			return { success: true, message: 'People merged.' };
 		} catch (error) {

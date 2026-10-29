@@ -47,6 +47,7 @@
 		fixHref,
 		fraudCaseHref,
 		allowFlag = false,
+		allowRename = false,
 		actions
 	}: {
 		shifts: Shift[];
@@ -56,6 +57,8 @@
 		fixHref: (shift: Shift, day: string) => string;
 		fraudCaseHref?: (flagId: string) => string;
 		allowFlag?: boolean;
+		// A name box in the face popup (admin and plant manager).
+		allowRename?: boolean;
 		actions?: Snippet<[S]>;
 	} = $props();
 
@@ -158,7 +161,12 @@
 										/>{/if}
 								</div>
 								{#if session.error_reason}<p class="half__note">{session.error_reason}</p>{/if}
-								<AttendanceEvidenceButtons session={session.evidence} {allowFlag} {fraudCaseHref} />
+								<AttendanceEvidenceButtons
+									session={session.evidence}
+									{allowFlag}
+									{allowRename}
+									{fraudCaseHref}
+								/>
 								{#if actions}<div class="half__actions">{@render actions(session)}</div>{/if}
 							{:else}
 								<div class="half__head"><span class="half__title">{half.title}</span></div>
@@ -245,19 +253,33 @@
 		gap: var(--space-2);
 		order: 3;
 	}
-	.fix-link {
+	/* Every tool on the card (Fix attendance here, the page's per-photo tools below) is the same
+	   compact outlined button, so none of them shouts louder than the photos. */
+	.fix-link,
+	.half__actions :global(.button) {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
 		min-height: 2.75rem;
-		margin-left: auto;
-		color: var(--brand-teal);
+		padding: 0 var(--space-3);
+		font-size: var(--text-sm);
 		font-weight: 700;
 		white-space: nowrap;
+		text-decoration: none;
+		background: var(--brand-white);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+	}
+	.fix-link {
+		margin-left: auto;
+		color: var(--brand-teal);
+	}
+	.fix-link:hover {
+		border-color: var(--brand-teal);
 	}
 	.half {
-		display: grid;
-		align-content: start;
+		display: flex;
+		flex-direction: column;
 		gap: var(--space-2);
 		min-width: 0;
 		padding-top: var(--space-3);
@@ -294,28 +316,37 @@
 		border: 1px dashed var(--brand-steel);
 		border-radius: var(--radius-md);
 	}
+	/* The tools sit on their own line under the faces; on wide screens they drop to the bottom of
+	   both halves, so start and end tools line up whatever the number of faces. */
 	.half__actions {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: flex-start;
+		align-items: center;
 		gap: var(--space-2);
+		padding-top: var(--space-2);
+		border-top: 1px dashed var(--brand-mist);
+	}
+	.half__actions:last-child {
+		margin-top: auto;
 	}
 	@media (min-width: 64rem) {
 		.shift {
 			grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr) minmax(0, 1fr);
-			align-items: start;
+			align-items: stretch;
 			column-gap: var(--space-4);
 		}
 		.shift__who {
 			flex-direction: column;
 			flex-wrap: nowrap;
 			align-items: flex-start;
+			align-self: start;
 		}
 		.shift__tags {
 			order: 0;
 		}
 		.fix-link {
 			order: 1;
+			margin-top: var(--space-1);
 			margin-left: 0;
 		}
 		.half {
