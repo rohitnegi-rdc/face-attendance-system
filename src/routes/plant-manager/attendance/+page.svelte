@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Download from '@lucide/svelte/icons/download';
 	import Search from '@lucide/svelte/icons/search';
@@ -10,12 +11,32 @@
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	const days = $derived(calendarDays(data.filters.from, data.filters.to));
+	// The Pump list follows the chosen Plant; the filters apply to every list below.
+	let plant = $state('');
+	let pump = $state('');
+	$effect.pre(() => {
+		plant = data.filters.plant;
+		pump = data.filters.pump;
+	});
+	const pumpChoices = $derived(
+		plant ? data.pumps.filter((p: any) => p.plant_id === plant) : data.pumps
+	);
+	// The Plant and Pump boxes above the session log set the same filter at once, staying at the log.
+	function applyLogFilter() {
+		const params = new URLSearchParams({ from: data.filters.from, to: data.filters.to });
+		if (plant) params.set('plant', plant);
+		if (pump) params.set('pump', pump);
+		goto(`?${params}`, { noScroll: true, keepFocus: true }).then(() =>
+			document.getElementById('session-log-title')?.scrollIntoView({ block: 'start' })
+		);
+	}
 	const entities = $derived(
-		data.pumps.map((pump: any) => ({ id: pump.id, label: pump.pump_code }))
+		data.shownPumps.map((pump: any) => ({ id: pump.id, label: pump.pump_code }))
 	);
 	// Keeps the date range, the pump and the other list's page when one list pages.
 	function pageUrl(param: 'session_page' | 'roster_page', page: number) {
 		const params = new URLSearchParams({ from: data.filters.from, to: data.filters.to });
+		if (data.filters.plant) params.set('plant', data.filters.plant);
 		if (data.filters.pump) params.set('pump', data.filters.pump);
 		if (param === 'session_page' && data.rosterPagination.page > 1)
 			params.set('roster_page', String(data.rosterPagination.page));
@@ -94,10 +115,20 @@
 			><span>From</span><input type="date" name="from" value={data.filters.from} /></label
 		><label class="field"
 			><span>To</span><input type="date" name="to" value={data.filters.to} /></label
-		><label class="field"
-			><span>Pump</span><select name="pump" value={data.filters.pump} data-testid="pm-pump-filter"
-				><option value="">All pumps</option>{#each data.pumps as pump (pump.id)}<option
-						value={pump.id}>{pump.pump_code}</option
+		>{#if data.plants.length > 1}<label class="field"
+				><span>Plant</span><select
+					name="plant"
+					bind:value={plant}
+					onchange={() => (pump = '')}
+					data-testid="pm-plant-filter"
+					><option value="">All plants</option>{#each data.plants as p (p.id)}<option value={p.id}
+							>{p.name}</option
+						>{/each}</select
+				></label
+			>{/if}<label class="field"
+			><span>Pump</span><select name="pump" bind:value={pump} data-testid="pm-pump-filter"
+				><option value="">All pumps</option>{#each pumpChoices as p (p.id)}<option value={p.id}
+						>{p.pump_code}</option
 					>{/each}</select
 			></label
 		>
@@ -161,7 +192,7 @@
 			/>{/if}
 	</section>
 	<section class="section" aria-labelledby="session-log-title">
-		<div class="section-header">
+		<div class="section-header log-head">
 			<div>
 				<h2 id="session-log-title">Session log and photos</h2>
 				<p class="supporting-text">
@@ -170,6 +201,30 @@
 					row is one shift, start photo and end photo side by side. Open a group photo or a worker to
 					see who was counted.
 				</p>
+			</div>
+			<div class="log-filter" data-testid="pm-log-filter">
+				{#if data.plants.length > 1}<label class="field"
+						><span>Plant</span><select
+							bind:value={plant}
+							onchange={() => {
+								pump = '';
+								applyLogFilter();
+							}}
+							data-testid="pm-log-plant"
+							><option value="">All plants</option>{#each data.plants as p (p.id)}<option
+									value={p.id}>{p.name}</option
+								>{/each}</select
+						></label
+					>{/if}<label class="field"
+					><span>Pump</span><select
+						bind:value={pump}
+						onchange={applyLogFilter}
+						data-testid="pm-log-pump"
+						><option value="">All pumps</option>{#each pumpChoices as p (p.id)}<option value={p.id}
+								>{p.pump_code}</option
+							>{/each}</select
+					></label
+				>
 			</div>
 		</div>
 		{#if data.shifts.length}
@@ -200,6 +255,20 @@
 </div>
 
 <style>
+	.log-head {
+		flex-wrap: wrap;
+	}
+	.log-filter {
+		display: flex;
+		flex: 1 1 20rem;
+		max-width: 28rem;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+	.log-filter .field {
+		flex: 1 1 10rem;
+		min-width: 0;
+	}
 	.eyebrow {
 		margin: 0 0 var(--space-1);
 		color: var(--ink-muted);
