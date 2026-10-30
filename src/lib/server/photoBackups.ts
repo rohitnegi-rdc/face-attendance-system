@@ -34,7 +34,7 @@ export async function listPhotoBackups(managerId: string | null): Promise<PhotoB
 		 JOIN areas a ON a.id = pl.area_id
 		 WHERE (b.status <> 'waiting' OR b.uploaded_at < now() - interval '1 hour')
 		   AND ($1::uuid IS NULL OR EXISTS (
-		         SELECT 1 FROM plant_manager_assignments pma
+		         SELECT 1 FROM manager_plants pma
 		         WHERE pma.plant_id = pu.plant_id AND pma.manager_id = $1))
 		 ORDER BY b.uploaded_at DESC
 		 LIMIT ${LIST_LIMIT}`,
@@ -53,7 +53,7 @@ export async function photoBackupFile(
 		 JOIN pumps pu ON pu.id = b.pump_id
 		 WHERE b.id = $1
 		   AND ($2::uuid IS NULL OR EXISTS (
-		         SELECT 1 FROM plant_manager_assignments pma
+		         SELECT 1 FROM manager_plants pma
 		         WHERE pma.plant_id = pu.plant_id AND pma.manager_id = $2))`,
 		[id, viewer.role === 'admin' ? null : viewer.id]
 	);

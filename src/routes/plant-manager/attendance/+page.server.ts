@@ -29,11 +29,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const requestedPump = url.searchParams.get('pump') || '';
 	const [pumps, plants, daily, sessionRows, sessionCount] = await Promise.all([
 		query<any>(
-			`SELECT pu.id, pu.pump_code FROM pumps pu JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id WHERE pma.manager_id = $1 ORDER BY pu.pump_code`,
+			`SELECT pu.id, pu.pump_code FROM pumps pu JOIN manager_plants pma ON pma.plant_id = pu.plant_id WHERE pma.manager_id = $1 ORDER BY pu.pump_code`,
 			[managerId]
 		),
 		query<any>(
-			`SELECT pl.id, pl.name, a.name AS area_name FROM plants pl JOIN areas a ON a.id = pl.area_id JOIN plant_manager_assignments pma ON pma.plant_id = pl.id WHERE pma.manager_id = $1 ORDER BY a.name, pl.name`,
+			`SELECT pl.id, pl.name, a.name AS area_name FROM plants pl JOIN areas a ON a.id = pl.area_id JOIN manager_plants pma ON pma.plant_id = pl.id WHERE pma.manager_id = $1 ORDER BY a.name, pl.name`,
 			[managerId]
 		),
 		query<any>(
@@ -41,7 +41,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			        COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched)
 			        / NULLIF(COUNT(*), 0), 0), 0)::int AS attendance_pct
 			 FROM daily_person_attendance dpa JOIN pumps pu ON pu.id = dpa.pump_id
-			 JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id
+			 JOIN manager_plants pma ON pma.plant_id = pu.plant_id
 			 WHERE pma.manager_id = $1 AND dpa.session_date BETWEEN $2 AND $3
 			 GROUP BY pu.id, dpa.session_date ORDER BY dpa.session_date`,
 			[managerId, from, to]
@@ -54,11 +54,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			          WHERE arf.session_id = s.id AND arf.person_id IS NULL AND arf.status = 'open'
 			        ) AS group_flagged
 			 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
-			 JOIN plants pl ON pl.id = pu.plant_id JOIN plant_manager_assignments pma ON pma.plant_id = pl.id
+			 JOIN plants pl ON pl.id = pu.plant_id JOIN manager_plants pma ON pma.plant_id = pl.id
 			 JOIN (
 			   SELECT s2.pump_id, s2.session_date, max(s2.submitted_at) AS last_at
 			   FROM attendance_sessions s2 JOIN pumps pu2 ON pu2.id = s2.pump_id
-			   JOIN plant_manager_assignments pma2 ON pma2.plant_id = pu2.plant_id
+			   JOIN manager_plants pma2 ON pma2.plant_id = pu2.plant_id
 			   WHERE pma2.manager_id = $1 AND s2.session_date BETWEEN $2 AND $3
 			   GROUP BY s2.pump_id, s2.session_date
 			   ORDER BY s2.session_date DESC, last_at DESC LIMIT $4 OFFSET $5
@@ -70,7 +70,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		query<any>(
 			`SELECT count(DISTINCT (s.pump_id, s.session_date))::int AS n
 			 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
-			 JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id
+			 JOIN manager_plants pma ON pma.plant_id = pu.plant_id
 			 WHERE pma.manager_id = $1 AND s.session_date BETWEEN $2 AND $3`,
 			[managerId, from, to]
 		)

@@ -99,7 +99,7 @@ describe('moveFace', () => {
 			sessionId: photo,
 			fromPersonId: wrong,
 			toPersonId: right,
-			adminId
+			actor: { role: 'admin', id: adminId }
 		});
 		assert.deepEqual(await evidence(photo), [right]);
 		assert.deepEqual(await days(wrong), [{ date: YESTERDAY, start: true, end: false }]);
@@ -122,7 +122,7 @@ describe('moveFace', () => {
 			fromPersonId: wrong,
 			toPersonId: null,
 			name: 'Suresh Kumar',
-			adminId
+			actor: { role: 'admin', id: adminId }
 		});
 		assert.equal(result.createdPerson, true);
 		assert.deepEqual(await status(result.personId), { status: 'active', name: 'Suresh Kumar' });
@@ -142,7 +142,7 @@ describe('moveFace', () => {
 			sessionId: photo,
 			fromPersonId: onlyThisFace,
 			toPersonId: right,
-			adminId
+			actor: { role: 'admin', id: adminId }
 		});
 		assert.equal((await status(onlyThisFace)).status, 'archived');
 	});
@@ -156,13 +156,52 @@ describe('moveFace', () => {
 		await seen(y, photo, B);
 
 		await assert.rejects(
-			moveFace(client, { sessionId: photo, fromPersonId: x, toPersonId: y, adminId }),
+			moveFace(client, {
+				sessionId: photo,
+				fromPersonId: x,
+				toPersonId: y,
+				actor: { role: 'admin', id: adminId }
+			}),
 			/already has a face in this photo/
 		);
 		await assert.rejects(
-			moveFace(client, { sessionId: photo, fromPersonId: x, toPersonId: elsewhere, adminId }),
+			moveFace(client, {
+				sessionId: photo,
+				fromPersonId: x,
+				toPersonId: elsewhere,
+				actor: { role: 'admin', id: adminId }
+			}),
 			FaceFixError
 		);
+	});
+
+	test('a plant manager or monitor: logged with no admin and the manager as `by`', async () => {
+		const { pump: p } = await setup();
+		const { rows } = await db.query(
+			`INSERT INTO plant_managers (name, email, is_monitor)
+			 VALUES ('Mumbai Monitor', 'monitor-' || gen_random_uuid() || '@rdc.in', true) RETURNING id`
+		);
+		const actor = { role: 'plant-manager' as const, id: rows[0].id as string };
+		const wrong = await person(p);
+		await seen(wrong, await session(p, YESTERDAY), A);
+		const photo = await session(p, TODAY);
+		await seen(wrong, photo, B);
+
+		const result = await moveFace(client, {
+			sessionId: photo,
+			fromPersonId: wrong,
+			toPersonId: null,
+			name: 'Ramesh Patil',
+			actor
+		});
+		const named = await db.query('SELECT named_by FROM persons WHERE id = $1', [result.personId]);
+		assert.equal(named.rows[0].named_by, 'plant-manager');
+		const log = await db.query(
+			`SELECT admin_id, details->'by'->>'id' AS by FROM admin_audit_log
+			 WHERE action = 'move_face' AND target_id = $1`,
+			[photo]
+		);
+		assert.deepEqual(log.rows, [{ admin_id: null, by: actor.id }]);
 	});
 });
 

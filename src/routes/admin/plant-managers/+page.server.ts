@@ -87,11 +87,12 @@ export const actions: Actions = {
 				);
 				manager = inserted.rows[0];
 			} else {
-				if (name)
-					await client.query('UPDATE plant_managers SET name = $1 WHERE id = $2', [
-						name,
-						manager.id
-					]);
+				// A plant brings back the sign-in of a login switched off as a removed monitor.
+				await client.query(
+					`UPDATE plant_managers SET name = COALESCE(NULLIF($1, ''), name), disabled_at = NULL
+					 WHERE id = $2`,
+					[name, manager.id]
+				);
 				if (!manager.password_hash) {
 					issuedPassword = temporaryPassword();
 					const passwordHash = await hashPassword(issuedPassword);

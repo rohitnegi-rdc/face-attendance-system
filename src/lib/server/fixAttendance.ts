@@ -1,14 +1,21 @@
-// Fix attendance for one pump and day, the same page for the admin and the plant manager
-// (src/lib/components/FixAttendance.svelte): "Same people?", the roster ticks, rename, a worker
-// counted twice, and a worker the camera missed. A plant manager reaches only the pumps of their
-// plants; every change is logged with who made it.
+// Fix attendance for one pump and day, the same page for the admin and the plant manager or
+// monitor (src/lib/components/FixAttendance.svelte): "Same people?", the roster ticks, rename, a
+// face counted for the wrong worker, a worker counted twice, and a worker the camera missed. A
+// plant manager reaches only the pumps of their plants, a monitor those of their Areas
+// (manager_plants); every change is logged with who made it.
 import { error, fail, redirect, type Actions, type RequestEvent } from '@sveltejs/kit';
 import type { PoolClient } from 'pg';
 import { pool, query, queryOne } from '$lib/server/db';
 import { isDateKey } from '$lib/date';
 import { saveCorrection } from '$lib/server/attendanceCorrection';
 import { logger } from '$lib/server/log';
-import { FaceFixError, markPresent, recalculateYear, type FixActor } from '$lib/server/faceFixes';
+import {
+	FaceFixError,
+	markPresent,
+	moveFace,
+	recalculateYear,
+	type FixActor
+} from '$lib/server/faceFixes';
 import { formText, runFaceFix } from '$lib/server/faceFixActions';
 import { findSamePeople, mergeSamePeople, mergedMessage } from '$lib/server/samePeople';
 import { renamePerson } from '$lib/server/personNames';
@@ -17,7 +24,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 
 // The admin sees every pump; a plant manager ($2) only the pumps of their plants.
 const PUMP_ALLOWED = `($3 = 'admin' OR EXISTS (
-	SELECT 1 FROM plant_manager_assignments pma WHERE pma.plant_id = pu.plant_id AND pma.manager_id = $2::uuid))`;
+	SELECT 1 FROM manager_plants pma WHERE pma.plant_id = pu.plant_id AND pma.manager_id = $2::uuid))`;
 
 async function allowedPump(client: PoolClient, actor: FixActor, pumpId: string) {
 	if (!UUID_PATTERN.test(pumpId)) return false;
@@ -41,7 +48,7 @@ export async function loadFixAttendance(actor: FixActor, url: URL, backPath: str
 	);
 	if (!pump) error(404, 'Pump not found');
 
-	const [sessions, people, corrections, duplicates] = await Promise.all([
+	const [sessions, people, faces, corrections, duplicates] = await Promise.all([
 		query<any>(
 			`SELECT id, session_type, status, submitted_at, photo_url IS NOT NULL AS has_photo
 			 FROM attendance_sessions WHERE pump_id = $1 AND session_date = $2
@@ -59,6 +66,15 @@ export async function loadFixAttendance(actor: FixActor, url: URL, backPath: str
 			 LEFT JOIN daily_person_attendance dpa ON dpa.person_id = p.id AND dpa.session_date = $2
 			 WHERE p.pump_id = $1 AND p.status = 'active'
 			 ORDER BY COALESCE(dpa.morning_matched AND dpa.evening_matched, false), p.display_seq`,
+			[pumpId, day]
+		),
+		// Each worker's face in each counted photo of the day, for "Wrong worker?".
+		query<any>(
+			`SELECT afe.person_id, afe.id AS evidence_id, afe.face_crop_url IS NOT NULL AS has_crop,
+			        s.id AS session_id, s.session_type
+			 FROM attendance_face_evidence afe JOIN attendance_sessions s ON s.id = afe.session_id
+			 WHERE s.pump_id = $1 AND s.session_date = $2 AND s.status IN ('review', 'completed')
+			 ORDER BY s.submitted_at`,
 			[pumpId, day]
 		),
 		query<any>(
@@ -88,7 +104,24 @@ export async function loadFixAttendance(actor: FixActor, url: URL, backPath: str
 		)
 	]);
 	const same = await findSamePeople(pool, pumpId, day);
-	return { pump, day, sessions, people, corrections, duplicates, same };
+	const facesOf = (personId: string) =>
+		faces
+			.filter((face) => face.person_id === personId)
+			.map((face) => ({
+				sessionId: face.session_id as string,
+				sessionType: face.session_type as 'morning' | 'evening',
+				evidenceId: face.evidence_id as string,
+				hasCrop: Boolean(face.has_crop)
+			}));
+	return {
+		pump,
+		day,
+		sessions,
+		people: people.map((person) => ({ ...person, faces: facesOf(person.id) })),
+		corrections,
+		duplicates,
+		same
+	};
 }
 
 // Worker `keptId` and worker `duplicateId` are one person counted twice in one photo: the kept
@@ -228,13 +261,23 @@ export function fixAttendanceActions(role: FixActor['role']): Actions {
 	const run = async (
 		event: RequestEvent,
 		name: string,
-		fix: (client: PoolClient, actor: FixActor, form: FormData) => Promise<string>
+		// A fix may name the worker its message belongs on (a moved face: the worker who got it).
+		fix: (
+			client: PoolClient,
+			actor: FixActor,
+			form: FormData
+		) => Promise<string | { message: string; personId: string }>
 	) => {
 		const actor = actorOf(event);
 		if (!actor) return fail(403, { error: 'Forbidden' });
 		const form = await event.request.formData();
-		const personId = formText(form, 'person_id') || undefined;
-		const result = await runFaceFix(name, actor.id, (client) => fix(client, actor, form));
+		let personId = formText(form, 'person_id') || undefined;
+		const result = await runFaceFix(name, actor.id, async (client) => {
+			const done = await fix(client, actor, form);
+			if (typeof done === 'string') return done;
+			personId = done.personId;
+			return done.message;
+		});
 		return 'status' in result
 			? fail(result.status, { error: result.data.message, personId })
 			: { ...result, personId };
@@ -285,6 +328,42 @@ export function fixAttendanceActions(role: FixActor['role']): Actions {
 					actor
 				});
 				return `${formText(form, 'name')} added and marked present.`;
+			}),
+		// A face counted for the wrong worker in one photo: it goes to the right worker of the
+		// pump, or to a new worker. That worker is then counted for the photo instead.
+		moveFace: (event) =>
+			run(event, 'move_face', async (client, actor, form) => {
+				const sessionId = formText(form, 'session_id');
+				const fromPersonId = formText(form, 'person_id');
+				const toPersonId = formText(form, 'to_person_id') || null;
+				if (
+					![sessionId, fromPersonId].every((value) => UUID_PATTERN.test(value)) ||
+					(toPersonId && !UUID_PATTERN.test(toPersonId))
+				)
+					throw new FaceFixError('Choose the photo and the right worker.');
+				const name = formText(form, 'name');
+				if (!toPersonId && !name)
+					throw new FaceFixError("Pick the right worker, or enter a new worker's name.");
+				const { rows } = await client.query(
+					'SELECT pump_id FROM attendance_sessions WHERE id = $1',
+					[sessionId]
+				);
+				if (!rows[0] || !(await allowedPump(client, actor, rows[0].pump_id)))
+					throw new FaceFixError('Pump not found.');
+				const result = await moveFace(client, {
+					sessionId,
+					fromPersonId,
+					toPersonId,
+					name: toPersonId ? undefined : name,
+					actor
+				});
+				// The message shows on the worker who got the face: the old one may be retired.
+				return {
+					personId: result.personId,
+					message: result.createdPerson
+						? `Face moved to ${name}, a new worker counted for that photo.`
+						: 'Face moved. This worker is now counted for that photo.'
+				};
 			}),
 		markDuplicate: (event) => run(event, 'mark_duplicate', markDuplicate),
 		undoDuplicate: (event) => run(event, 'undo_duplicate', undoDuplicate),

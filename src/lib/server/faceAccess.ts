@@ -12,10 +12,10 @@ export async function canSeePump(user: User, pump: PumpRef) {
 	if (user.role === 'vendor') return pump.vendor_id === user.id;
 	if (user.role === 'plant-manager') {
 		return Boolean(
-			await queryOne(
-				'SELECT 1 FROM plant_manager_assignments WHERE manager_id = $1 AND plant_id = $2',
-				[user.id, pump.plant_id]
-			)
+			await queryOne('SELECT 1 FROM manager_plants WHERE manager_id = $1 AND plant_id = $2', [
+				user.id,
+				pump.plant_id
+			])
 		);
 	}
 	return false;

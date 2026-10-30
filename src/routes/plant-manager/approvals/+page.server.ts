@@ -14,7 +14,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		        pu.pump_code, pl.name AS plant_name, pm.name AS decided_by
 		 FROM attendance_sessions s
 		 JOIN pumps pu ON pu.id = s.pump_id JOIN plants pl ON pl.id = pu.plant_id
-		 JOIN plant_manager_assignments pma ON pma.plant_id = pl.id AND pma.manager_id = $1
+		 JOIN manager_plants pma ON pma.plant_id = pl.id AND pma.manager_id = $1
 		 LEFT JOIN plant_managers pm ON pm.id = s.location_decided_by
 		 WHERE s.location_status = 'pending'
 		    OR (s.location_status IN ('approved', 'rejected')

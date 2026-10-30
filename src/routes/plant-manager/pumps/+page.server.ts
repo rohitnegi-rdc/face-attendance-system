@@ -11,7 +11,7 @@ export const load: PageServerLoad = async ({ locals }) => ({
 		        COALESCE(ROUND(100.0 * COUNT(dpa.id) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched)
 		        / NULLIF(COUNT(dpa.id), 0), 0), 0)::int AS attendance_pct
 		 FROM pumps pu JOIN plants pl ON pl.id = pu.plant_id JOIN areas a ON a.id = pl.area_id
-		 JOIN plant_manager_assignments pma ON pma.plant_id = pl.id AND pma.manager_id = $1
+		 JOIN manager_plants pma ON pma.plant_id = pl.id AND pma.manager_id = $1
 		 LEFT JOIN daily_person_attendance dpa ON dpa.pump_id = pu.id AND dpa.session_date BETWEEN $2::date - interval '29 days' AND $2::date
 		 LEFT JOIN LATERAL (SELECT submitted_at, session_type, status FROM attendance_sessions
 		   WHERE pump_id = pu.id ORDER BY submitted_at DESC LIMIT 1) latest ON true
@@ -28,7 +28,7 @@ export const actions: Actions = {
 		const [pump] = /^[0-9a-f-]{36}$/i.test(id)
 			? await query<{ id: string }>(
 					`SELECT pu.id FROM pumps pu
-					 JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id AND pma.manager_id = $2
+					 JOIN manager_plants pma ON pma.plant_id = pu.plant_id AND pma.manager_id = $2
 					 WHERE pu.id = $1`,
 					[id, locals.user!.id]
 				)

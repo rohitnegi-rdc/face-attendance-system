@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		: '';
 	const [pumps, persons] = await Promise.all([
 		query<any>(
-			`SELECT pu.id, pu.pump_code FROM pumps pu JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id WHERE pma.manager_id = $1 ORDER BY pu.pump_code`,
+			`SELECT pu.id, pu.pump_code FROM pumps pu JOIN manager_plants pma ON pma.plant_id = pu.plant_id WHERE pma.manager_id = $1 ORDER BY pu.pump_code`,
 			[locals.user!.id]
 		),
 		query<any>(
@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			        COUNT(dpa.id) FILTER (WHERE dpa.morning_matched AND NOT dpa.evening_matched AND NOT ${shiftStillOpen('dpa')})::int AS days_morning_only,
 			        COUNT(dpa.id) FILTER (WHERE NOT dpa.morning_matched AND dpa.evening_matched)::int AS days_evening_only
 			 FROM persons p JOIN pumps pu ON pu.id = p.pump_id
-			 JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id
+			 JOIN manager_plants pma ON pma.plant_id = pu.plant_id
 			 LEFT JOIN daily_person_attendance dpa ON dpa.person_id = p.id
 			 WHERE pma.manager_id = $1 AND p.status = 'active' AND ($2 = '' OR pu.id = $2::uuid)
 			 GROUP BY p.id, pu.pump_code ORDER BY p.last_seen_at DESC`,

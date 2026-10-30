@@ -106,7 +106,7 @@ export async function mergeSamePeople(
 	const { pumpId, day, form, actor } = input;
 	if (actor.role === 'plant-manager') {
 		const { rowCount } = await client.query(
-			`SELECT 1 FROM pumps pu JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id
+			`SELECT 1 FROM pumps pu JOIN manager_plants pma ON pma.plant_id = pu.plant_id
 			 WHERE pu.id = $1 AND pma.manager_id = $2`,
 			[pumpId, actor.id]
 		);

@@ -1,12 +1,14 @@
 <script lang="ts">
-	// Fix attendance for one pump and day, the same page for the admin and the plant manager
-	// (load and actions in fixAttendance.ts). Phone first: "Same people?" when the camera split the
-	// crew, both photos whole, then one row per worker, not a full shift first. A row's ticks get a
-	// reason and Save only once changed; Rename and Counted twice? open under the row.
+	// Fix attendance for one pump and day, the same page for the admin and the plant manager or
+	// monitor (load and actions in fixAttendance.ts). Phone first: "Same people?" when the camera
+	// split the crew, both photos whole, then one row per worker, not a full shift first. A row's
+	// ticks get a reason and Save only once changed; Rename, Wrong worker? and Counted twice? open
+	// under the row.
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Pencil from '@lucide/svelte/icons/pencil';
+	import Shuffle from '@lucide/svelte/icons/shuffle';
 	import Save from '@lucide/svelte/icons/save';
 	import Undo2 from '@lucide/svelte/icons/undo-2';
 	import UserMinus from '@lucide/svelte/icons/user-minus';
@@ -40,8 +42,18 @@
 
 	// Unsaved ticks per worker; the reason and Save appear only for a worker whose ticks changed.
 	let drafts = $state<Record<string, { start: boolean; end: boolean }>>({});
-	// The one tool open under a worker: Rename or Counted twice?
-	let open = $state<Record<string, 'rename' | 'twice' | undefined>>({});
+	type Tool = 'rename' | 'move' | 'twice';
+	// The one tool open under a worker: Rename, Wrong worker? or Counted twice?
+	let open = $state<Record<string, Tool | undefined>>({});
+	// Wrong worker?: the photo whose face moves, and the worker it goes to ('' = a new worker).
+	let moveFrom = $state<Record<string, string>>({});
+	let moveTo = $state<Record<string, string>>({});
+	// Workers who can take the face: the others of the pump not already in that photo.
+	const moveTargets = (person: any, sessionId: string) =>
+		data.people.filter(
+			(other: any) =>
+				other.id !== person.id && !other.faces.some((f: any) => f.sessionId === sessionId)
+		);
 	function tick(person: any, half: 'start' | 'end', value: boolean) {
 		const current = drafts[person.id] ?? {
 			start: person.morning_matched,
@@ -55,8 +67,9 @@
 			draft && (draft.start !== person.morning_matched || draft.end !== person.evening_matched)
 		);
 	}
-	function toggle(personId: string, tool: 'rename' | 'twice') {
-		open[personId] = open[personId] === tool ? undefined : tool;
+	function toggle(person: any, tool: Tool) {
+		open[person.id] = open[person.id] === tool ? undefined : tool;
+		if (tool === 'move' && !moveFrom[person.id]) moveFrom[person.id] = person.faces[0]?.sessionId;
 	}
 	// Marked counted twice for this half: the other worker kept the count.
 	const twiceFor = (personId: string, half: string) =>
@@ -275,14 +288,21 @@
 							class="tool"
 							type="button"
 							aria-expanded={open[person.id] === 'rename'}
-							onclick={() => toggle(person.id, 'rename')}
+							onclick={() => toggle(person, 'rename')}
 							data-testid="fix-rename-open"><Pencil size={15} /> Rename</button
 						>
+						{#if person.faces.length}<button
+								class="tool"
+								type="button"
+								aria-expanded={open[person.id] === 'move'}
+								onclick={() => toggle(person, 'move')}
+								data-testid="fix-move-open"><Shuffle size={15} /> Wrong worker?</button
+							>{/if}
 						{#if counted.length && data.people.length > 1}<button
 								class="tool"
 								type="button"
 								aria-expanded={open[person.id] === 'twice'}
-								onclick={() => toggle(person.id, 'twice')}
+								onclick={() => toggle(person, 'twice')}
 								><UserMinus size={15} /> Counted twice?</button
 							>{/if}
 					</div>
@@ -309,6 +329,69 @@
 								/></label
 							>
 							<button class="button button--primary" type="submit">Save name</button>
+						</form>
+					{:else if open[person.id] === 'move'}
+						{@const fromId = moveFrom[person.id] ?? person.faces[0]?.sessionId}
+						<form
+							class="panel"
+							method="POST"
+							action="?/moveFace&pump={data.pump.id}&day={data.day}"
+							use:enhance={rowEnhance(person.id)}
+							data-testid="fix-move"
+						>
+							<p class="panel__hint">
+								The camera counted someone else as {name}. The face goes to the right worker, who is
+								counted for that photo instead of {name}.
+							</p>
+							<input type="hidden" name="person_id" value={person.id} />
+							<fieldset class="move-faces">
+								<legend>Which face is wrong</legend>
+								{#each person.faces as face (face.evidenceId)}
+									<label class="move-face">
+										<input
+											type="radio"
+											name="session_id"
+											value={face.sessionId}
+											checked={face.sessionId === fromId}
+											onchange={() => {
+												moveFrom[person.id] = face.sessionId;
+												moveTo[person.id] = '';
+											}}
+										/>
+										<span class="face">
+											{#if face.hasCrop}<img
+													src={resolve('/api/attendance/face/[id]', { id: face.evidenceId })}
+													alt="{name} in the {shiftTypeLabel(face.sessionType).toLowerCase()} photo"
+													loading="lazy"
+												/>{/if}
+										</span>
+										<span>{shiftTypeLabel(face.sessionType)}</span>
+									</label>
+								{/each}
+							</fieldset>
+							<label class="field"
+								><span>This face is</span><select
+									name="to_person_id"
+									value={moveTo[person.id] ?? ''}
+									onchange={(e) => (moveTo[person.id] = e.currentTarget.value)}
+									data-testid="fix-move-to"
+									><option value="">A new worker</option
+									>{#each moveTargets(person, fromId) as other (other.id)}<option value={other.id}
+											>{label(other)}</option
+										>{/each}</select
+								></label
+							>
+							{#if !moveTo[person.id]}
+								<label class="field"
+									><span>New worker's name</span><input
+										name="name"
+										maxlength="60"
+										required
+										autocomplete="off"
+									/></label
+								>
+							{/if}
+							<button class="button button--primary" type="submit">Move the face</button>
 						</form>
 					{:else if open[person.id] === 'twice'}
 						<form
@@ -633,6 +716,41 @@
 		background: var(--surface-subtle);
 		border: 1px solid var(--brand-mist);
 		border-radius: var(--radius-md);
+	}
+	.move-faces {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+	.move-faces legend {
+		margin-bottom: var(--space-1);
+		font-size: var(--text-sm);
+		font-weight: 600;
+	}
+	.move-face {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-1) var(--space-2);
+		font-size: var(--text-sm);
+		background: var(--surface-raised);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+		cursor: pointer;
+	}
+	.move-face input {
+		flex: none;
+		width: 1.125rem;
+		height: 1.125rem;
+		min-height: 0;
+		margin: 0;
+	}
+	.move-face:has(input:checked) {
+		border-color: var(--brand-teal);
+		box-shadow: 0 0 0 1px var(--brand-teal);
 	}
 	.panel__hint {
 		margin: 0;

@@ -14,7 +14,7 @@ export type CorrectionActor = { role: 'admin' | 'plant-manager'; id: string };
 export function correctablePumps(role: CorrectionActor['role']) {
 	return role === 'admin'
 		? '$1::uuid IS NOT NULL'
-		: 'pu.plant_id IN (SELECT plant_id FROM plant_manager_assignments WHERE manager_id = $1)';
+		: 'pu.plant_id IN (SELECT plant_id FROM manager_plants WHERE manager_id = $1)';
 }
 
 export async function saveCorrection(actor: CorrectionActor, form: FormData) {
@@ -28,7 +28,11 @@ export async function saveCorrection(actor: CorrectionActor, form: FormData) {
 		return { status: 400, error: 'Invalid attendance correction request', personId };
 	}
 	if (reason.length < 5 || reason.length > 500) {
-		return { status: 400, error: 'Enter a correction reason between 5 and 500 characters', personId };
+		return {
+			status: 400,
+			error: 'Enter a correction reason between 5 and 500 characters',
+			personId
+		};
 	}
 
 	const client = await pool.connect();

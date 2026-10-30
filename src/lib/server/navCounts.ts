@@ -10,7 +10,7 @@ export type NavCounts = { attendance: number; fraud: number; approvals: number }
 export function pumpScope(role: NavRole, alias: string) {
 	if (role === 'vendor') return `${alias}.vendor_id = $1`;
 	if (role === 'plant-manager')
-		return `${alias}.plant_id IN (SELECT plant_id FROM plant_manager_assignments WHERE manager_id = $1)`;
+		return `${alias}.plant_id IN (SELECT plant_id FROM manager_plants WHERE manager_id = $1)`;
 	return 'TRUE';
 }
 

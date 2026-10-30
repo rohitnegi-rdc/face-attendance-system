@@ -146,7 +146,7 @@ async function audit(
 
 // The face counted for `fromPersonId` in this photo belongs to `toPersonId`, or to a new worker
 // when toPersonId is null (optional `name`). The face, its evidence and the shift slot move; the
-// admin has looked at it, so it joins the new worker's gallery.
+// admin or plant manager has looked at it, so it joins the new worker's gallery.
 export async function moveFace(
 	client: PoolClient,
 	input: {
@@ -154,7 +154,7 @@ export async function moveFace(
 		fromPersonId: string;
 		toPersonId: string | null;
 		name?: unknown;
-		adminId: string;
+		actor: FixActor;
 	}
 ): Promise<{ personId: string; createdPerson: boolean }> {
 	const session = await lockSession(client, input.sessionId);
@@ -170,7 +170,7 @@ export async function moveFace(
 			throw new FaceFixError('That worker already has a face in this photo.');
 		}
 	} else {
-		personId = await createWorker(client, session.pump_id, input.name);
+		personId = await createWorker(client, session.pump_id, input.name, input.actor.role);
 	}
 
 	await client.query(
@@ -187,7 +187,7 @@ export async function moveFace(
 	await setSlot(client, personId, session, true);
 	await trimGallery(client, personId);
 	await retireIfEmpty(client, input.fromPersonId);
-	await audit(client, input.adminId, 'move_face', session.id, {
+	await audit(client, input.actor, 'move_face', session.id, {
 		from_person_id: input.fromPersonId,
 		to_person_id: personId,
 		created_person: createdPerson
@@ -474,7 +474,7 @@ export async function resolveReviewFlag(
 			fromPersonId: flag.person_id,
 			toPersonId: fix.action === 'move' ? fix.personId : null,
 			name: fix.action === 'new_worker' ? fix.name : undefined,
-			adminId
+			actor: { role: 'admin', id: adminId }
 		}));
 	} else if (fix.action === 'mark_present') {
 		({ personId } = await markPresent(client, {

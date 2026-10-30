@@ -68,7 +68,9 @@ export async function findAccountByEmail(email: string): Promise<{
 	if (vendor) return { role: 'vendor', ...vendor };
 
 	const plantManager = await queryOne<any>(
-		`SELECT id, email, password_hash, must_change_password FROM plant_managers WHERE lower(email) = lower($1)`,
+		`SELECT id, email, password_hash, must_change_password,
+		        CASE WHEN disabled_at IS NULL THEN 'active' ELSE 'disabled' END AS status
+		 FROM plant_managers WHERE lower(email) = lower($1)`,
 		[email]
 	);
 	if (plantManager) return { role: 'plant-manager', ...plantManager };

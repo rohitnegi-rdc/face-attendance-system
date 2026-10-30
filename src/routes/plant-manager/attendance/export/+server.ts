@@ -8,12 +8,12 @@ import { buildHeadcountReport } from '$lib/server/headcountReport';
 export const GET: RequestHandler = async ({ locals, url }) => {
 	const managerId = locals.user!.id;
 	const plants = await query<{ name: string }>(
-		`SELECT pl.name FROM plants pl JOIN plant_manager_assignments pma ON pma.plant_id = pl.id
+		`SELECT pl.name FROM plants pl JOIN manager_plants pma ON pma.plant_id = pl.id
 		 WHERE pma.manager_id = $1 ORDER BY pl.name`,
 		[managerId]
 	);
 	const scope = {
-		where: `pl.id IN (SELECT plant_id FROM plant_manager_assignments WHERE manager_id = $1)`,
+		where: `pl.id IN (SELECT plant_id FROM manager_plants WHERE manager_id = $1)`,
 		params: [managerId],
 		description: `Plant manager, ${plants.map((p) => p.name).join(', ') || 'no plants assigned'}`
 	};

@@ -9,6 +9,7 @@ import { sendFraudAlertEmail } from './mailer.js';
 import { checkRecapture } from './recaptureCheck.js';
 import { pollPumpGps } from './gpsFeed.js';
 import { sendEndReminders } from './endReminders.js';
+import { sendMonitorDigests } from './monitorDigest.js';
 import {
 	assignFaces,
 	findCrossPumpMatch,
@@ -859,6 +860,15 @@ async function loop() {
 				log('error', { error: String(err?.message || err) }, 'shift end reminder sweep failed')
 			),
 		Number(process.env.END_REMINDER_POLL_SECONDS || 60) * 1000
+	).unref();
+
+	// The 8 pm email to monitors (worker/monitorDigest.js), checked every 5 minutes.
+	setInterval(
+		() =>
+			sendMonitorDigests(pool, log, testModeOn).catch((err) =>
+				log('error', { error: String(err?.message || err) }, 'monitor digest failed')
+			),
+		5 * 60 * 1000
 	).unref();
 
 	// Pump GPS positions for the shift start location check (worker/gpsFeed.js).

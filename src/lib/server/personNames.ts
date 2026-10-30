@@ -24,7 +24,7 @@ export async function renamePerson(actor: RenameActor, personId: string, rawName
 			   AND ($2 = 'admin'
 			        OR ($2 = 'vendor' AND pu.vendor_id = $3::uuid)
 			        OR ($2 = 'plant-manager' AND EXISTS (
-			              SELECT 1 FROM plant_manager_assignments pma
+			              SELECT 1 FROM manager_plants pma
 			              WHERE pma.plant_id = pu.plant_id AND pma.manager_id = $3::uuid)))
 			 FOR UPDATE OF p`,
 			[personId, actor.role, actor.id]

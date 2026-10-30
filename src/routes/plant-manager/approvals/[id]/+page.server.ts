@@ -22,7 +22,7 @@ async function loadSession(id: string, managerId: string) {
 		        (SELECT count(*)::int FROM attendance_face_evidence e WHERE e.session_id = s.id) AS faces
 		 FROM attendance_sessions s
 		 JOIN pumps pu ON pu.id = s.pump_id JOIN plants pl ON pl.id = pu.plant_id
-		 JOIN plant_manager_assignments pma ON pma.plant_id = pl.id AND pma.manager_id = $2
+		 JOIN manager_plants pma ON pma.plant_id = pl.id AND pma.manager_id = $2
 		 LEFT JOIN plant_managers pm ON pm.id = s.location_decided_by
 		 WHERE s.id = $1 AND s.location_status IS NOT NULL`,
 		[id, managerId]

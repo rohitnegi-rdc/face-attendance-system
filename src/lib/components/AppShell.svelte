@@ -15,6 +15,7 @@
 	import Factory from '@lucide/svelte/icons/factory';
 	import Fuel from '@lucide/svelte/icons/fuel';
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import Eye from '@lucide/svelte/icons/eye';
 	import ImageOff from '@lucide/svelte/icons/image-off';
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
@@ -30,11 +31,17 @@
 	let {
 		role,
 		userEmail = '',
+		isMonitor = false,
+		monitorOnly = false,
 		navCounts,
 		children
 	} = $props<{
 		role: 'admin' | 'vendor' | 'plant-manager';
 		userEmail?: string;
+		// A plant-manager login that watches whole Areas (admin Monitors page).
+		isMonitor?: boolean;
+		// A monitor with no plants of its own: no Overview, Approvals or Kept photos (for now).
+		monitorOnly?: boolean;
 		navCounts?: NavCounts;
 		children: import('svelte').Snippet;
 	}>();
@@ -123,6 +130,7 @@
 		{ href: resolve('/admin/photo-backups'), label: 'Kept photos', icon: ImageOff },
 		{ href: resolve('/admin/vendors'), label: 'Vendors', icon: Building2 },
 		{ href: resolve('/admin/plant-managers'), label: 'Plant managers', icon: Building2 },
+		{ href: resolve('/admin/monitors'), label: 'Monitors', icon: Eye },
 		{ href: resolve('/admin/import'), label: 'Imports', icon: FileUp },
 		{ href: resolve('/admin/logs'), label: 'Logs', icon: ScrollText },
 		{ href: resolve('/admin/settings'), label: 'Settings', icon: Settings }
@@ -164,8 +172,19 @@
 		{ href: resolve('/plant-manager/people'), label: 'People', icon: UsersRound }
 	];
 
+	const monitorHidden: string[] = [
+		resolve('/plant-manager'),
+		resolve('/plant-manager/approvals'),
+		resolve('/plant-manager/photo-backups')
+	];
 	let items = $derived(
-		role === 'admin' ? adminItems : role === 'vendor' ? vendorItems : plantManagerItems
+		role === 'admin'
+			? adminItems
+			: role === 'vendor'
+				? vendorItems
+				: monitorOnly
+					? plantManagerItems.filter((item) => !monitorHidden.includes(item.href))
+					: plantManagerItems
 	);
 
 	function isActive(item: { href: string; exact?: boolean }) {
@@ -229,7 +248,15 @@
 		</button>
 		<a
 			class="brand"
-			href={resolve(role === 'admin' ? '/admin' : role === 'vendor' ? '/vendor' : '/plant-manager')}
+			href={resolve(
+				role === 'admin'
+					? '/admin'
+					: role === 'vendor'
+						? '/vendor'
+						: monitorOnly
+							? '/plant-manager/attendance'
+							: '/plant-manager'
+			)}
 			aria-label="Face Attendance home"
 		>
 			<span class="brand__mark"><RdcLogo height={2.25} /></span>
@@ -242,7 +269,9 @@
 						? 'Administrator'
 						: role === 'vendor'
 							? 'Vendor'
-							: 'Plant Manager'}</strong
+							: isMonitor
+								? 'Monitor'
+								: 'Plant Manager'}</strong
 				>
 				<span>{userEmail}</span>
 			</div>

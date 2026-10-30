@@ -155,7 +155,7 @@ export const actions: Actions = {
 				fromPersonId: params.id,
 				toPersonId,
 				name: formText(form, 'name'),
-				adminId: locals.user!.id
+				actor: { role: 'admin', id: locals.user!.id }
 			});
 			return result.createdPerson
 				? 'Face moved to a new worker, who is marked present for that photo.'

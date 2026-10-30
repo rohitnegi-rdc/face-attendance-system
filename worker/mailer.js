@@ -95,3 +95,48 @@ export async function sendFraudAlertEmail(
 		log('error', { pumpCode, error: err.message }, 'fraud alert email failed to send');
 	}
 }
+
+const escapeHtml = (value) =>
+	String(value ?? '').replace(
+		/[&<>"']/g,
+		(c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+	);
+
+// The monitor's 8 pm list (worker/monitorDigest.js): one line per pump that needs a look.
+export async function sendMonitorDigestEmail({ to, name, day, pumps }, log) {
+	if (process.env.MAIL_ENABLED !== 'true') {
+		log('info', { to, pumps: pumps.length }, 'monitor digest email NOT sent (mail off)');
+		return;
+	}
+	const client = getTransporter();
+	if (!client) {
+		log('warn', { pumps: pumps.length }, 'monitor digest email skipped — SMTP not configured');
+		return;
+	}
+	const rows = pumps
+		.map(
+			(p) =>
+				`<tr><td><strong>${escapeHtml(p.pump_code)}</strong></td><td>${escapeHtml(p.plant_name)}, ${escapeHtml(p.area_name)}</td><td>${escapeHtml(p.problems.join(', '))}</td></tr>`
+		)
+		.join('');
+	const html = `
+		<p>Hello ${escapeHtml(name)},</p>
+		<p>${pumps.length} ${pumps.length === 1 ? 'pump needs' : 'pumps need'} a look for ${formatSessionDate(day)}:</p>
+		<table cellpadding="6" style="border-collapse:collapse">
+			<tr><th align="left">Pump</th><th align="left">Plant</th><th align="left">Needs a look</th></tr>
+			${rows}
+		</table>
+		<p>Sign in to Face Attendance and open Attendance to fix these pumps.</p>
+	`;
+	try {
+		await client.sendMail({
+			from: process.env.SMTP_FROM || process.env.SMTP_USER,
+			to,
+			subject: `${pumps.length} ${pumps.length === 1 ? 'pump needs' : 'pumps need'} a look, ${formatSessionDate(day)}`,
+			html
+		});
+		log('info', { pumps: pumps.length }, 'monitor digest email sent');
+	} catch (err) {
+		log('error', { error: err.message }, 'monitor digest email failed to send');
+	}
+}

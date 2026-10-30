@@ -2,6 +2,8 @@ import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { base, resolve as resolvePath } from '$app/paths';
 import { verifyToken } from '$lib/server/auth';
+import { COOKIE_PATH } from '$lib/server/cookies';
+import { queryOne } from '$lib/server/db';
 import { logger } from '$lib/server/log';
 import { CONTACT_ADMIN } from '$lib/errorMessages';
 
@@ -28,7 +30,22 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const token = isHttps
 		? event.cookies.get('session')
 		: (event.cookies.get('session_http') ?? event.cookies.get('session'));
-	const auth = token ? verifyToken(token) : null;
+	let auth = token ? verifyToken(token) : null;
+	// A plant-manager login an admin switched off (a removed monitor) is signed out at once,
+	// not when its 7-day session runs out.
+	if (auth?.role === 'plant-manager') {
+		const manager = await queryOne<{ disabled: boolean }>(
+			'SELECT disabled_at IS NOT NULL AS disabled FROM plant_managers WHERE id = $1',
+			[auth.id]
+		);
+		if (!manager || manager.disabled) {
+			event.cookies.delete(isHttps ? 'session' : 'session_http', {
+				path: COOKIE_PATH,
+				secure: isHttps
+			});
+			auth = null;
+		}
+	}
 	event.locals.user = auth;
 
 	// With BASE_PATH set, URLs arrive prefixed (/pump-attendance/admin). Guard on the path inside

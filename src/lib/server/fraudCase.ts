@@ -24,7 +24,7 @@ function sighting(prefix: 's' | 'm') {
 // Plant managers may open group photos of their own plants only (the photo route checks this too).
 function photoAllowed(role: NavRole, alias: string) {
 	return role === 'plant-manager'
-		? `${alias}.plant_id IN (SELECT plant_id FROM plant_manager_assignments WHERE manager_id = $2)`
+		? `${alias}.plant_id IN (SELECT plant_id FROM manager_plants WHERE manager_id = $2)`
 		: 'FALSE';
 }
 

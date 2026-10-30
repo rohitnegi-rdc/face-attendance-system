@@ -59,17 +59,20 @@ export const GET: RequestHandler = async ({ url, cookies, request }) => {
 
 		const email = payload.email!.trim().toLowerCase();
 		const account = await findAccountByEmail(email);
-		if (!account || (account.role === 'pump' && account.status === 'disabled')) {
+		if (!account || account.status === 'disabled') {
 			loginFailure('unassigned');
 		}
 
 		const mustChangePassword = account.must_change_password;
-		const token = signToken({
-			role: account.role,
-			id: account.id,
-			email: account.email,
-			...(mustChangePassword ? { mustChangePassword: true } : {})
-		}, mustChangePassword ? '15m' : '7d');
+		const token = signToken(
+			{
+				role: account.role,
+				id: account.id,
+				email: account.email,
+				...(mustChangePassword ? { mustChangePassword: true } : {})
+			},
+			mustChangePassword ? '15m' : '7d'
+		);
 		const isHttps = request.headers.get('x-forwarded-proto')?.split(',')[0].trim() === 'https';
 		cookies.set(isHttps ? 'session' : 'session_http', token, {
 			path: COOKIE_PATH,
