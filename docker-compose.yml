@@ -204,3 +204,13 @@ services:
 volumes:
   pgdata:
   uploads:
+
+# Fixed subnet for the project network. Without it Docker picks one from its default pools, which
+# include 192.168.0.0/20: when that matches the office LAN (192.168.0.x), the server routes replies
+# into this network and the server is reachable only over VPN. Override with DOCKER_SUBNET if
+# 10.201.0.0/24 is ever in use on the server's network.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: '${DOCKER_SUBNET:-10.201.0.0/24}'
