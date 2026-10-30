@@ -6,6 +6,7 @@
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import TodayCards from '$lib/components/TodayCards.svelte';
 	import { formatDate } from '$lib/date';
 
 	let { data } = $props();
@@ -20,7 +21,10 @@
 		{ label: 'Active workers', value: data.metrics.totalPersons, detail: 'Known identities' },
 		{
 			label: 'Full shifts',
-			value: data.metrics.avgElapsedHours === 'N/A' ? 'Not available' : `${data.metrics.avgElapsedHours}h`,
+			value:
+				data.metrics.avgElapsedHours === 'N/A'
+					? 'Not available'
+					: `${data.metrics.avgElapsedHours}h`,
 			detail: 'Average interval today'
 		}
 	]);
@@ -65,14 +69,36 @@
 			<div class="today-summary__icon"><CalendarCheck size={22} /></div>
 			<div>
 				<h2 id="today-heading">Today</h2>
-				<p><strong>{data.metrics.presentToday}</strong> fully present out of <strong>{data.metrics.totalToday}</strong> recorded workers</p>
+				<p>
+					<strong>{data.metrics.presentToday}</strong> fully present out of
+					<strong>{data.metrics.totalToday}</strong> recorded workers
+				</p>
 			</div>
 		</div>
 		<div class="coverage" aria-label={`${data.metrics.attendancePct}% attendance today`}>
-			<div class="coverage__track"><span style={`width: ${data.metrics.attendancePct}%`}></span></div>
+			<div class="coverage__track">
+				<span style={`width: ${data.metrics.attendancePct}%`}></span>
+			</div>
 			<strong>{data.metrics.attendancePct}%</strong>
 		</div>
 	</section>
+
+	{#if data.areas.length}
+		<section class="areas" aria-labelledby="areas-heading">
+			<div class="areas__head">
+				<h2 id="areas-heading">Areas today</h2>
+				<a href={resolve('/admin/areas')}>All areas</a>
+			</div>
+			<TodayCards
+				bounded
+				testId="admin-areas"
+				items={data.areas.map((area) => ({
+					...area,
+					href: resolve('/admin/areas/[id]', { id: area.id })
+				}))}
+			/>
+		</section>
+	{/if}
 
 	<MetricStrip {metrics} testId="admin-metrics" />
 
@@ -144,7 +170,11 @@
 						<tr>
 							<td><a href={resolve(`/admin/pumps/${session.pump_id}`)}>{session.pump_code}</a></td>
 							<td>{session.plant_name}</td>
-							<td><span class="session-type">{session.session_type === 'morning' ? 'Shift start' : 'Shift end'}</span></td>
+							<td
+								><span class="session-type"
+									>{session.session_type === 'morning' ? 'Shift start' : 'Shift end'}</span
+								></td
+							>
 							<td>{formatDate(session.submitted_at)}</td>
 							<td
 								><StatusBadge
@@ -193,8 +223,13 @@
 		border-radius: var(--radius-md);
 	}
 	.today-summary h2,
-	.today-summary p { margin: 0; }
-	.today-summary p { margin-top: var(--space-1); color: var(--ink-default); }
+	.today-summary p {
+		margin: 0;
+	}
+	.today-summary p {
+		margin-top: var(--space-1);
+		color: var(--ink-default);
+	}
 	.coverage {
 		display: grid;
 		grid-template-columns: minmax(8rem, 1fr) auto;
@@ -207,8 +242,34 @@
 		background: rgb(255 255 255 / 75%);
 		border-radius: var(--radius-sm);
 	}
-	.coverage__track span { display: block; height: 100%; background: var(--brand-teal); }
-	.coverage strong { font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+	.coverage__track span {
+		display: block;
+		height: 100%;
+		background: var(--brand-teal);
+	}
+	.coverage strong {
+		font-size: var(--text-lg);
+		font-variant-numeric: tabular-nums;
+	}
+	/* Areas side by side so they can be compared at a glance; one column on a phone. */
+	.areas {
+		margin-bottom: var(--space-4);
+	}
+	.areas__head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--space-1) var(--space-3);
+		margin-bottom: var(--space-3);
+	}
+	.areas__head h2 {
+		margin: 0;
+	}
+	.areas__head a {
+		font-size: var(--text-sm);
+		font-weight: 700;
+	}
 	.overview-grid {
 		display: grid;
 		grid-template-columns: minmax(0, 1.55fr) minmax(18rem, 0.8fr);
@@ -299,14 +360,23 @@
 		font-weight: 700;
 		text-align: right;
 	}
-	.session-type { text-transform: capitalize; }
+	.session-type {
+		text-transform: capitalize;
+	}
 	@media (max-width: 64rem) {
 		.overview-grid {
 			grid-template-columns: 1fr;
 		}
 	}
 	@media (max-width: 47.99rem) {
-		.today-summary { grid-template-columns: 1fr; gap: var(--space-4); padding: var(--space-4); }
-		.queue-row { grid-template-columns: 1.75rem 1fr auto auto; padding: var(--space-3); }
+		.today-summary {
+			grid-template-columns: 1fr;
+			gap: var(--space-4);
+			padding: var(--space-4);
+		}
+		.queue-row {
+			grid-template-columns: 1.75rem 1fr auto auto;
+			padding: var(--space-3);
+		}
 	}
 </style>

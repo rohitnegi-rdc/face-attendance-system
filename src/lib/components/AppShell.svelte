@@ -12,6 +12,7 @@
 	import UsersRound from '@lucide/svelte/icons/users-round';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import FileUp from '@lucide/svelte/icons/file-up';
+	import Factory from '@lucide/svelte/icons/factory';
 	import Fuel from '@lucide/svelte/icons/fuel';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import ImageOff from '@lucide/svelte/icons/image-off';
@@ -99,6 +100,10 @@
 
 	const adminItems: NavItem[] = [
 		{ href: resolve('/admin'), label: 'Overview', icon: LayoutDashboard, exact: true },
+		// Area > Plant > Pump, together and near the top: the quick way to one place's attendance.
+		{ href: resolve('/admin/areas'), label: 'Areas', icon: MapPin },
+		{ href: resolve('/admin/plants'), label: 'Plants', icon: Factory },
+		{ href: resolve('/admin/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/admin/insights'), label: 'Insights', icon: ChartNoAxesCombined },
 		{
 			href: resolve('/admin/attendance'),
@@ -116,7 +121,6 @@
 		{ href: resolve('/admin/flagged-guests'), label: 'Guest review', icon: ScanFace },
 		{ href: resolve('/admin/merge-candidates'), label: 'Merge review', icon: UsersRound },
 		{ href: resolve('/admin/photo-backups'), label: 'Kept photos', icon: ImageOff },
-		{ href: resolve('/admin/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/admin/vendors'), label: 'Vendors', icon: Building2 },
 		{ href: resolve('/admin/plant-managers'), label: 'Plant managers', icon: Building2 },
 		{ href: resolve('/admin/import'), label: 'Imports', icon: FileUp },

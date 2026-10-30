@@ -2,6 +2,7 @@ import type { PageServerLoad } from './$types';
 import { query, queryOne } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
 import { faceMatchThreshold } from '$lib/server/matching';
+import { groupsToday } from '$lib/server/attendanceRollup';
 
 export const load: PageServerLoad = async () => {
 	const today = todayIST();
@@ -14,7 +15,8 @@ export const load: PageServerLoad = async () => {
 		avgElapsed,
 		pendingMerges,
 		trend,
-		recentActivity
+		recentActivity,
+		areas
 	] = await Promise.all([
 		queryOne<any>(
 			`SELECT COUNT(*) FILTER (WHERE morning_matched AND evening_matched) AS present,
@@ -27,7 +29,11 @@ export const load: PageServerLoad = async () => {
 			[today]
 		),
 		queryOne<any>(`SELECT COUNT(*) AS c FROM persons WHERE status = 'active'`),
-		queryOne<any>(`SELECT COUNT(*) AS c FROM fraud_flags WHERE created_at::date = $1`, [today]),
+		queryOne<any>(
+			`SELECT COUNT(*) AS c FROM fraud_flags
+			 WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1`,
+			[today]
+		),
 		queryOne<any>(`SELECT COUNT(*) AS c FROM flagged_guests WHERE reviewed = false`),
 		queryOne<any>(
 			`SELECT AVG(EXTRACT(EPOCH FROM (b.submitted_at - a.submitted_at)) / 3600) AS avg_hours
@@ -71,7 +77,9 @@ export const load: PageServerLoad = async () => {
 			 JOIN pumps pu ON pu.id = s.pump_id
 			 JOIN plants pl ON pl.id = pu.plant_id
 			 ORDER BY s.submitted_at DESC LIMIT 12`
-		)
+		),
+		// Today per area, on the same counts as the totals above, so the areas add up to them.
+		groupsToday('area', today)
 	]);
 
 	const present = Number(attendanceToday?.present ?? 0);
@@ -89,6 +97,7 @@ export const load: PageServerLoad = async () => {
 			avgElapsedHours: avgElapsed?.avg_hours ? Number(avgElapsed.avg_hours).toFixed(1) : 'N/A'
 		},
 		trend,
-		recentActivity
+		recentActivity,
+		areas
 	};
 };

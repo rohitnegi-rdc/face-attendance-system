@@ -1,9 +1,11 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
+	import PumpTodayList from '$lib/components/PumpTodayList.svelte';
+	import TodayCards from '$lib/components/TodayCards.svelte';
+	import { formatDate } from '$lib/date';
 
 	let { data } = $props();
 	let from = $state('');
@@ -12,138 +14,67 @@
 		if (!from) from = data.range.from;
 		if (!to) to = data.range.to;
 	});
-
-	const plantEntities = $derived(
-		data.plants.map((plant: any) => ({ id: plant.id, label: plant.name }))
-	);
-	const pumpEntities = $derived(
-		data.pumps.map((pump: any) => ({ id: pump.id, label: pump.pump_code }))
-	);
-
 	function apply() {
 		window.location.search = new URLSearchParams({ from, to }).toString();
-	}
-
-	function plantCellValue(plantId: string, day: string) {
-		const value = data.plantDailyMap[`${plantId}|${day}`];
-		return !value || value.total === 0 ? null : Math.round((value.present / value.total) * 100);
-	}
-	function pumpCellValue(pumpId: string, day: string) {
-		const value = data.pumpDailyMap[`${pumpId}|${day}`];
-		return !value || value.total === 0 ? null : Math.round((value.present / value.total) * 100);
-	}
-	function pageUrl(param: string, n: number) {
-		const params = new URLSearchParams(page.url.search);
-		params.set(param, String(n));
-		return `?${params.toString()}`;
 	}
 </script>
 
 <svelte:head><title>{data.area.name} | Face Attendance</title></svelte:head>
 
 <div class="page detail-page">
-	<a class="back-link" href={resolve('/admin/attendance')}><ArrowLeft size={16} /> Attendance records</a>
+	<a class="back-link" href={resolve('/admin/areas')}><ArrowLeft size={16} /> Areas</a>
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Area</p>
 			<h1>{data.area.name}</h1>
-			<p>Plant- and pump-level attendance across the selected range.</p>
+			<p>
+				{data.plants.length}
+				{data.plants.length === 1 ? 'plant' : 'plants'} · {data.pumps.length}
+				{data.pumps.length === 1 ? 'pump' : 'pumps'}
+			</p>
 		</div>
 	</header>
-	<DateRangePicker bind:from bind:to onchange={apply} />
 
-	<section class="section">
-		<div class="section-header">
-			<div>
-				<h2>Attendance by plant</h2>
-				<p class="supporting-text">
-					Daily percentage of complete attendance &middot; scroll for more days.
-				</p>
-			</div>
-		</div>
-		<div class="calendar-frame">
-			<AttendanceCalendarGrid
-				days={data.days}
-				entities={plantEntities}
-				cellValue={plantCellValue}
-				mode="percent"
-				entityLabel="Plant"
-			/>
-		</div>
-	</section>
-	<section class="section">
-		<div class="section-header"><h2>Plants</h2></div>
-		<div class="table-wrap">
-			<table class="data-table">
-				<thead><tr><th>Plant</th><th>Manager</th><th>Attendance in range</th></tr></thead><tbody
-					>{#each data.plants as plant}<tr
-							><td><strong>{plant.name}</strong></td><td
-								>{#if plant.manager_email}{plant.manager_name} · {plant.manager_email}{:else}—{/if}</td
-							><td>{plant.attendancePct}%</td></tr
-						>{/each}</tbody
-				>
-			</table>
-		</div>
-		{#if data.plantPagination.totalPages > 1}
-			<nav class="pager" aria-label="Plants pagination">
-				{#if data.plantPagination.page > 1}<a
-						class="button button--secondary"
-						href={pageUrl('plant_page', data.plantPagination.page - 1)}>Previous</a
-					>{:else}<span></span>{/if}
-				<span>Page {data.plantPagination.page} of {data.plantPagination.totalPages}</span>
-				{#if data.plantPagination.page < data.plantPagination.totalPages}<a
-						class="button button--secondary"
-						href={pageUrl('plant_page', data.plantPagination.page + 1)}>Next</a
-					>{/if}
-			</nav>
-		{/if}
+	<section class="section" aria-labelledby="plants-heading">
+		<h2 id="plants-heading">Plants today, {formatDate(data.today)}</h2>
+		<TodayCards
+			testId="area-plants"
+			items={data.plants.map((plant) => ({
+				...plant,
+				href: resolve('/admin/plants/[id]', { id: plant.id })
+			}))}
+		/>
 	</section>
 
-	<section class="section">
+	<section class="section" aria-labelledby="pumps-heading">
+		<h2 id="pumps-heading">Pumps <span class="count">{data.pumps.length}</span></h2>
+		<PumpTodayList pumps={data.pumps} rangeLabel={data.range.label} showPlant />
+	</section>
+
+	<section class="section" aria-labelledby="calendar-heading">
 		<div class="section-header">
 			<div>
-				<h2>Attendance by pump</h2>
-				<p class="supporting-text">
-					Daily percentage of complete attendance &middot; scroll for more days.
-				</p>
+				<h2 id="calendar-heading">Attendance by day</h2>
+				<p class="supporting-text">Percent of workers with a full shift, per day.</p>
 			</div>
 		</div>
-		<div class="calendar-frame">
-			<AttendanceCalendarGrid
-				days={data.days}
-				entities={pumpEntities}
-				cellValue={pumpCellValue}
-				mode="percent"
-				entityLabel="Pump"
-			/>
-		</div>
-	</section>
-	<section class="section">
-		<div class="section-header"><h2>Pumps</h2></div>
-		<div class="table-wrap">
-			<table class="data-table">
-				<thead><tr><th>Pump</th><th>Plant</th><th>Attendance in range</th></tr></thead><tbody
-					>{#each data.pumps as pump}<tr
-							><td><a href={resolve(`/admin/pumps/${pump.id}`)}>{pump.pump_code}</a></td><td
-								>{pump.plant_name}</td
-							><td>{pump.attendancePct}%</td></tr
-						>{/each}</tbody
-				>
-			</table>
-		</div>
-		{#if data.pumpPagination.totalPages > 1}
-			<nav class="pager" aria-label="Pumps pagination">
-				{#if data.pumpPagination.page > 1}<a
-						class="button button--secondary"
-						href={pageUrl('pump_page', data.pumpPagination.page - 1)}>Previous</a
-					>{:else}<span></span>{/if}
-				<span>Page {data.pumpPagination.page} of {data.pumpPagination.totalPages}</span>
-				{#if data.pumpPagination.page < data.pumpPagination.totalPages}<a
-						class="button button--secondary"
-						href={pageUrl('pump_page', data.pumpPagination.page + 1)}>Next</a
-					>{/if}
-			</nav>
-		{/if}
+		<DateRangePicker bind:from bind:to onchange={apply} />
+		<h3>By plant</h3>
+		<AttendanceCalendarGrid
+			days={data.range.days}
+			entities={data.plants.map((plant) => ({ id: plant.id, label: plant.name }))}
+			cellValue={(id: string, day: string) => data.plantDaily[`${id}|${day}`] ?? null}
+			mode="percent"
+			entityLabel="Plant"
+		/>
+		<h3>By pump</h3>
+		<AttendanceCalendarGrid
+			days={data.range.days}
+			entities={data.pumps.map((pump) => ({ id: pump.id, label: pump.pumpCode }))}
+			cellValue={(id: string, day: string) => data.pumpDaily[`${id}|${day}`] ?? null}
+			mode="percent"
+			entityLabel="Pump"
+		/>
 	</section>
 </div>
 
@@ -155,7 +86,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-1);
-		margin-bottom: var(--space-5);
+		margin-bottom: var(--space-4);
 		font-size: var(--text-sm);
 		font-weight: 600;
 		text-decoration: none;
@@ -167,14 +98,16 @@
 		font-weight: 700;
 		text-transform: uppercase;
 	}
-	.calendar-frame :global(.grid-wrap) {
-		width: 100%;
+	.section h2 {
+		margin: 0 0 var(--space-3);
 	}
-	.pager {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--space-3);
-		margin-top: var(--space-3);
+	.section h3 {
+		margin: var(--space-4) 0 var(--space-2);
+		font-size: var(--text-base);
+	}
+	.count {
+		color: var(--ink-muted);
+		font-size: var(--text-base);
+		font-weight: 600;
 	}
 </style>
