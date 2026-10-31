@@ -30,6 +30,7 @@
 		reset_settings: 'Reset settings',
 		set_fraud_check: 'Switched fraud check',
 		set_test_mode: 'Switched test mode',
+		set_approval_email: 'Switched location approval emails',
 		update_digest_cc: 'Changed attendance email copies',
 		update_digest_areas: 'Changed attendance email areas',
 		delete_session: 'Deleted a session',
@@ -198,6 +199,31 @@
 				<button type="submit" class="button button--primary">Add</button>
 			</form>
 		</div>
+	</section>
+
+	<section
+		class="surface surface--padded section"
+		aria-labelledby="approval-email-heading"
+		data-testid="approval-email-section"
+	>
+		<h2 id="approval-email-heading">Location approval email</h2>
+		<p class="supporting-text">
+			When a shift start photo is sent too far from the pump, the shift waits for the plant
+			manager's approval on their Approvals page. This switch only decides whether they also get an
+			email for it. The approval works either way.
+		</p>
+		{#if form?.formKind === 'approval-email' && form?.message}
+			<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+		{/if}
+		<p class="supporting-text" data-testid="approval-email-state">
+			Approval emails are <strong>{data.approvalEmailOn ? 'on' : 'off'}</strong>.
+		</p>
+		<form method="POST" action="?/approvalEmail" class="settings-actions">
+			<input type="hidden" name="on" value={data.approvalEmailOn ? 'false' : 'true'} />
+			<button type="submit" class="button button--secondary">
+				{data.approvalEmailOn ? 'Turn approval emails off' : 'Turn approval emails on'}
+			</button>
+		</form>
 	</section>
 
 	<section

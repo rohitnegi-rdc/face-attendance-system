@@ -10,6 +10,8 @@ import {
 	getAttendanceSettingsWithSource,
 	getDigestCc,
 	getDigestFirstDay,
+	isApprovalEmailOn,
+	APPROVAL_EMAIL_KEY,
 	parseEmailList,
 	getTestMode,
 	validateAttendanceSettings,
@@ -17,25 +19,28 @@ import {
 } from '$lib/server/settings';
 
 export const load: PageServerLoad = async () => {
-	const [settings, testMode, digestCc, digestFirstDay, digestAreas, auditLog] = await Promise.all([
-		getAttendanceSettingsWithSource(),
-		getTestMode(),
-		getDigestCc(),
-		getDigestFirstDay(),
-		query<{ id: string; name: string; digest_enabled: boolean }>(
-			'SELECT id, name, digest_enabled FROM areas ORDER BY name'
-		),
-		query<any>(
-			`SELECT l.id, l.action, l.target_type, l.target_id, l.details, l.created_at, ad.email AS admin_email
+	const [settings, testMode, approvalEmailOn, digestCc, digestFirstDay, digestAreas, auditLog] =
+		await Promise.all([
+			getAttendanceSettingsWithSource(),
+			getTestMode(),
+			isApprovalEmailOn(),
+			getDigestCc(),
+			getDigestFirstDay(),
+			query<{ id: string; name: string; digest_enabled: boolean }>(
+				'SELECT id, name, digest_enabled FROM areas ORDER BY name'
+			),
+			query<any>(
+				`SELECT l.id, l.action, l.target_type, l.target_id, l.details, l.created_at, ad.email AS admin_email
 			 FROM admin_audit_log l LEFT JOIN admins ad ON ad.id = l.admin_id
 			 ORDER BY l.created_at DESC LIMIT 25`
-		)
-	]);
+			)
+		]);
 	return {
 		settings,
 		defaults: ATTENDANCE_SETTING_DEFAULTS,
 		limits: ATTENDANCE_SETTING_LIMITS,
 		testMode,
+		approvalEmailOn,
 		digestCc,
 		digestFirstDay,
 		digestAreas,
@@ -168,6 +173,45 @@ export const actions: Actions = {
 		);
 	},
 	// Test mode on or off: the cross-pump fraud check and the attendance alert emails.
+	// Whether plant managers get an email for a shift waiting for their location approval.
+	approvalEmail: async ({ request, locals }) => {
+		const on = (await request.formData()).get('on') === 'true';
+		const adminId = locals.user!.id;
+		const client = await pool.connect();
+		try {
+			await client.query('BEGIN');
+			await client.query(
+				`INSERT INTO app_settings (key, value, updated_by_admin_id, updated_at)
+				 VALUES ($1, $2, $3, now())
+				 ON CONFLICT (key) DO UPDATE
+				 SET value = EXCLUDED.value, updated_by_admin_id = EXCLUDED.updated_by_admin_id,
+				     updated_at = now()`,
+				[APPROVAL_EMAIL_KEY, on ? 'on' : 'off', adminId]
+			);
+			await client.query(
+				`INSERT INTO admin_audit_log (admin_id, action, target_type, details)
+				 VALUES ($1, 'set_approval_email', 'app_settings', $2)`,
+				[adminId, JSON.stringify({ on })]
+			);
+			await client.query('COMMIT');
+		} catch (saveError) {
+			await client.query('ROLLBACK').catch(() => {});
+			logger.error({ adminId, error: String(saveError) }, 'approval email switch failed');
+			return fail(500, {
+				formKind: 'approval-email',
+				message: 'Could not change it. Nothing was changed.'
+			});
+		} finally {
+			client.release();
+		}
+		return {
+			formKind: 'approval-email',
+			success: true,
+			message: on
+				? 'Approval emails are on. Plant managers get an email for each shift waiting for them.'
+				: 'Approval emails are off. Plant managers see waiting shifts on their Approvals page only.'
+		};
+	},
 	testMode: async ({ request, locals }) => {
 		const on = (await request.formData()).get('on') === 'true';
 		const adminId = locals.user!.id;

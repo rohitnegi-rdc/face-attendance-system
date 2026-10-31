@@ -90,6 +90,17 @@ export function validateAttendanceSettings(settings: AttendanceSettings): string
 // those. Off (no row) is production. Every admin page shows a banner while it is on.
 // worker/index.js reads the same key (testModeOn); keep the name in sync.
 export const TEST_MODE_KEY = 'test_mode';
+// The location approval email to plant managers (src/lib/server/locationCheck.ts), switched at
+// /admin/settings. Off unless the row says 'on'; the approval itself works either way.
+export const APPROVAL_EMAIL_KEY = 'location_approval_email';
+
+export async function isApprovalEmailOn(db: Pool | PoolClient = pool): Promise<boolean> {
+	const { rows } = await db.query<{ value: string }>(
+		'SELECT value FROM app_settings WHERE key = $1',
+		[APPROVAL_EMAIL_KEY]
+	);
+	return rows[0]?.value === 'on';
+}
 
 export type TestModeState = { on: boolean; since: Date | null; by: string | null };
 

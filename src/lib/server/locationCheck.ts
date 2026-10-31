@@ -2,12 +2,13 @@
 // reading (copied from the optimizer database every 5 minutes by worker/gpsFeed.js into
 // pump_locations).
 // Within range the shift starts normally; otherwise it starts on hold and the plant manager is
-// emailed to approve or reject it. Only areas with location_check_enabled are checked.
+// emailed to approve or reject it (when the admin has the email switched on at /admin/settings).
+// Only areas with location_check_enabled are checked.
 import { escapeHtml, mailEnabled, mailer, mailFrom } from '$lib/server/mail';
 import type { PoolClient } from 'pg';
 import { query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
-import { isTestModeOn } from '$lib/server/settings';
+import { isApprovalEmailOn, isTestModeOn } from '$lib/server/settings';
 
 export const LOCATION_RADIUS_M = 100;
 // Pumps report about every 10 minutes and the worker copies every 5; 30 minutes allows a missed
@@ -154,6 +155,11 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 		// Test mode (admin switch): the plant manager still sees the approval in the app, no email.
 		if (await isTestModeOn()) {
 			logger.info({ sessionId, to }, 'location approval email NOT sent (test mode)');
+			return;
+		}
+		// Switched off at /admin/settings: the manager approves on the Approvals page, no email.
+		if (!(await isApprovalEmailOn())) {
+			logger.info({ sessionId, to }, 'location approval email NOT sent (switched off)');
 			return;
 		}
 		if (!mailEnabled()) {

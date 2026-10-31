@@ -232,6 +232,31 @@ test('LOC-06 only the plant manager of that plant sees it; login returns to the 
 
 test('LOC-07 held shift emails the plant manager an absolute approval link', async () => {
 	test.skip(!process.env.REGRESSION_OUTPUT_DIR, 'needs the app log from run-regression');
+	const admin = await login((await createAdmin()).email);
+	expect((await action(admin, '/admin/settings?/approvalEmail', { on: 'true' })).type).toBe(
+		'success'
+	);
+	try {
+		const { plantId } = await checkedArea();
+		const pump = await createPump(plantId);
+		const manager = await createPlantManager(plantId);
+		const { session } = await startShift(await login(pump.email), null);
+
+		const mails = await logLines('app', [session.id, 'location approval email']);
+		expect(mails).toHaveLength(1);
+		const [mail] = mails;
+		expect(mail.message).toBe('location approval email NOT sent (mail off)');
+		expect(mail.to).toEqual([manager.email]);
+		expect(mail.subject).toContain(pump.code);
+		// Regression: the link was once built as "<origin>../../plant-manager/...".
+		expect(mail.approvalUrl).toBe(`${BASE_URL}/plant-manager/approvals/${session.id}`);
+	} finally {
+		await db.query(`DELETE FROM app_settings WHERE key = 'location_approval_email'`);
+	}
+});
+
+test('LOC-12 approval emails are off by default; the shift still waits for approval', async () => {
+	test.skip(!process.env.REGRESSION_OUTPUT_DIR, 'needs the app log from run-regression');
 	const { plantId } = await checkedArea();
 	const pump = await createPump(plantId);
 	const manager = await createPlantManager(plantId);
@@ -239,12 +264,9 @@ test('LOC-07 held shift emails the plant manager an absolute approval link', asy
 
 	const mails = await logLines('app', [session.id, 'location approval email']);
 	expect(mails).toHaveLength(1);
-	const [mail] = mails;
-	expect(mail.message).toBe('location approval email NOT sent (mail off)');
-	expect(mail.to).toEqual([manager.email]);
-	expect(mail.subject).toContain(pump.code);
-	// Regression: the link was once built as "<origin>../../plant-manager/...".
-	expect(mail.approvalUrl).toBe(`${BASE_URL}/plant-manager/approvals/${session.id}`);
+	expect(mails[0].message).toBe('location approval email NOT sent (switched off)');
+	expect(mails[0].to).toEqual([manager.email]);
+	expect(session.location_status).toBe('pending');
 });
 
 test('LOC-11 in test mode a held shift is logged, not emailed, and still waits for approval', async () => {
