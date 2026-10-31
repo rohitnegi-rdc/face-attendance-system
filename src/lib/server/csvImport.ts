@@ -71,18 +71,20 @@ export async function importCsv(csvText: string): Promise<ImportSummary> {
 				continue;
 			}
 
-			// find-or-create Area
-			let area = await queryOne<any>('SELECT id FROM areas WHERE name = $1', [areaName]);
+			// find-or-create Area; 'mumbai' finds 'Mumbai' rather than making a second Area
+			let area = await queryOne<any>('SELECT id FROM areas WHERE lower(name) = lower($1)', [
+				areaName
+			]);
 			if (!area) {
 				area = await queryOne<any>('INSERT INTO areas (name) VALUES ($1) RETURNING id', [areaName]);
 				summary.areas_created++;
 			}
 
 			// find-or-create Plant (scoped to area)
-			let plant = await queryOne<any>('SELECT id FROM plants WHERE area_id = $1 AND name = $2', [
-				area.id,
-				plantName
-			]);
+			let plant = await queryOne<any>(
+				'SELECT id FROM plants WHERE area_id = $1 AND lower(name) = lower($2)',
+				[area.id, plantName]
+			);
 			if (!plant) {
 				plant = await queryOne<any>(
 					'INSERT INTO plants (area_id, name) VALUES ($1, $2) RETURNING id',

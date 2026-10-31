@@ -14,6 +14,7 @@
 	import FileUp from '@lucide/svelte/icons/file-up';
 	import Factory from '@lucide/svelte/icons/factory';
 	import Fuel from '@lucide/svelte/icons/fuel';
+	import Power from '@lucide/svelte/icons/power';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Eye from '@lucide/svelte/icons/eye';
 	import ImageOff from '@lucide/svelte/icons/image-off';
@@ -111,6 +112,7 @@
 		{ href: resolve('/admin/areas'), label: 'Areas', icon: MapPin },
 		{ href: resolve('/admin/plants'), label: 'Plants', icon: Factory },
 		{ href: resolve('/admin/pumps'), label: 'Pumps', icon: Fuel },
+		{ href: resolve('/admin/pump-status'), label: 'Pump status', icon: Power },
 		{ href: resolve('/admin/insights'), label: 'Insights', icon: ChartNoAxesCombined },
 		{
 			href: resolve('/admin/attendance'),
@@ -169,6 +171,7 @@
 		},
 		{ href: resolve('/plant-manager/photo-backups'), label: 'Kept photos', icon: ImageOff },
 		{ href: resolve('/plant-manager/pumps'), label: 'Pumps', icon: Fuel },
+		{ href: resolve('/plant-manager/pump-status'), label: 'Pump status', icon: Power },
 		{ href: resolve('/plant-manager/people'), label: 'People', icon: UsersRound }
 	];
 

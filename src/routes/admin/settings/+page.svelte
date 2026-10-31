@@ -1,6 +1,28 @@
 <script lang="ts">
 	import { formatDate, formatDateTime } from '$lib/date';
 	let { data, form } = $props();
+	// Ticked areas first, so the ones that get the email are seen without scrolling.
+	const pickOrder = $derived(
+		[...data.digestAreas].sort((a, b) => Number(b.digest_enabled) - Number(a.digest_enabled))
+	);
+	// "Mon, 2 Nov 2026" for a YYYY-MM-DD day.
+	function humanDay(value: string) {
+		return new Intl.DateTimeFormat('en-GB', {
+			weekday: 'short',
+			day: 'numeric',
+			month: 'short',
+			year: 'numeric',
+			timeZone: 'UTC'
+		})
+			.format(new Date(`${value}T00:00:00Z`))
+			.replace(/^(\w+) /, '$1, ')
+			.replace('Sept', 'Sep');
+	}
+	const nextDay = (value: string) =>
+		new Date(Date.parse(`${value}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+	const enabledAreas = $derived(
+		data.digestAreas.filter((area) => area.digest_enabled).map((area) => area.name)
+	);
 
 	const sourceLabel = { admin: 'Set here', env: 'From server env', default: 'Default' } as const;
 	const actionLabel: Record<string, string> = {
@@ -8,6 +30,8 @@
 		reset_settings: 'Reset settings',
 		set_fraud_check: 'Switched fraud check',
 		set_test_mode: 'Switched test mode',
+		update_digest_cc: 'Changed attendance email copies',
+		update_digest_areas: 'Changed attendance email areas',
 		delete_session: 'Deleted a session',
 		clear_pump_attendance: 'Cleared pump data',
 		clear_test_attendance: 'Cleared test records'
@@ -34,7 +58,7 @@
 		</div>
 	</header>
 
-	{#if form?.message}
+	{#if form?.message && form?.formKind !== 'digest'}
 		<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
 	{/if}
 
@@ -92,6 +116,88 @@
 				starts.
 			</p>
 		{/if}
+	</section>
+
+	<section
+		class="surface surface--padded section"
+		aria-labelledby="digest-heading"
+		data-testid="digest-cc-section"
+	>
+		<h2 id="digest-heading">Daily attendance email</h2>
+		<p class="supporting-text">
+			Every morning at 9 am, one email per ticked area with the attendance of the day before: full
+			shift, start only and end only for every Active and Idle pump (set at Pump status), a pump
+			with no one counted in red. It goes to the admins and the area's monitors, with a copy to
+			everyone on the CC list below and no one else.
+		</p>
+		{#if data.digestFirstDay}
+			<p class="supporting-text" data-testid="digest-first">
+				First email: <strong>{humanDay(nextDay(data.digestFirstDay))}, 9 am</strong>, about
+				{humanDay(data.digestFirstDay)}. No email is sent for an earlier day.
+			</p>
+		{/if}
+		{#if form?.formKind === 'digest' && form?.message}
+			<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+		{/if}
+		<form method="POST" action="?/digestAreas" class="digest-form" data-testid="digest-areas">
+			<fieldset class="area-picks">
+				<legend>Send for these areas</legend>
+				<div class="area-list">
+					{#each pickOrder as area (area.id)}
+						<label class="area-pick"
+							><input type="checkbox" name="area" value={area.id} checked={area.digest_enabled} />
+							{area.name}</label
+						>
+					{/each}
+				</div>
+			</fieldset>
+			<p class="supporting-text" data-testid="digest-areas-now">
+				{#if enabledAreas.length}Goes out now for: <strong>{enabledAreas.join(', ')}</strong
+					>.{:else}<strong>No area is ticked, so no attendance email goes out.</strong>{/if}
+			</p>
+			<div class="settings-actions">
+				<button type="submit" class="button button--primary">Save areas</button>
+			</div>
+		</form>
+		<div class="cc-block" data-testid="digest-cc">
+			<h3 class="cc-title">CC ({data.digestCc.length})</h3>
+			{#if form?.formKind === 'digest-cc' && form?.message}
+				<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+			{/if}
+			{#if data.digestCc.length}
+				<ul class="cc-list">
+					{#each data.digestCc as email (email)}
+						<li>
+							<span class="cc-email">{email}</span>
+							<form method="POST" action="?/removeDigestCc">
+								<input type="hidden" name="email" value={email} />
+								<button
+									type="submit"
+									class="button button--secondary cc-remove"
+									aria-label="Remove {email}">Remove</button
+								>
+							</form>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="supporting-text"><strong>No one is copied.</strong></p>
+			{/if}
+			<form method="POST" action="?/addDigestCc" class="cc-add">
+				<label class="field">
+					<span>Add to CC (several at once: put a comma between them)</span>
+					<input
+						name="cc"
+						type="text"
+						inputmode="email"
+						autocomplete="off"
+						placeholder="name@rdc.in"
+						data-testid="digest-cc-add"
+					/>
+				</label>
+				<button type="submit" class="button button--primary">Add</button>
+			</form>
+		</div>
 	</section>
 
 	<section
@@ -166,7 +272,84 @@
 </div>
 
 <style>
-	.settings-form {
+	.area-picks {
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+	/* Every area fits in a short scroll box; the ticked ones come first. */
+	.area-list {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+		column-gap: var(--space-3);
+		max-height: 15rem;
+		overflow-y: auto;
+		padding: var(--space-1) var(--space-2);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+	}
+	.area-picks legend {
+		margin-bottom: var(--space-2);
+		font-weight: 600;
+	}
+	.area-pick {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		min-width: 0;
+		min-height: 2.75rem;
+		overflow-wrap: anywhere;
+	}
+	.cc-block {
+		display: grid;
+		gap: var(--space-3);
+		max-width: 36rem;
+	}
+	.cc-title {
+		margin: 0;
+		font-size: 1rem;
+	}
+	.cc-list {
+		display: grid;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+	}
+	.cc-list li {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+	}
+	.cc-list li + li {
+		border-top: 1px solid var(--brand-mist);
+	}
+	.cc-email {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.cc-remove {
+		flex-shrink: 0;
+	}
+	.cc-add {
+		display: flex;
+		align-items: flex-end;
+		gap: var(--space-2);
+	}
+	.cc-add .field {
+		flex: 1;
+		min-width: 0;
+	}
+	.area-pick input {
+		flex-shrink: 0;
+		width: 1.25rem;
+		height: 1.25rem;
+	}
+	.settings-form,
+	.digest-form {
 		display: grid;
 		gap: var(--space-4);
 		max-width: 36rem;

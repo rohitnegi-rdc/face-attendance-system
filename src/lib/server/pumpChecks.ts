@@ -1,6 +1,6 @@
 // The daily checklist of a plant manager or monitor (plant-manager Overview): every pump they can
-// see for one day, what needs a look, and who marked it Checked (pump_day_checks). The 8 pm email
-// to monitors (worker/monitorDigest.js) names the same problems.
+// see for one day, what needs a look, and who marked it Checked (pump_day_checks). The 9 am
+// attendance email (worker/attendanceDigest.js) counts the same full shift, start only and end only.
 import { query, queryOne } from '$lib/server/db';
 
 export type PumpCheck = {

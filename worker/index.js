@@ -5,11 +5,11 @@
 import pg from 'pg';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { sendFraudAlertEmail } from './mailer.js';
+import { sendAttendanceDigestEmail, sendFraudAlertEmail } from './mailer.js';
 import { checkRecapture } from './recaptureCheck.js';
 import { pollPumpGps } from './gpsFeed.js';
 import { sendEndReminders } from './endReminders.js';
-import { sendMonitorDigests } from './monitorDigest.js';
+import { sendAttendanceDigests } from './attendanceDigest.js';
 import {
 	assignFaces,
 	findCrossPumpMatch,
@@ -862,11 +862,12 @@ async function loop() {
 		Number(process.env.END_REMINDER_POLL_SECONDS || 60) * 1000
 	).unref();
 
-	// The 8 pm email to monitors (worker/monitorDigest.js), checked every 5 minutes.
+	// The 9 am attendance email for the previous day (worker/attendanceDigest.js), checked every 5
+	// minutes.
 	setInterval(
 		() =>
-			sendMonitorDigests(pool, log, testModeOn).catch((err) =>
-				log('error', { error: String(err?.message || err) }, 'monitor digest failed')
+			sendAttendanceDigests(pool, log, testModeOn, new Date(), sendAttendanceDigestEmail).catch(
+				(err) => log('error', { error: String(err?.message || err) }, 'attendance digest failed')
 			),
 		5 * 60 * 1000
 	).unref();

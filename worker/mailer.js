@@ -5,6 +5,7 @@
 // set, sending is skipped with a log line instead of crashing the worker — the fraud lockout
 // and DB state are the source of truth; email is a best-effort notification on top of it.
 import nodemailer from 'nodemailer';
+import { renderAttendanceDigest } from './digestEmail.js';
 
 // DD-MM-YYYY, the date format used everywhere in the app. A DATE column can arrive as a
 // "YYYY-MM-DD" string or as a Date at local midnight, so both are read by their date parts.
@@ -96,47 +97,31 @@ export async function sendFraudAlertEmail(
 	}
 }
 
-const escapeHtml = (value) =>
-	String(value ?? '').replace(
-		/[&<>"']/g,
-		(c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
-	);
-
-// The monitor's 8 pm list (worker/monitorDigest.js): one line per pump that needs a look.
-export async function sendMonitorDigestEmail({ to, name, day, pumps }, log) {
+export async function sendAttendanceDigestEmail(message, log) {
 	if (process.env.MAIL_ENABLED !== 'true') {
-		log('info', { to, pumps: pumps.length }, 'monitor digest email NOT sent (mail off)');
+		log(
+			'info',
+			{ to: message.to.length, cc: message.cc.length },
+			'attendance digest email NOT sent (mail off)'
+		);
 		return;
 	}
 	const client = getTransporter();
 	if (!client) {
-		log('warn', { pumps: pumps.length }, 'monitor digest email skipped — SMTP not configured');
+		log('warn', {}, 'attendance digest email skipped — SMTP not configured');
 		return;
 	}
-	const rows = pumps
-		.map(
-			(p) =>
-				`<tr><td><strong>${escapeHtml(p.pump_code)}</strong></td><td>${escapeHtml(p.plant_name)}, ${escapeHtml(p.area_name)}</td><td>${escapeHtml(p.problems.join(', '))}</td></tr>`
-		)
-		.join('');
-	const html = `
-		<p>Hello ${escapeHtml(name)},</p>
-		<p>${pumps.length} ${pumps.length === 1 ? 'pump needs' : 'pumps need'} a look for ${formatSessionDate(day)}:</p>
-		<table cellpadding="6" style="border-collapse:collapse">
-			<tr><th align="left">Pump</th><th align="left">Plant</th><th align="left">Needs a look</th></tr>
-			${rows}
-		</table>
-		<p>Sign in to Face Attendance and open Attendance to fix these pumps.</p>
-	`;
+	const { subject, html } = renderAttendanceDigest(message);
 	try {
 		await client.sendMail({
 			from: process.env.SMTP_FROM || process.env.SMTP_USER,
-			to,
-			subject: `${pumps.length} ${pumps.length === 1 ? 'pump needs' : 'pumps need'} a look, ${formatSessionDate(day)}`,
+			to: message.to,
+			cc: message.cc,
+			subject,
 			html
 		});
-		log('info', { pumps: pumps.length }, 'monitor digest email sent');
+		log('info', { to: message.to.length, cc: message.cc.length }, 'attendance digest email sent');
 	} catch (err) {
-		log('error', { error: err.message }, 'monitor digest email failed to send');
+		log('error', { error: err.message }, 'attendance digest email failed to send');
 	}
 }

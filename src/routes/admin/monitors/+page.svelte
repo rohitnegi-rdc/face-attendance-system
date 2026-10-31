@@ -18,8 +18,8 @@
 			<h1>Monitors</h1>
 			<p>
 				A monitor checks every pump of their areas each day and fixes attendance like a plant
-				manager: ticks, wrong worker, a missed worker, same people. They get an email at 8 pm with
-				the pumps that need a look.
+				manager: ticks, wrong worker, a missed worker, same people. Every morning at 9 am they get
+				the attendance tracker of each of their areas for the day before.
 			</p>
 		</div>
 	</header>

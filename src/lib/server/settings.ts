@@ -109,3 +109,41 @@ export async function getTestMode(db: Pool | PoolClient = pool): Promise<TestMod
 export async function isTestModeOn(db: Pool | PoolClient = pool): Promise<boolean> {
 	return (await getTestMode(db)).on;
 }
+
+// The 9 am attendance email (worker/attendanceDigest.js): addresses copied on every one, edited at
+// /admin/settings, the only source of the CC line (migration 045 fills the first list). No row means
+// no one is copied. The worker reads the same key; keep it in sync.
+export const DIGEST_CC_KEY = 'digest_cc';
+// The first day the 9 am email reports on (migration 045: Sunday 1 Nov 2026, so the first email is
+// Monday 2 Nov at 9 am). The worker reads the same key.
+export const DIGEST_FIRST_DAY_KEY = 'digest_first_day';
+const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+
+// Every address in `text` (commas, spaces or new lines between them), lower case, no repeats, and
+// the parts that are not an email address.
+export function parseEmailList(text: string): { emails: string[]; invalid: string[] } {
+	const parts = text
+		.split(/[\s,;]+/)
+		.map((part) => part.trim().toLowerCase())
+		.filter(Boolean);
+	return {
+		emails: [...new Set(parts.filter((part) => EMAIL.test(part)))],
+		invalid: parts.filter((part) => !EMAIL.test(part))
+	};
+}
+
+export async function getDigestCc(db: Pool | PoolClient = pool): Promise<string[]> {
+	const { rows } = await db.query<{ value: string }>(
+		'SELECT value FROM app_settings WHERE key = $1',
+		[DIGEST_CC_KEY]
+	);
+	return rows.length ? parseEmailList(rows[0].value).emails : [];
+}
+
+export async function getDigestFirstDay(db: Pool | PoolClient = pool): Promise<string | null> {
+	const { rows } = await db.query<{ value: string }>(
+		'SELECT value FROM app_settings WHERE key = $1',
+		[DIGEST_FIRST_DAY_KEY]
+	);
+	return rows[0]?.value ?? null;
+}
