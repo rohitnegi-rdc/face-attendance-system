@@ -35,6 +35,13 @@ function getTransporter() {
 	return transporter;
 }
 
+// The name people see in their inbox is fixed here (same in src/lib/server/mail.ts); the address
+// comes from the settings.
+const mailFrom = () => ({
+	name: 'PUMP Attendance',
+	address: process.env.SMTP_FROM || process.env.SMTP_USER || ''
+});
+
 export async function sendFraudAlertEmail(
 	{
 		plantManagerEmail,
@@ -82,7 +89,7 @@ export async function sendFraudAlertEmail(
 
 	try {
 		await client.sendMail({
-			from: process.env.SMTP_FROM || process.env.SMTP_USER,
+			from: mailFrom(),
 			to: to.length ? to.join(', ') : undefined,
 			cc: cc.length ? cc.join(', ') : undefined,
 			subject,
@@ -114,7 +121,7 @@ export async function sendAttendanceDigestEmail(message, log) {
 	const { subject, html } = renderAttendanceDigest(message);
 	try {
 		await client.sendMail({
-			from: process.env.SMTP_FROM || process.env.SMTP_USER,
+			from: mailFrom(),
 			to: message.to,
 			cc: message.cc,
 			subject,

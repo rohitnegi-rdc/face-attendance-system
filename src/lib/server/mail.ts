@@ -16,7 +16,12 @@ export function mailer() {
 	return transporter;
 }
 
-export const mailFrom = () => process.env.SMTP_FROM || process.env.SMTP_USER;
+// The name people see in their inbox is fixed here (same in worker/mailer.js); the address comes
+// from the settings.
+export const mailFrom = () => ({
+	name: 'PUMP Attendance',
+	address: process.env.SMTP_FROM || process.env.SMTP_USER || ''
+});
 
 // Email goes out only where MAIL_ENABLED=true, which is set on the production server alone.
 // Everywhere else (local Docker, regression, scripts) callers log exactly what would be mailed and
