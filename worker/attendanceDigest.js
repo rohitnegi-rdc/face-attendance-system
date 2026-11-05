@@ -13,13 +13,14 @@
 /**
  * @typedef {{ id: string, pump_code: string, plant_id: string, plant_name: string, area_name: string,
  *   site_name: string | null, start_at: Date | null, end_at: Date | null, full_shift: number, start_only: number,
- *   end_only: number, workers: number }} DigestPump
+ *   end_only: number, workers: number, mtd_workers: number }} DigestPump
  */
-/** @typedef {{ full_shift: number, start_only: number, end_only: number, workers: number }} Counts */
+/** @typedef {{ full_shift: number, start_only: number, end_only: number, workers: number, mtd_workers: number }} Counts */
 /**
  * @typedef {{ to: string[], cc: string[], area: string, day: string,
  *   areas: { name: string, plants: { id: string, name: string, pumps: DigestPump[], totals: Counts }[] }[],
- *   totals: Counts & { pumps: number } }} DigestMessage
+ *   totals: Counts & { pumps: number, marked: number },
+ *   mtd: { pump_days: number, marked: number } }} DigestMessage
  */
 
 export const DIGEST_HOUR_IST = 9;
@@ -69,7 +70,8 @@ const WORKING_ON_DAY = `COALESCE((SELECT ds.status FROM pump_day_status ds WHERE
 // A pump added after `day` ($1) is not a zero for it.
 const EXISTED_BY_DAY = `pu.created_at < (($1::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')`;
 
-// Every Active and Idle pump of one Area, with its counts on `day` (zero when it sent no photo).
+// Every Active and Idle pump of one Area, with its counts on `day` (zero when it sent no photo)
+// and for the month so far.
 /**
  * @param {Queryable} db
  * @param {string} day
@@ -79,6 +81,9 @@ const EXISTED_BY_DAY = `pu.created_at < (($1::date + 1)::timestamp AT TIME ZONE 
 export async function digestPumps(db, day, areaId) {
 	const { rows } = await db.query(
 		`SELECT pu.id, pu.pump_code, pl.id AS plant_id, pl.name AS plant_name, a.name AS area_name,
+		        (SELECT count(*)::int FROM daily_person_attendance m
+		          WHERE m.pump_id = pu.id AND m.session_date BETWEEN $3::date AND $1::date
+		            AND (m.morning_matched OR m.evening_matched)) AS mtd_workers,
 		        (SELECT ds.site_name FROM pump_day_status ds WHERE ds.pump_id = pu.id AND ds.day <= $1
 		          ORDER BY ds.day DESC LIMIT 1) AS site_name,
 		        (SELECT min(s.submitted_at) FROM attendance_sessions s WHERE s.pump_id = pu.id
@@ -93,12 +98,38 @@ export async function digestPumps(db, day, areaId) {
 		 WHERE ${WORKING_ON_DAY} AND pl.area_id = $2 AND ${EXISTED_BY_DAY}
 		 GROUP BY pu.id, pl.id, a.name
 		 ORDER BY a.name, pl.name, pu.pump_code`,
-		[day, areaId]
+		[day, areaId, `${day.slice(0, 7)}-01`]
 	);
 	return rows.map((row) => ({
 		...row,
 		workers: row.full_shift + row.start_only + row.end_only
 	}));
+}
+
+// The Area's pump days this month, up to and including `day`: a pump counts on the days it was
+// Active or Idle, and is marked on those of them when someone was counted.
+/**
+ * @param {Queryable} db
+ * @param {string} day
+ * @param {string} areaId
+ * @returns {Promise<{ pump_days: number, marked: number }>}
+ */
+export async function digestPumpDays(db, day, areaId) {
+	const { rows } = await db.query(
+		`SELECT count(*)::int AS pump_days,
+		        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM daily_person_attendance d
+		          WHERE d.pump_id = pu.id AND d.session_date = days.day
+		            AND (d.morning_matched OR d.evening_matched)))::int AS marked
+		 FROM pumps pu JOIN plants pl ON pl.id = pu.plant_id
+		 CROSS JOIN (SELECT d::date AS day
+		   FROM generate_series($3::date::timestamp, $1::date::timestamp, interval '1 day') d) days
+		 WHERE pl.area_id = $2
+		   AND pu.created_at < ((days.day + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+		   AND COALESCE((SELECT ds.status FROM pump_day_status ds WHERE ds.pump_id = pu.id
+		         AND ds.day <= days.day ORDER BY ds.day DESC LIMIT 1), 'inactive') <> 'inactive'`,
+		[day, areaId, `${day.slice(0, 7)}-01`]
+	);
+	return rows[0];
 }
 
 // CC without the To addresses and without repeats.
@@ -116,7 +147,8 @@ export function groupPumps(pumps) {
 		full_shift: list.reduce((n, p) => n + p.full_shift, 0),
 		start_only: list.reduce((n, p) => n + p.start_only, 0),
 		end_only: list.reduce((n, p) => n + p.end_only, 0),
-		workers: list.reduce((n, p) => n + p.workers, 0)
+		workers: list.reduce((n, p) => n + p.workers, 0),
+		mtd_workers: list.reduce((n, p) => n + p.mtd_workers, 0)
 	});
 	/** @type {DigestMessage['areas']} */
 	const areas = [];
@@ -131,7 +163,8 @@ export function groupPumps(pumps) {
 		plant.pumps.push(pump);
 	}
 	for (const area of areas) for (const plant of area.plants) plant.totals = sum(plant.pumps);
-	return { areas, totals: { pumps: pumps.length, ...sum(pumps) } };
+	const marked = pumps.filter((p) => p.workers > 0).length;
+	return { areas, totals: { pumps: pumps.length, marked, ...sum(pumps) } };
 }
 
 // Claims the day for `recipient`; false when another run already has it.
@@ -184,9 +217,13 @@ export async function sendAttendanceDigests(db, log, testModeOn, now, send) {
 			 WHERE ma.area_id = $1 AND pm.is_monitor AND pm.disabled_at IS NULL`,
 			[area.id]
 		);
-		const to = [...new Set([...admins, ...monitors].map((r) => r.email))].sort();
+		// Logins ending in .rdc are made up by the system (admin@attendance.rdc): no mailbox there.
+		const to = [...new Set([...admins, ...monitors].map((r) => r.email))]
+			.filter((email) => !email.endsWith('.rdc'))
+			.sort();
 		const cc = ccList(to, fixedCc);
-		const message = { to, cc, area: area.name, day, ...groupPumps(pumps) };
+		const mtd = await digestPumpDays(db, day, area.id);
+		const message = { to, cc, area: area.name, day, ...groupPumps(pumps), mtd };
 		if (await testModeOn(db)) {
 			log(
 				'info',

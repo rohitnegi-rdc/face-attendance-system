@@ -21,6 +21,7 @@ type Sent = {
 	day: string;
 	areas: any[];
 	totals: any;
+	mtd: any;
 };
 
 let sent: Sent[] = [];
@@ -40,12 +41,12 @@ async function manager(name: string, { monitor = false, disabled = false } = {})
 }
 
 // A worker counted at the start, the end or both on DAY.
-async function worker(pumpId: string, start: boolean, end: boolean) {
+async function worker(pumpId: string, start: boolean, end: boolean, day = DAY) {
 	const id = await person(pumpId);
 	await db.query(
 		`INSERT INTO daily_person_attendance (person_id, pump_id, session_date, morning_matched, evening_matched)
 		 VALUES ($1, $2, $3, $4, $5)`,
-		[id, pumpId, DAY, start, end]
+		[id, pumpId, day, start, end]
 	);
 }
 
@@ -125,6 +126,10 @@ async function build() {
 	await worker(full, true, true);
 	await worker(full, true, false);
 	await worker(full, false, true);
+	// Month to date: `full` earlier this month and last month; `silent` before it was set Idle.
+	await worker(full, true, true, '2026-09-01');
+	await worker(full, true, true, '2026-08-31');
+	await worker(silent, true, false, '2026-09-05');
 	await session(failedOnly, DAY, 'morning', 'failed');
 	await session(startOnly, DAY, 'morning');
 	await worker(startOnly, true, false);
@@ -148,6 +153,10 @@ async function build() {
 		a.areaId
 	]);
 	const adminId = await admin();
+	await db.query(
+		`INSERT INTO admins (email, password_hash) VALUES ('admin@attendance.rdc', 'x')
+		 ON CONFLICT DO NOTHING`
+	);
 	const { rows: ad } = await db.query('SELECT email FROM admins WHERE id = $1', [adminId]);
 	return {
 		names: {
@@ -243,10 +252,12 @@ describe('the 9 am attendance tracker', () => {
 			assert.equal(pumps.find((p: any) => p.pump_code === code).workers, 0);
 		assert.deepEqual(mail.totals, {
 			pumps: 4,
+			marked: 2,
 			full_shift: 2,
 			start_only: 2,
 			end_only: 1,
-			workers: 5
+			workers: 5,
+			mtd_workers: 7
 		});
 	});
 
@@ -256,6 +267,7 @@ describe('the 9 am attendance tracker', () => {
 		const [a] = mailFor(names.a);
 		assert.ok(a.to.includes(mon.email));
 		assert.ok(a.to.includes(adminEmail));
+		assert.ok(!a.to.includes('admin@attendance.rdc'), 'a made-up login has no mailbox');
 		assert.deepEqual(a.cc, ['boss@unit.test', 'cc.two@unit.test']);
 		assert.ok(!a.cc.includes(pm1.email), 'a plant manager is copied only when on the list');
 		const [b] = mailFor(names.b);
@@ -302,6 +314,45 @@ describe('the 9 am attendance tracker', () => {
 		);
 		assert.equal(sent.length, 0);
 		assert.ok(logged.includes('attendance digest email NOT sent (test mode)'));
+	});
+
+	test("MTD is the pump's total attendance from the 1st till that day, whatever its status", async () => {
+		const { codes, names } = world;
+		await sendAttendanceDigests(db, quiet, testModeOff, AT_0930, send);
+		const [a] = mailFor(names.a);
+		const pumps = pumpsIn(a);
+		const mtdOf = (pumpCode: string) =>
+			pumps.find((p: any) => p.pump_code === pumpCode).mtd_workers;
+		assert.equal(mtdOf(codes.full), 5, '4 on the day and 1 on the 1st, not the one in August');
+		assert.equal(mtdOf(codes.silent), 1, 'before it was set Idle; still no one on the day');
+		assert.equal(mtdOf(codes.startOnly), 1);
+		assert.equal(mtdOf(codes.failedOnly), 0);
+		assert.equal(a.totals.mtd_workers, 7);
+		// Marked days are Active or Idle ones: `full` on the 1st and DAY, `startOnly` on DAY.
+		assert.equal(a.mtd.marked, 3);
+		// Area C: one Active pump on all 30 days of September, no photo on any of them.
+		assert.deepEqual(mailFor(names.c)[0].mtd, { pump_days: 30, marked: 0 });
+	});
+
+	test('the summary shows pumps, marked and month to date; plants are a column of one table', async () => {
+		await sendAttendanceDigests(db, quiet, testModeOff, AT_0930, send);
+		const mail = mailFor(world.names.a)[0];
+		const { html } = renderAttendanceDigest(mail);
+		assert.match(html, /Total pumps<\/th><th [^>]*>Marked attendance<\/th><\/tr>/);
+		assert.match(
+			html,
+			/2026<\/td><td [^>]*><strong>4<\/strong><\/td><td [^>]*><strong>2<\/strong>/
+		);
+		assert.match(html, /Month to date<\/td>/);
+		assert.match(html, /<th [^>]*>Plant<\/th>/);
+		assert.match(html, /<th [^>]*>MTD<\/th>/);
+		assert.equal(html.match(/<table/g)?.length, 2, 'the summary and one pump table');
+		for (const plant of mail.areas[0].plants) assert.ok(html.includes(`>${plant.name}</td>`));
+		assert.equal(
+			html.match(/<td colspan="9"[^>]*>&nbsp;<\/td>/g)?.length ?? 0,
+			mail.areas[0].plants.length - 1,
+			'one empty row between plants'
+		);
 	});
 
 	test('the subject names the Area, the day and the three counts', async () => {
