@@ -28,5 +28,11 @@ export const mailFrom = () => ({
 // send nothing, so local testing never mails a real person, even with real SMTP settings loaded.
 export const mailEnabled = () => process.env.MAIL_ENABLED === 'true';
 
+// Logins made up by the system (pump01@pumps.rdc, vendor@vendors.rdc, admin@attendance.rdc)
+// end in .rdc, which is not a real email domain: nothing can be delivered there.
+export function hasMailbox(email: string) {
+	return !email.trim().toLowerCase().endsWith('.rdc');
+}
+
 export const escapeHtml = (value: string) =>
 	value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);

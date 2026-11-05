@@ -4,7 +4,7 @@
 // Within range the shift starts normally; otherwise it starts on hold and the plant manager is
 // emailed to approve or reject it (when the admin has the email switched on at /admin/settings).
 // Only areas with location_check_enabled are checked.
-import { escapeHtml, mailEnabled, mailer, mailFrom } from '$lib/server/mail';
+import { escapeHtml, hasMailbox, mailEnabled, mailer, mailFrom } from '$lib/server/mail';
 import type { PoolClient } from 'pg';
 import { query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
@@ -150,16 +150,25 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 			 JOIN plant_managers pm ON pm.id = pma.manager_id WHERE s.id = $1`,
 			[sessionId]
 		);
-		const to = managers.map((m) => m.email).filter(Boolean);
+		// To every admin, like the 9 am attendance email; the plant's managers are copied.
+		const admins = await query<{ email: string }>('SELECT email FROM admins');
+		const to = admins.map((a) => a.email).filter(hasMailbox);
+		const cc = [
+			...new Set(
+				[...managers.map((m) => m.email), process.env.FRAUD_ALERT_CC_EMAIL ?? '']
+					.filter(Boolean)
+					.filter(hasMailbox)
+			)
+		];
 		if (!info) return;
 		// Test mode (admin switch): the plant manager still sees the approval in the app, no email.
 		if (await isTestModeOn()) {
-			logger.info({ sessionId, to }, 'location approval email NOT sent (test mode)');
+			logger.info({ sessionId, to, cc }, 'location approval email NOT sent (test mode)');
 			return;
 		}
 		// Switched off at /admin/settings: the manager approves on the Approvals page, no email.
 		if (!(await isApprovalEmailOn())) {
-			logger.info({ sessionId, to }, 'location approval email NOT sent (switched off)');
+			logger.info({ sessionId, to, cc }, 'location approval email NOT sent (switched off)');
 			return;
 		}
 		if (!mailEnabled()) {
@@ -167,7 +176,7 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 				{
 					sessionId,
 					to,
-					cc: process.env.FRAUD_ALERT_CC_EMAIL || null,
+					cc,
 					subject:
 						info.issue === 'too_far'
 							? `Approve attendance: ${info.pump_code} operator was ${info.distance_m} m from the pump`
@@ -179,10 +188,10 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 			);
 			return;
 		}
-		if (!client || !to.length) {
+		if (!client || !(to.length || cc.length)) {
 			logger.warn(
-				{ sessionId, smtp: Boolean(client), managers: to.length },
-				'location approval email skipped (no SMTP or no plant manager)'
+				{ sessionId, smtp: Boolean(client), to: to.length, cc: cc.length },
+				'location approval email skipped (no SMTP or nobody to send to)'
 			);
 			return;
 		}
@@ -192,20 +201,20 @@ export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: 
 				? `Approve attendance: ${info.pump_code} operator was ${info.distance_m} m from the pump`
 				: `Approve attendance: ${info.pump_code} location could not be verified`;
 		const html = `
-			<p>A shift start at pump <strong>${escapeHtml(info.pump_code)}</strong> (${escapeHtml(info.plant_name)}) needs your approval.</p>
+			<p>A shift start at pump <strong>${escapeHtml(info.pump_code)}</strong> (${escapeHtml(info.plant_name)}) needs the plant manager's approval.</p>
 			<p><strong>Problem:</strong> ${escapeHtml(reason)}</p>
 			<p><strong>Photo sent:</strong> ${escapeHtml(info.sent_at)}</p>
-			<p>Please call the operator to verify, then approve or reject. The attendance is not counted in reports until you approve it.</p>
+			<p>Plant manager: please call the operator to verify, then approve or reject. The attendance is not counted in reports until it is approved.</p>
 			<p><a href="${approvalUrl}" style="display:inline-block;padding:10px 18px;background:#0b6e69;color:#fff;border-radius:6px;text-decoration:none">Open approval</a></p>`;
 		await client.sendMail({
 			from: mailFrom(),
 			to,
-			cc: process.env.FRAUD_ALERT_CC_EMAIL || undefined,
+			cc,
 			subject,
 			text: `${subject}\n\n${reason}\nPhoto sent: ${info.sent_at}\n\nApprove or reject: ${approvalUrl}`,
 			html
 		});
-		logger.info({ sessionId, to }, 'location approval email sent');
+		logger.info({ sessionId, to, cc }, 'location approval email sent');
 	} catch (err: any) {
 		logger.error(
 			{ sessionId, error: String(err?.message || err) },

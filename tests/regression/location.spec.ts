@@ -246,7 +246,10 @@ test('LOC-07 held shift emails the plant manager an absolute approval link', asy
 		expect(mails).toHaveLength(1);
 		const [mail] = mails;
 		expect(mail.message).toBe('location approval email NOT sent (mail off)');
-		expect(mail.to).toEqual([manager.email]);
+		expect(mail.cc).toContain(manager.email);
+		expect(mail.to).not.toContain(manager.email);
+		// A made-up login (migration 026) has no mailbox.
+		expect(mail.to).not.toContain('admin@attendance.rdc');
 		expect(mail.subject).toContain(pump.code);
 		// Regression: the link was once built as "<origin>../../plant-manager/...".
 		expect(mail.approvalUrl).toBe(`${BASE_URL}/plant-manager/approvals/${session.id}`);
@@ -265,7 +268,7 @@ test('LOC-12 approval emails are off by default; the shift still waits for appro
 	const mails = await logLines('app', [session.id, 'location approval email']);
 	expect(mails).toHaveLength(1);
 	expect(mails[0].message).toBe('location approval email NOT sent (switched off)');
-	expect(mails[0].to).toEqual([manager.email]);
+	expect(mails[0].cc).toContain(manager.email);
 	expect(session.location_status).toBe('pending');
 });
 
@@ -282,7 +285,7 @@ test('LOC-11 in test mode a held shift is logged, not emailed, and still waits f
 		const mails = await logLines('app', [session.id, 'location approval email']);
 		expect(mails).toHaveLength(1);
 		expect(mails[0].message).toBe('location approval email NOT sent (test mode)');
-		expect(mails[0].to).toEqual([manager.email]);
+		expect(mails[0].cc).toContain(manager.email);
 		// The plant manager still has it to approve in the app.
 		const approvals = await (await login(manager.email)).get('/plant-manager/approvals');
 		expect(await approvals.text()).toContain(pump.code);

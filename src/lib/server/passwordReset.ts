@@ -14,7 +14,7 @@ import { resolve } from '$app/paths';
 import { DEFAULT_PASSWORD, findAccountByEmail, hashPassword, type Role } from '$lib/server/auth';
 import { pool, query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
-import { escapeHtml, mailEnabled, mailer, mailFrom } from '$lib/server/mail';
+import { escapeHtml, hasMailbox, mailEnabled, mailer, mailFrom } from '$lib/server/mail';
 
 export const RESET_LINK_MINUTES = 30;
 const MAX_LINKS_PER_HOUR = 3;
@@ -33,12 +33,6 @@ export function passwordProblem(password: string, confirmation: string) {
 	}
 	if (password !== confirmation) return 'The passwords do not match.';
 	return null;
-}
-
-// Logins made up by the system (pump01@pumps.rdc, vendor@vendors.rdc, admin@attendance.rdc)
-// end in .rdc, which is not a real email domain: nothing can be delivered there.
-export function hasMailbox(email: string) {
-	return !email.trim().toLowerCase().endsWith('.rdc');
 }
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
