@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SearchField from '$lib/components/SearchField.svelte';
 	import { resolve } from '$app/paths';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import TodayCards from '$lib/components/TodayCards.svelte';
@@ -20,18 +21,8 @@
 	</header>
 
 	<form class="filter-bar area-search" method="GET" role="search">
-		<label class="field"
-			><span>Search</span><input
-				name="q"
-				type="search"
-				value={data.q}
-				placeholder="Area or plant name"
-				autocomplete="off"
-				data-testid="area-search"
-			/></label
-		>
+		<SearchField value={data.q} placeholder="Area or plant name" testId="area-search" />
 		<div class="filter-actions">
-			<button class="button button--primary" type="submit">Search</button>
 			{#if data.q}<a class="button button--ghost" href={areasPath}>Clear</a>{/if}
 		</div>
 	</form>

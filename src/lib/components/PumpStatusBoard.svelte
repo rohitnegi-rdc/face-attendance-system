@@ -1,4 +1,6 @@
 <script lang="ts">
+	import SearchField from '$lib/components/SearchField.svelte';
+	import { applyOnSelect } from '$lib/liveSearch';
 	// Pump status, the same page for the admin, plant managers and monitors (src/lib/server/pumpStatus.ts):
 	// each pump's Active / Idle / Inactive for today and tomorrow, changed right in the row, and how
 	// many days it was each over the chosen week, month or year. On a phone each row is a card.
@@ -135,19 +137,14 @@
 		</div>
 	</nav>
 
-	<form class="filter-bar status-filter" method="GET" role="search">
+	<form class="filter-bar status-filter" method="GET" role="search" onchange={applyOnSelect}>
 		<input type="hidden" name="period" value={data.period} />
 		{#if data.at !== data.today}<input type="hidden" name="at" value={data.at} />{/if}
-		<label class="field"
-			><span>Search</span><input
-				name="q"
-				type="search"
-				value={data.filters.q}
-				placeholder="Pump, plant or area"
-				autocomplete="off"
-				data-testid="status-search"
-			/></label
-		><label class="field"
+		<SearchField
+			value={data.filters.q}
+			placeholder="Pump, plant or area"
+			testId="status-search"
+		/><label class="field"
 			><span>Today</span><select
 				name="status"
 				value={data.filters.status}
@@ -157,9 +154,6 @@
 					>{/each}</select
 			></label
 		>
-		<div class="filter-actions">
-			<button class="button button--primary" type="submit">Show</button>
-		</div>
 	</form>
 
 	<p class="today-line" data-testid="status-today-counts">

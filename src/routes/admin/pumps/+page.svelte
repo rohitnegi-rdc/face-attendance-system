@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SearchField from '$lib/components/SearchField.svelte';
 	import { resolve } from '$app/paths';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -36,18 +37,8 @@
 	</header>
 
 	<form class="filter-bar pump-search" method="GET" role="search">
-		<label class="field"
-			><span>Search</span><input
-				name="q"
-				type="search"
-				value={data.q}
-				placeholder="e.g. AYLPADA1, Anjanapura, RDC"
-				autocomplete="off"
-				data-testid="pump-search"
-			/></label
-		>
+		<SearchField value={data.q} placeholder="e.g. AYLPADA1, Anjanapura, RDC" testId="pump-search" />
 		<div class="filter-actions">
-			<button class="button button--primary" type="submit">Search</button>
 			{#if data.q}<a class="button button--ghost" href={pumpsPath}>Clear</a>{/if}
 		</div>
 	</form>

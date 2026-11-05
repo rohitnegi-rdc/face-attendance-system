@@ -1,4 +1,6 @@
 <script lang="ts">
+	import SearchField from '$lib/components/SearchField.svelte';
+	import { applyOnSelect } from '$lib/liveSearch';
 	import { resolve } from '$app/paths';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
@@ -40,7 +42,7 @@
 		]}
 	/>
 
-	<form class="filter-bar" method="GET">
+	<form class="filter-bar" method="GET" onchange={applyOnSelect}>
 		<label class="field"
 			><span>Level</span><select name="level"
 				><option value="">Warnings and errors</option><option
@@ -68,16 +70,8 @@
 				><option value="30" selected={data.filters.days === 30}>Last 30 days</option></select
 			></label
 		>
-		<label class="field"
-			><span>Search</span><input
-				name="q"
-				type="search"
-				value={data.filters.q}
-				placeholder="Pump code, message, request id"
-			/></label
-		>
+		<SearchField value={data.filters.q} placeholder="Pump code, message, request id" />
 		<div class="filter-actions">
-			<button class="button button--primary" type="submit">Filter</button>
 			<a class="button button--ghost" href={logsPath}>Reset</a>
 		</div>
 	</form>

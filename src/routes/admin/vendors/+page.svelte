@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SearchField from '$lib/components/SearchField.svelte';
 	import { resolve } from '$app/paths';
 	import Plus from '@lucide/svelte/icons/plus';
 
@@ -109,18 +110,8 @@
 			</div>
 		</div>
 		<form class="filter-bar vendor-search" method="GET" role="search">
-			<label class="field"
-				><span>Search</span><input
-					name="q"
-					type="search"
-					value={data.q}
-					placeholder="e.g. RDC, Mumbai, Kapcom"
-					autocomplete="off"
-					data-testid="vendor-search"
-				/></label
-			>
+			<SearchField value={data.q} placeholder="e.g. RDC, Mumbai, Kapcom" testId="vendor-search" />
 			<div class="filter-actions">
-				<button class="button button--primary" type="submit">Search</button>
 				{#if data.q}<a class="button button--ghost" href={resolve('/admin/vendors')}>Clear</a>{/if}
 			</div>
 		</form>
