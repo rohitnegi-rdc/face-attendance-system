@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { COOKIE_PATH } from '$lib/server/cookies';
+import { SESSION_SECONDS, setSessionCookie } from '$lib/server/cookies';
 import { findAccountByEmail, checkPassword, signToken } from '$lib/server/auth';
 import { logger } from '$lib/server/log';
 
@@ -42,15 +42,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		},
 		mustChangePassword ? '15m' : '7d'
 	);
-	const isHttps = request.headers.get('x-forwarded-proto')?.split(',')[0].trim() === 'https';
-	cookies.set(isHttps ? 'session' : 'session_http', token, {
-		path: COOKIE_PATH,
-		httpOnly: true,
-		sameSite: 'lax',
-		// LAN HTTP is used only for local device testing; deployed HTTPS sessions stay secure.
-		secure: isHttps,
-		maxAge: mustChangePassword ? 15 * 60 : 60 * 60 * 24 * 7
-	});
+	setSessionCookie(cookies, request, token, mustChangePassword ? 15 * 60 : SESSION_SECONDS);
 
 	logger.info({ email, role: account.role }, 'login success');
 	return json({ role: account.role, id: account.id, email: account.email, mustChangePassword });

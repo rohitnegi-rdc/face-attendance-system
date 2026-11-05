@@ -176,3 +176,7 @@ The admin and the plant manager each had their own Fix attendance page. Features
 ## 2026-10-30: "filter log PUMP WISE" meant the Attendance session log
 
 The user asked for "a filter log option PUMP WISE to monitor the attendance for the particular pumps only". I guessed the monitor's home checklist and added a pump filter there. They meant the session log on the Attendance tab, the page that is literally a log. The filter moved there (Plant and Pump narrow the daily table, the calendar and the session log), and the home filter was removed. Soon after, the monitor's Overview, Approvals and Kept photos were hidden, so Attendance became their home. Lesson: "log" names a page that already exists. Match the user's word to the page with that name before inventing a new place for the feature.
+
+## 2026-11-05: a pump link's sign-in was given the normal 7-day life
+
+The first version of the pump links reused the normal login's 7-day session. The user corrected it: the link exists because the operator struggles to sign in, so a sign-in that quietly runs out sends them back to the same problem every week. It now lasts until logout, revoke or the pump being disabled. A browser keeps a cookie 400 days at most, so each page opened renews it, and because no end date remains, the session check also refuses a disabled pump. The lesson: a session length follows from who holds the phone, so do not copy the default for a feature built for a different user.

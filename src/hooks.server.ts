@@ -2,9 +2,10 @@ import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { base, resolve as resolvePath } from '$app/paths';
 import { verifyToken } from '$lib/server/auth';
-import { COOKIE_PATH } from '$lib/server/cookies';
+import { COOKIE_PATH, LINK_SESSION_SECONDS, setSessionCookie } from '$lib/server/cookies';
 import { queryOne } from '$lib/server/db';
 import { logger } from '$lib/server/log';
+import { isLinkActive } from '$lib/server/pumpLinks';
 import { CONTACT_ADMIN } from '$lib/errorMessages';
 
 // Any exception no route handled. The user gets a short reference to quote to the admin; the
@@ -44,6 +45,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 				secure: isHttps
 			});
 			auth = null;
+		}
+	}
+	// A session opened with a pump link ends as soon as the admin revokes the link or disables the
+	// pump. Otherwise it stays until the pump logs out: each page opened renews the cookie.
+	if (auth?.role === 'pump' && auth.linkId && token) {
+		if (!(await isLinkActive(auth.linkId))) {
+			event.cookies.delete(isHttps ? 'session' : 'session_http', {
+				path: COOKIE_PATH,
+				secure: isHttps
+			});
+			auth = null;
+		} else if (event.request.method === 'GET' && !event.url.pathname.includes('/api/')) {
+			setSessionCookie(event.cookies, event.request, token, LINK_SESSION_SECONDS);
 		}
 	}
 	event.locals.user = auth;

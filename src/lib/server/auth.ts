@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { queryOne } from './db';
 
-function getJwtSecret(): string {
+export function getJwtSecret(): string {
 	const secret = process.env.JWT_SECRET?.trim();
 	if (!secret || secret.length < 32 || secret === 'dev-secret-change-me') {
 		throw new Error('JWT_SECRET must be configured with at least 32 characters');
@@ -17,6 +17,8 @@ export interface AuthToken {
 	id: string;
 	email: string;
 	mustChangePassword?: boolean;
+	// Signed in with this pump link (pumpLinks.ts): revoking the link ends the session.
+	linkId?: string;
 }
 
 export function signToken(
@@ -24,6 +26,12 @@ export function signToken(
 	expiresIn: jwt.SignOptions['expiresIn'] = '7d'
 ): string {
 	return jwt.sign(payload, getJwtSecret(), { expiresIn });
+}
+
+// A pump link's session has no end date of its own: it lasts until the pump logs out or the link
+// is revoked, and hooks.server.ts checks the link on every request.
+export function signLinkSession(payload: AuthToken): string {
+	return jwt.sign(payload, getJwtSecret());
 }
 
 export function verifyToken(token: string): AuthToken | null {
