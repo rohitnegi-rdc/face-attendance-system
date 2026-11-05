@@ -90,6 +90,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 			});
 		}
 		if (auth.role !== requiredRole) {
+			// Opening another role's home is a wrong turn, not an attack: the app shortcut (manifest
+			// start_url) opens /pump for everyone, so go to this login's own home instead.
+			if (event.request.method === 'GET' && path === guardedPrefix) {
+				return new Response(null, { status: 302, headers: { location: `${base}/${auth.role}` } });
+			}
 			return new Response('Forbidden', { status: 403 });
 		}
 	}

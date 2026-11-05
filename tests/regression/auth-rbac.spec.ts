@@ -180,8 +180,17 @@ test('RBAC-01 each role reaches only its own pages; anonymous users go to login'
 	const pages = ['/admin', '/vendor', '/plant-manager', '/pump'];
 	for (const [role, context] of Object.entries(contexts)) {
 		for (const path of pages) {
-			const status = (await context.get(path, { maxRedirects: 0 })).status();
-			expect(status, `${role} -> ${path}`).toBe(path === `/${role}` ? 200 : 403);
+			const response = await context.get(path, { maxRedirects: 0 });
+			if (path === `/${role}`) {
+				expect(response.status(), `${role} -> ${path}`).toBe(200);
+				continue;
+			}
+			// Another role's home sends this login to its own (bug: the Chrome app shortcut opens
+			// /pump, and an admin saw a bare "Forbidden"). Pages inside it stay refused.
+			expect(response.status(), `${role} -> ${path}`).toBe(302);
+			expect(response.headers().location).toMatch(new RegExp(`/${role}$`));
+			const inner = await context.get(`${path}/attendance`, { maxRedirects: 0 });
+			expect(inner.status(), `${role} -> ${path}/attendance`).toBe(403);
 		}
 	}
 	const anon = await anonymous();

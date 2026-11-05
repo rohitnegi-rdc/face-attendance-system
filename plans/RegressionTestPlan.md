@@ -80,7 +80,7 @@ Priority: P0 = must pass to deploy, P1 = must pass before go-live, P2 = importan
 
 | ID | Scenario | Expected | Tier | Pri | Status |
 |---|---|---|---|---|---|
-| RBAC-01 | Matrix: every role × every page prefix (`/admin`, `/vendor`, `/plant-manager`, `/pump`) | Own prefix 200; others 403; anonymous 302 to login | 1 | P0 | Covered (auth-rbac.spec) |
+| RBAC-01 | Matrix: every role × every page prefix (`/admin`, `/vendor`, `/plant-manager`, `/pump`) | Own prefix 200; another role's home 302 to the login's own home (bug 2026-11-05: the Chrome app shortcut opens /pump, an admin saw "Forbidden"); pages inside it 403; anonymous 302 to login | 1 | P0 | Covered (auth-rbac.spec) |
 | RBAC-02 | Matrix: every role × every `/api/*` route | Allowed only as in `hooks.server.ts`; others 401 or 403 | 1 | P0 | Covered (auth-rbac.spec) |
 | RBAC-03 | Pump A reads pump B's photo or status | 403 | 1 | P0 | Covered (auth-rbac.spec) |
 | RBAC-04 | Pump A approves or retries pump B's session | 403, nothing changed | 1 | P0 | Covered (auth-rbac.spec) |
