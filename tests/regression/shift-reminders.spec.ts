@@ -187,7 +187,7 @@ test('REM-01 only the Enable notifications button asks, the sheet comes before t
 	await page.context().clearCookies();
 
 	const { plantId } = await createArea();
-	const pump = await createPump(plantId);
+	const pump = await createPump(plantId, undefined, { guideDone: false });
 	await page.goto('/login');
 	await page.getByTestId('login-email').fill(pump.email);
 	await page.getByTestId('login-password').fill(PASSWORD);
@@ -217,7 +217,7 @@ test('REM-01 only the Enable notifications button asks, the sheet comes before t
 test('REM-02 end to end: Enable notifications, reminders sent and shown on the phone', async ({}, testInfo) => {
 	const browser = await chromium.launch({ channel: 'chromium' });
 	const { plantId } = await createArea();
-	const pump = await createPump(plantId);
+	const pump = await createPump(plantId, undefined, { guideDone: false });
 	const phoneId = randomUUID();
 	const keys = phoneKeys();
 	const endpoint = `${STUB_URL}/push/${phoneId}`;

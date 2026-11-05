@@ -1,9 +1,7 @@
 <script lang="ts">
 	// Walkthrough of the pump screen for operators: one action per step, a moving picture of it,
-	// the same button the screen shows, and a Listen button that reads the step aloud. On the
-	// first sign-in it cannot be closed (forced): no close, Escape and the phone's Back do
-	// nothing, only the last step's button ends it. On every later visit it opens again with a
-	// close (X) button, and from the Help button; then it closes any time.
+	// the same button the screen shows, and a Listen button that reads the step aloud. It closes
+	// at any step, with the X or Escape (PumpShell decides when it opens).
 	import { onDestroy, tick } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -15,7 +13,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import { pumpLang, setPumpHindi, t } from '$lib/pumpLang.svelte';
 
-	let { forced, onclose }: { forced: boolean; onclose: () => void } = $props();
+	let { onclose }: { onclose: () => void } = $props();
 
 	type Step = {
 		scene: 'operator' | 'group' | 'names' | 'end';
@@ -105,16 +103,10 @@
 	function onkeydown(event: KeyboardEvent) {
 		if (event.key !== 'Escape') return;
 		event.preventDefault();
-		if (!forced) onclose();
-	}
-
-	// The phone's Back button would leave the page; on the first sign-in it stays on the guide.
-	function onpopstate() {
-		if (forced) history.pushState({ pumpGuide: true }, '', location.href);
+		onclose();
 	}
 
 	$effect(() => {
-		if (forced) history.pushState({ pumpGuide: true }, '', location.href);
 		const overflow = document.body.style.overflow;
 		document.body.style.overflow = 'hidden';
 		nextButton?.focus();
@@ -126,7 +118,7 @@
 	onDestroy(stopSpeaking);
 </script>
 
-<svelte:window {onkeydown} {onpopstate} />
+<svelte:window {onkeydown} />
 
 {#snippet person(x: number, y: number, size: number, shirt = '#05ad98')}
 	<g transform="translate({x} {y}) scale({size})">
@@ -182,7 +174,6 @@
 		aria-labelledby="guide-title"
 		aria-describedby="guide-body"
 		data-testid="pump-guide"
-		data-forced={forced}
 	>
 		<div class="guide-top">
 			<div
@@ -209,17 +200,15 @@
 				<span class:active={pumpLang.hindi} lang="hi">हिंदी</span>
 				<span class:active={!pumpLang.hindi} lang="en">English</span>
 			</button>
-			{#if !forced}
-				<button
-					class="guide-close"
-					type="button"
-					onclick={onclose}
-					aria-label={t('Close guide')}
-					data-testid="guide-close"
-				>
-					<X size={22} />
-				</button>
-			{/if}
+			<button
+				class="guide-close"
+				type="button"
+				onclick={onclose}
+				aria-label={t('Close guide')}
+				data-testid="guide-close"
+			>
+				<X size={22} />
+			</button>
 		</div>
 
 		{#key index}

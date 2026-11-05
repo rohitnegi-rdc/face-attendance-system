@@ -58,7 +58,6 @@ test('APP-01 the RDC logo on sign in and in the pump header, no install banner',
 	expect(signedIn.status()).toBe(200);
 
 	await page.goto('/pump');
-	await page.getByTestId('guide-close').click();
 	await expect(page.locator('.pump-topbar .rdc-logo')).toHaveJSProperty('naturalWidth', 240);
 	// Logo, Help, language and sign out all fit one phone-wide header.
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(

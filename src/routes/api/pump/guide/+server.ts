@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { pool } from '$lib/server/db';
 
-// The pump finished the first sign-in guide: it stops opening by itself. The first finish
+// The pump closed or finished the first sign-in guide: it stops opening by itself. The first
 // time is kept; the Help button reopens the guide without calling this.
 export const POST: RequestHandler = async ({ locals }) => {
 	if (!locals.user || locals.user.role !== 'pump') {

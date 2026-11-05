@@ -101,11 +101,9 @@ export async function login(email: string, password = PASSWORD): Promise<APIRequ
 	return context;
 }
 
-// The pump screen in a browser, past the guide that opens on every visit (UI-13): a pump that
-// already finished it closes it with the X.
+// The pump screen in a browser. A pump that already closed the guide does not see it (UI-13).
 export async function openPumpScreen(page: Page) {
 	await page.goto('/pump');
-	await page.getByTestId('guide-close').click();
 	await expect(page.getByTestId('pump-guide')).toHaveCount(0);
 }
 

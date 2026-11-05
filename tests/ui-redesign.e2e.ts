@@ -79,8 +79,6 @@ test('pump capture retains a selected group photo before submission', async ({ p
 	await page.setViewportSize({ width: 390, height: 844 });
 	await installFakeCamera(page);
 	await page.goto('/pump');
-	// The guide opens on every visit; a pump that finished it closes it with the X.
-	await page.getByTestId('guide-close').click();
 	await takeShiftPhotos(page, { buffer: await readFile('Test/faces/group photo.jpg') });
 	await expect(page.getByRole('button', { name: 'Submit photos' })).toBeVisible();
 	await expectNoHorizontalOverflow(page);

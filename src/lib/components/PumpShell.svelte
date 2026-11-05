@@ -19,13 +19,11 @@
 		children: import('svelte').Snippet;
 	}>();
 
-	// The guide opens on every visit. Until the pump finishes it once it cannot be closed; after
-	// that it has a close (X) button, and the Help button opens it again. The page load decides;
-	// later changes are local.
+	// The guide opens by itself until the pump closes or finishes it once; after that only the
+	// Help button opens it. The page load decides; later changes are local.
 	const startedDone = untrack(() => guideDone);
 	let guideFinished = $state(startedDone);
-	let guideOpen = $state(true);
-	let guideForced = $state(!startedDone);
+	let guideOpen = $state(!startedDone);
 	// A phone that has not answered about reminders sees the Enable notifications sheet first
 	// (PumpReminders); the guide waits behind it. Neither is known before the page runs in the
 	// browser, so the guide appears once the sheet has decided, never flashing in and out.
@@ -43,7 +41,6 @@
 		guideOpen = false;
 		if (guideFinished) return;
 		guideFinished = true;
-		guideForced = false;
 		try {
 			const response = await fetch(resolve('/api/pump/guide'), { method: 'POST' });
 			if (!response.ok) toastIfServerError(response);
@@ -108,7 +105,7 @@
 		{@render children()}
 	</main>
 	{#if guideShown}
-		<PumpGuide forced={guideForced} onclose={closeGuide} />
+		<PumpGuide onclose={closeGuide} />
 	{/if}
 </div>
 

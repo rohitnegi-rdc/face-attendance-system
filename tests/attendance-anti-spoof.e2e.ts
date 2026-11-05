@@ -61,8 +61,6 @@ test('mixed liveness state is understandable and remains reviewable', async ({
 }, testInfo) => {
 	await authenticate(page);
 	await page.goto('/pump');
-	// The guide opens on every visit; a pump that finished it closes it with the X.
-	await page.getByTestId('guide-close').click();
 	console.log(`anti-spoof browser reached ${page.url()}`);
 	await expect(page).toHaveURL(/\/pump$/);
 	const fixture = Buffer.concat([

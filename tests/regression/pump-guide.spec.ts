@@ -1,12 +1,10 @@
-// UI-13: a new pump's first visit opens the guide, which cannot be closed (no close button,
-// Escape does nothing) and switches between Hindi and English. Finishing it is saved on the
-// server; every later visit opens it again with a close (X) button, and Help reopens it.
-import { test, expect } from '@playwright/test';
+// UI-13: a new pump's first visit opens the guide. It closes at any step (X or Escape) and switches
+// between Hindi and English. Closing or finishing it once is saved on the server: it does not
+// open by itself again, and only the Help button reopens it.
+import { test, expect, type Page } from '@playwright/test';
 import { BASE_URL, PASSWORD, createArea, createPump, db } from './helpers';
 
-test('UI-13 first sign-in guide cannot be skipped, switches language, Help reopens it', async ({
-	page
-}) => {
+async function newPumpOnScreen(page: Page) {
 	const { plantId } = await createArea();
 	const pump = await createPump(plantId, undefined, { guideDone: false });
 	const response = await page.request.post('/api/auth/login', {
@@ -14,16 +12,46 @@ test('UI-13 first sign-in guide cannot be skipped, switches language, Help reope
 		headers: { origin: BASE_URL }
 	});
 	expect(response.status()).toBe(200);
-
 	await page.goto('/pump');
+	return pump;
+}
+
+async function expectSaved(pumpId: string) {
+	await expect
+		.poll(async () => {
+			const { rows } = await db.query('SELECT guide_done_at FROM pumps WHERE id = $1', [pumpId]);
+			return rows[0].guide_done_at !== null;
+		})
+		.toBe(true);
+}
+
+test('UI-13 a new pump can close the guide at the first step; it stays closed, Help reopens it', async ({
+	page
+}) => {
+	const pump = await newPumpOnScreen(page);
 	const guide = page.getByTestId('pump-guide');
 	await expect(guide).toBeVisible();
-	await expect(guide).toHaveAttribute('data-forced', 'true');
-	await expect(page.getByTestId('guide-close')).toHaveCount(0);
 	await expect(page.getByTestId('guide-title')).toHaveText('पंप ऑपरेटर की फोटो लें');
-	await page.keyboard.press('Escape');
-	await expect(guide).toBeVisible();
+	await page.getByTestId('guide-close').click();
+	await expect(guide).toHaveCount(0);
+	await expectSaved(pump.id);
 
+	// The next visit goes straight to the screen: Help can only be tapped with no guide over it.
+	await page.reload();
+	await page.getByTestId('guide-help').click();
+	await expect(guide).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(guide).toHaveCount(0);
+	await page.getByTestId('guide-help').click();
+	await page.getByTestId('guide-close').click();
+	await expect(guide).toHaveCount(0);
+});
+
+test('UI-13 the guide switches language, and finishing it also stops it opening', async ({
+	page
+}) => {
+	const pump = await newPumpOnScreen(page);
+	const guide = page.getByTestId('pump-guide');
 	await page.getByTestId('guide-lang').click();
 	await expect(page.getByTestId('guide-title')).toHaveText('Take the Pump Operator photo');
 	await expect(guide.getByText('Take Pump Operator photo').first()).toBeVisible();
@@ -34,27 +62,11 @@ test('UI-13 first sign-in guide cannot be skipped, switches language, Help reope
 	await expect(next).toHaveText(/Start/);
 	await next.click();
 	await expect(guide).toHaveCount(0);
-	await expect
-		.poll(async () => {
-			const { rows } = await db.query('SELECT guide_done_at FROM pumps WHERE id = $1', [pump.id]);
-			return rows[0].guide_done_at !== null;
-		})
-		.toBe(true);
+	await expectSaved(pump.id);
 
-	// Every later visit opens it again, now with the X to close it.
 	await page.reload();
-	await expect(guide).toBeVisible();
-	await expect(guide).toHaveAttribute('data-forced', 'false');
-	await page.getByTestId('guide-close').click();
-	await expect(guide).toHaveCount(0);
-	await expect(
-		page.getByRole('button', { name: 'Take Pump Operator photo', exact: true })
-	).toBeVisible();
-
 	await page.getByTestId('guide-help').click();
-	await expect(guide).toHaveAttribute('data-forced', 'false');
-	await page.getByTestId('guide-close').click();
-	await expect(guide).toHaveCount(0);
+	await expect(guide).toBeVisible();
 });
 
 // The four steps word for word as the user wrote them (2026-10-27), with the footer under every
