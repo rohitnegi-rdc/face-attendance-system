@@ -15,6 +15,7 @@
 	import Users from '@lucide/svelte/icons/users';
 	import X from '@lucide/svelte/icons/x';
 	import { dateKey, formatDate, formatDateTime, formatDayLabel, todayStr } from '$lib/date';
+	import { askForPosition } from '$lib/pumpLocation';
 	import { personDisplayLabel } from '$lib/personLabel';
 	import { t, tLabel } from '$lib/pumpLang.svelte';
 	import { showErrorToast, toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
@@ -62,14 +63,13 @@
 	// The phone's position for the shift start location check. Never blocks the photo: if the
 	// operator denies access or it times out, the server sends it for plant manager approval.
 	function currentPosition(): Promise<GeolocationPosition | null> {
-		if (!navigator.geolocation) return Promise.resolve(null);
-		return new Promise((done) =>
-			navigator.geolocation.getCurrentPosition(done, () => done(null), {
-				enableHighAccuracy: true,
-				timeout: 12000,
-				maximumAge: 60000
-			})
-		);
+		return askForPosition(navigator.geolocation, async () => {
+			try {
+				return (await navigator.permissions.query({ name: 'geolocation' })).state;
+			} catch {
+				return null;
+			}
+		});
 	}
 	let selectedFile = $state<File | null>(null);
 	let previewUrl = $state('');
