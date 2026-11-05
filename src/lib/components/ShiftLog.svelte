@@ -7,6 +7,8 @@
 		status: string;
 		submitted_at: string;
 		location_status: string;
+		gps_lat: number | null;
+		gps_lng: number | null;
 		error_reason: string | null;
 		pairing_status: string;
 		closed_by?: string | null;
@@ -30,11 +32,13 @@
 	// screens put start and end side by side for comparison. Pages add their own per-photo tools
 	// (admin fixes) through the actions snippet.
 	import type { Snippet } from 'svelte';
+	import Eye from '@lucide/svelte/icons/eye';
 	import Wrench from '@lucide/svelte/icons/wrench';
 	import AttendanceEvidenceButtons from '$lib/components/AttendanceEvidenceButtons.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import LocationBadge from '$lib/components/LocationBadge.svelte';
-	import { dateKey, formatDate, formatTime } from '$lib/date';
+	import { dateKey, formatDate, formatTime, formatWeekday } from '$lib/date';
+	import { mapUrl } from '$lib/maps';
 	import { shiftOutcomeLabel } from '$lib/shiftLabels';
 
 	type Shift = ShiftLogShift<S>;
@@ -115,7 +119,7 @@
 	function sentLabel(sentAt: string, day: string) {
 		return dateKey(sentAt) === day
 			? formatTime(sentAt)
-			: `${formatDate(sentAt).slice(0, 3)} ${formatTime(sentAt)}`;
+			: `${formatWeekday(sentAt)} ${formatTime(sentAt)}`;
 	}
 </script>
 
@@ -159,6 +163,20 @@
 									{#if session.location_status !== 'approved'}<LocationBadge
 											status={session.location_status}
 										/>{/if}
+									{#if session.gps_lat !== null && session.gps_lng !== null}
+										<a
+											class="location-link"
+											href={mapUrl(session.gps_lat, session.gps_lng)}
+											target="_blank"
+											rel="noopener"
+											aria-label="{half.title} location on Google Maps"
+											data-testid="shift-location"><Eye size={15} /> Location</a
+										>
+									{:else}
+										<span class="half__no-location" data-testid="shift-no-location"
+											>No location</span
+										>
+									{/if}
 								</div>
 								{#if session.error_reason}<p class="half__note">{session.error_reason}</p>{/if}
 								<AttendanceEvidenceButtons
@@ -256,6 +274,7 @@
 	/* Every tool on the card (Fix attendance here, the page's per-photo tools below) is the same
 	   compact outlined button, so none of them shouts louder than the photos. */
 	.fix-link,
+	.location-link,
 	.half__actions :global(.button) {
 		display: inline-flex;
 		align-items: center;
@@ -274,8 +293,18 @@
 		margin-left: auto;
 		color: var(--brand-teal);
 	}
-	.fix-link:hover {
+	.location-link {
+		margin-left: auto;
+		color: var(--brand-teal);
+	}
+	.fix-link:hover,
+	.location-link:hover {
 		border-color: var(--brand-teal);
+	}
+	.half__no-location {
+		margin-left: auto;
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
 	}
 	.half {
 		display: flex;

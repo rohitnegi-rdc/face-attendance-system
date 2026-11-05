@@ -99,7 +99,8 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const sessionLog = await query<any>(
 		`SELECT s.id, s.pump_id, s.session_date, s.session_type, s.status, s.pairing_status,
 		        s.paired_session_id, s.closed_by, s.submitted_at, s.processed_at, s.error_reason,
-		        s.photo_url, s.fraud_resolution, s.fraud_resolved_at, s.location_status, s.test_mode,
+		        s.photo_url, s.fraud_resolution, s.fraud_resolved_at, s.location_status, s.gps_lat,
+		        s.gps_lng, s.test_mode,
 		        EXISTS (
 		          SELECT 1 FROM attendance_review_flags arf
 		          WHERE arf.session_id = s.id AND arf.person_id IS NULL AND arf.status = 'open'

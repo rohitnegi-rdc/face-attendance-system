@@ -57,7 +57,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		),
 		query<any>(
 			`SELECT s.id, s.session_date, s.session_type, s.status, s.submitted_at, s.photo_url,
-			        s.pairing_status, s.closed_by, s.error_reason, s.location_status, pu.id AS pump_id, pu.pump_code, pl.name AS plant_name,
+			        s.pairing_status, s.closed_by, s.error_reason, s.location_status, s.gps_lat, s.gps_lng,
+			        pu.id AS pump_id, pu.pump_code, pl.name AS plant_name,
 			        EXISTS (
 			          SELECT 1 FROM attendance_review_flags arf
 			          WHERE arf.session_id = s.id AND arf.person_id IS NULL AND arf.status = 'open'

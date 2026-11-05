@@ -4,11 +4,11 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import { formatDate } from '$lib/date';
+	import { mapUrl } from '$lib/maps';
 
 	let { data, form } = $props();
 	const s = $derived(data.session);
 	const pending = $derived(s.location_status === 'pending');
-	const mapUrl = (lat: number, lng: number) => `https://www.google.com/maps?q=${lat},${lng}`;
 	// Both points on one map: directions from the operator to the pump.
 	const bothUrl = $derived(
 		s.gps_lat !== null && s.pump_gps_lat !== null

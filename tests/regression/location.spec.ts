@@ -18,6 +18,8 @@ import {
 	login,
 	logLines,
 	photo,
+	recordSession,
+	shiftBack,
 	waitForSession,
 	type Pump
 } from './helpers';
@@ -121,6 +123,45 @@ test('LOC-01 area without the check: no location status at all', async () => {
 	const { body, session } = await startShift(await login(pump.email), null);
 	expect(body.location_hold).toBeNull();
 	expect(session.location_status).toBeNull();
+});
+
+test('LOC-13 the shift card links each photo to its location on Google Maps, or says there is none', async () => {
+	const { plantId } = await createArea();
+	const pump = await createPump(plantId);
+	const context = await login(pump.email);
+	const { body } = await startShift(context, NEAR);
+	await shiftBack(body.session_id, 600);
+	const end = await recordSession(context, ['loc-a']);
+	await db.query('UPDATE attendance_sessions SET gps_lat = $2, gps_lng = $3 WHERE id = $1', [
+		end,
+		FAR.lat,
+		FAR.lng
+	]);
+	const noLocation = await createPump(plantId);
+	await startShift(await login(noLocation.email), null, ['loc-b']);
+
+	const manager = await login((await createPlantManager(plantId)).email);
+	const admin = await login((await createAdmin()).email);
+	const pages = [
+		await (await manager.get('/plant-manager/attendance')).text(),
+		await (await admin.get(`/admin/pumps/${pump.id}`)).text()
+	];
+	for (const page of pages) {
+		expect(page).toContain(`https://www.google.com/maps?q=${NEAR.lat},${NEAR.lng}`);
+		expect(page).toContain(`https://www.google.com/maps?q=${FAR.lat},${FAR.lng}`);
+		expect(page).toContain('Shift start location on Google Maps');
+		expect(page).toContain('Shift end location on Google Maps');
+	}
+	expect(pages[0]).toContain('data-testid="shift-no-location"');
+
+	// A photo sent on another day than its shift shows the weekday, not the start of the date.
+	await db.query(
+		`UPDATE attendance_sessions SET submitted_at = '2026-11-02T18:06:00Z' WHERE id = $1`,
+		[body.session_id]
+	);
+	const log = await (await manager.get('/plant-manager/attendance')).text();
+	expect(log).toMatch(/Mon 11:36.pm/);
+	expect(log).not.toMatch(/\d\d- \d/);
 });
 
 test('LOC-02 within 100 m of fresh pump GPS starts normally', async () => {

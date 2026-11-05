@@ -326,6 +326,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | LOC-08 | Worker copies pump GPS from the optimizer feed (`dump.pump_events`, stand-in table in the test DB) | Matched by pump code (any case) or `gps_device_id`; blank coordinates and rows older than 2 h skipped; unknown ids logged; the copied reading lets a nearby shift start `ok` | 2 | P1 | Covered (added 2026-10-20) |
 | LOC-11 | Test mode on, a shift start held for location (added 2026-10-26) | The approval email is logged as not sent (test mode), with the plant manager in CC; the plant manager still sees the approval in the app. The fraud alert email for a fake photo is held back the same way in the worker (not covered: the spoof check is off in the gate) | 2 | P1 | Covered (location.spec) |
 | LOC-12 | Approval emails left off (the default since 2026-10-31, switch at /admin/settings), a shift start held for location | The approval email is logged as not sent (switched off) with the plant manager in CC; the shift still waits for approval (`location_status` pending) | 2 | P1 | Covered (location.spec) |
+| LOC-13 | Shift card on the plant manager Attendance and admin pump pages (added 2026-11-03) | Each start and end photo with a phone position links to it on Google Maps; a photo without one says No location | 1 | P1 | Covered (location.spec) |
 
 ### BAK: kept copy of failed and fraud photos (photo-backup.spec)
 

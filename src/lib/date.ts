@@ -38,6 +38,11 @@ export function formatTime(value: string | Date): string {
 	return dayjs(value).tz(IST).format('h:mm a').replace(' ', NBSP);
 }
 
+// "Mon", India time.
+export function formatWeekday(value: string | Date): string {
+	return dayjs(value).tz(IST).format('ddd');
+}
+
 export function dateKey(value: string | Date): string {
 	if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
 		return value.slice(0, 10);
