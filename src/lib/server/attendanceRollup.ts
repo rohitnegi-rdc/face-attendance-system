@@ -4,6 +4,7 @@
 // "YYYY-MM-DD" strings from todayIST().
 import { query } from '$lib/server/db';
 import { addDaysStr, dateKey, daysBetween } from '$lib/date';
+import { countsAsFraud } from '$lib/server/fraudCount';
 
 export type GroupToday = {
 	id: string;
@@ -25,6 +26,7 @@ export type PumpToday = {
 	vendorName: string;
 	plantId: string;
 	plantName: string;
+	workStatus: 'active' | 'idle';
 	startAt: string | null;
 	endAt: string | null;
 	present: number;
@@ -65,7 +67,8 @@ export async function groupsToday(
 		          WHERE ${pumpsOf} AND dpa.session_date = $1) AS total,
 		        (SELECT count(*) FROM fraud_flags ff JOIN attendance_sessions s ON s.id = ff.session_id
 		          JOIN pumps pu ON pu.id = s.pump_id
-		          WHERE ${pumpsOf} AND (ff.created_at AT TIME ZONE 'Asia/Kolkata')::date = $1) AS fraud
+		          WHERE ${pumpsOf} AND ${countsAsFraud('ff')}
+		            AND (ff.created_at AT TIME ZONE 'Asia/Kolkata')::date = $1) AS fraud
 		 FROM ${isArea ? 'areas g' : 'plants g JOIN areas a ON a.id = g.area_id'}
 		 WHERE ($2::uuid IS NULL OR ${isArea ? 'g.id' : 'g.area_id'} = $2::uuid)
 		   AND ($3 = '' OR g.name ILIKE $4${
@@ -98,7 +101,8 @@ export async function groupsToday(
 		});
 }
 
-// Every pump of a plant or an area: today's start and end photo times, present today, and
+// The pumps of a plant or an area that are Active or Idle today (their latest pump_day_status up to
+// today; no status means Inactive): today's start and end photo times, present today, and
 // attendance over from..to. Ordered by plant, then pump code.
 export async function pumpsToday(
 	scope: { plantId: string } | { areaId: string },
@@ -110,6 +114,7 @@ export async function pumpsToday(
 	const id = 'plantId' in scope ? scope.plantId : scope.areaId;
 	const rows = await query<any>(
 		`SELECT pu.id, pu.pump_code, v.name AS vendor_name, pl.id AS plant_id, pl.name AS plant_name,
+		        st.status AS work_status,
 		        (SELECT min(s.submitted_at) FROM attendance_sessions s WHERE s.pump_id = pu.id
 		          AND s.session_date = $2 AND s.session_type = 'morning' AND s.status <> 'failed') AS start_at,
 		        (SELECT max(s.submitted_at) FROM attendance_sessions s WHERE s.pump_id = pu.id
@@ -123,8 +128,12 @@ export async function pumpsToday(
 		        (SELECT count(*) FROM daily_person_attendance
 		          WHERE pump_id = pu.id AND session_date BETWEEN $3 AND $4) AS range_total,
 		        (SELECT count(*) FROM fraud_flags ff JOIN attendance_sessions s ON s.id = ff.session_id
-		          WHERE s.pump_id = pu.id AND (ff.created_at AT TIME ZONE 'Asia/Kolkata')::date = $2) AS fraud
+		          WHERE s.pump_id = pu.id AND ${countsAsFraud('ff')}
+		            AND (ff.created_at AT TIME ZONE 'Asia/Kolkata')::date = $2) AS fraud
 		 FROM pumps pu JOIN plants pl ON pl.id = pu.plant_id JOIN vendors v ON v.id = pu.vendor_id
+		 JOIN LATERAL (SELECT ds.status FROM pump_day_status ds
+		   WHERE ds.pump_id = pu.id AND ds.day <= $2 ORDER BY ds.day DESC LIMIT 1) st
+		   ON st.status IN ('active', 'idle')
 		 WHERE ${where}
 		 ORDER BY pl.name, pu.pump_code`,
 		[id, today, from, to]
@@ -138,6 +147,7 @@ export async function pumpsToday(
 			vendorName: row.vendor_name,
 			plantId: row.plant_id,
 			plantName: row.plant_name,
+			workStatus: row.work_status,
 			startAt: row.start_at ? new Date(row.start_at).toISOString() : null,
 			endAt: row.end_at ? new Date(row.end_at).toISOString() : null,
 			present: Number(row.present),

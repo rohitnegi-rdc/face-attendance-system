@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { query } from '$lib/server/db';
 import { todayStr, addDaysStr, dateKey } from '$lib/date';
+import { countsAsFraud } from '$lib/server/fraudCount';
 
 const ATTENTION_SILENCE_HOURS = Number(process.env.EVENING_PAIRING_WINDOW_HOURS ?? 24) + 6; // 30h default
 
@@ -34,14 +35,11 @@ export const load: PageServerLoad = async () => {
 		 FROM daily_person_attendance WHERE session_date >= $1 AND session_date <= $2`,
 		[last7From, today]
 	);
-	const [fraudToday] = await query<any>(
-		`SELECT COUNT(*) AS c FROM fraud_flags WHERE created_at::date = $1`,
-		[today]
-	);
-	const [fraudYesterday] = await query<any>(
-		`SELECT COUNT(*) AS c FROM fraud_flags WHERE created_at::date = $1`,
-		[yesterday]
-	);
+	// Flags of an IST day, "not fraud" ones left out (fraudCount.ts).
+	const fraudOn = `SELECT COUNT(*) AS c FROM fraud_flags ff
+		 WHERE ${countsAsFraud('ff')} AND (ff.created_at AT TIME ZONE 'Asia/Kolkata')::date = $1`;
+	const [fraudToday] = await query<any>(fraudOn, [today]);
+	const [fraudYesterday] = await query<any>(fraudOn, [yesterday]);
 
 	const todayPct = pct(Number(todayAgg?.present ?? 0), Number(todayAgg?.total ?? 0));
 	const yesterdayPct = pct(Number(yesterdayAgg?.present ?? 0), Number(yesterdayAgg?.total ?? 0));
@@ -184,7 +182,8 @@ export const load: PageServerLoad = async () => {
 	const fraudByVendor = await query<any>(
 		`SELECT pu.vendor_id, COUNT(*) AS fraud_count
 		 FROM fraud_flags ff JOIN attendance_sessions s ON s.id = ff.session_id JOIN pumps pu ON pu.id = s.pump_id
-		 WHERE ff.created_at >= $1 GROUP BY pu.vendor_id`,
+		 WHERE ${countsAsFraud('ff')} AND (ff.created_at AT TIME ZONE 'Asia/Kolkata')::date >= $1
+		 GROUP BY pu.vendor_id`,
 		[last30From]
 	);
 	const sessionsByVendor = await query<any>(

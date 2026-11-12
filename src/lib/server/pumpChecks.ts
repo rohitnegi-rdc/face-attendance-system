@@ -2,6 +2,7 @@
 // see for one day, what needs a look, and who marked it Checked (pump_day_checks). The 9 am
 // attendance email (worker/attendanceDigest.js) counts the same full shift, start only and end only.
 import { query, queryOne } from '$lib/server/db';
+import { countsAsFraud } from '$lib/server/fraudCount';
 
 export type PumpCheck = {
 	pumpId: string;
@@ -65,7 +66,7 @@ export async function dayChecklist(managerId: string, day: string, late: boolean
 		        (SELECT count(*) FROM daily_person_attendance
 		          WHERE pump_id = pu.id AND session_date = $2) AS total,
 		        (SELECT count(*) FROM fraud_flags ff JOIN attendance_sessions s ON s.id = ff.session_id
-		          WHERE s.pump_id = pu.id AND s.session_date = $2) AS fraud,
+		          WHERE s.pump_id = pu.id AND s.session_date = $2 AND ${countsAsFraud('ff')}) AS fraud,
 		        (SELECT r.status FROM regularisations r WHERE r.pump_id = pu.id AND r.day = $2
 		          AND r.status IN ('pending', 'approved') LIMIT 1) AS reg_status,
 		        pdc.checked_at, pdc.note, coalesce(pm.name, adm.email) AS checked_by

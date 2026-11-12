@@ -4,6 +4,7 @@
 // a plant manager looking at the same plant read the same numbers.
 import ExcelJS from 'exceljs';
 import { query } from '$lib/server/db';
+import { countsAsFraud } from '$lib/server/fraudCount';
 import { personDisplayLabel } from '$lib/personLabel';
 import { addDaysStr, dateKey, formatDate, formatDateTime, isDateKey } from '$lib/date';
 import { shiftOutcomeLabel } from '$lib/shiftLabels';
@@ -318,6 +319,7 @@ export async function buildAttendanceReport(scope: ReportScope, filters: ReportF
 		SELECT f.person_id, count(*)::int AS n FROM fraud_flags f
 		JOIN attendance_sessions s ON s.id = f.session_id JOIN scope ON scope.id = s.pump_id
 		WHERE s.session_date BETWEEN ${FROM} AND ${TO} AND f.person_id IS NOT NULL
+		  AND ${countsAsFraud('f')}
 		GROUP BY f.person_id`,
 		params.slice(0, n + 2)
 	);

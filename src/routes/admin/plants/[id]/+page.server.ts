@@ -4,8 +4,8 @@ import { queryOne } from '$lib/server/db';
 import { dailyPercent, groupsToday, pumpsToday, readRange } from '$lib/server/attendanceRollup';
 import { todayIST } from '$lib/server/time';
 
-// One plant: today's totals, every pump with its shift today and attendance over the range, and
-// the pump-by-day calendar.
+// One plant: today's totals, the Active and Idle pumps with their shift today and attendance over
+// the range, and the pump-by-day calendar.
 export const load: PageServerLoad = async ({ params, url }) => {
 	if (!/^[0-9a-f-]{36}$/i.test(params.id)) throw error(404, 'plant not found');
 	const plant = await queryOne<{

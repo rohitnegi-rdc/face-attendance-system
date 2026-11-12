@@ -184,3 +184,7 @@ The first version of the pump links reused the normal login's 7-day session. The
 ## 2026-11-11: every test passed and the form still looked broken
 
 All 18 regularisation scenarios passed while the admin form showed huge, uneven radio circles: a global input style stretched them inside a flex label, and a click test cannot see that. A crew of 27 also pushed Next off the phone screen. Looking at the screenshots found both. Open the images before reporting, passing tests only prove the flow works.
+
+## 2026-11-12: fraud marked "not fraud" still showed on the Area and plant cards
+
+Clearing a flag keeps the row (resolution 'not_fraud', so the decision stays on record), but the cards, Overview, Insights, the plant manager checklist and the report each counted fraud_flags with their own SQL and none of them looked at the decision. Only the nav badge did, through `NOT ff.reviewed`. The rule now lives once in `countsAsFraud` (src/lib/server/fraudCount.ts) and a unit test fails on any fraud count that leaves it out. The lesson: when a record gets a decision instead of being deleted, every count of it needs the decision, so put that condition in one shared place.

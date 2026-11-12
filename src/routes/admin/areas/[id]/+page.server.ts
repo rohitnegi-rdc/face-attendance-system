@@ -4,8 +4,8 @@ import { error } from '@sveltejs/kit';
 import { dailyPercent, groupsToday, pumpsToday, readRange } from '$lib/server/attendanceRollup';
 import { todayIST } from '$lib/server/time';
 
-// One area: today per plant, every pump with its shift today and attendance over the range, and
-// the plant-by-day and pump-by-day calendars.
+// One area: today per plant, the Active and Idle pumps with their shift today and attendance over
+// the range, and the plant-by-day and pump-by-day calendars.
 export const load: PageServerLoad = async ({ params, url }) => {
 	if (!/^[0-9a-f-]{36}$/i.test(params.id)) throw error(404, 'area not found');
 	const area = await queryOne<{ id: string; name: string }>(

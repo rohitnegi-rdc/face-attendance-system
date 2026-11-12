@@ -1,10 +1,11 @@
 <script lang="ts">
-	// The pumps of an area or plant (attendanceRollup.ts pumpsToday): today's shift start and end
-	// photo times, workers present today, and attendance over the chosen range. Each row opens the
-	// pump page. Phone: the row stacks; wide screens line the columns up for comparison.
+	// The Active and Idle pumps of an area or plant (attendanceRollup.ts pumpsToday): their status,
+	// today's shift start and end photo times, workers present today, and attendance over the chosen
+	// range. Each row opens the pump page. Phone: the row stacks; wide screens line the columns up.
 	import { resolve } from '$app/paths';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatTime } from '$lib/date';
+	import { PUMP_WORK_STATUS_LABELS } from '$lib/pumpWorkStatus';
 	import type { PumpToday } from '$lib/server/attendanceRollup';
 
 	let {
@@ -23,7 +24,9 @@
 
 <div class="pump-list" data-testid="pump-today-list">
 	<div class="pump-list__head" aria-hidden="true">
-		<span>Pump</span><span>Today</span><span>Present today</span><span>{rangeLabel}</span>
+		<span>Pump</span><span>Status</span><span>Today</span><span>Present today</span><span
+			>{rangeLabel}</span
+		>
 	</div>
 	<ul>
 		{#each pumps as pump (pump.id)}
@@ -31,13 +34,22 @@
 			<li>
 				<a
 					class="pump-row"
+					class:pump-row--none={pump.total === 0}
 					class:pump-row--fraud={pump.fraud > 0}
 					href={resolve('/admin/pumps/[id]', { id: pump.id })}
 					data-testid="pump-today-row"
+					data-status={pump.workStatus}
+					data-attendance={pump.total === 0 ? 'none' : 'some'}
 				>
 					<span class="pump-row__who">
 						<strong>{pump.pumpCode}</strong>
 						<small>{showPlant ? `${pump.plantName} · ` : ''}{pump.vendorName}</small>
+					</span>
+					<span class="pump-row__status">
+						<StatusBadge
+							tone={pump.workStatus === 'active' ? 'success' : 'pending'}
+							label={PUMP_WORK_STATUS_LABELS[pump.workStatus]}
+						/>
 					</span>
 					<span class="pump-row__shift">
 						<StatusBadge tone={today.tone} label={today.label} />
@@ -64,7 +76,7 @@
 				</a>
 			</li>
 		{:else}
-			<li class="pump-list__empty">No pumps here yet.</li>
+			<li class="pump-list__empty">No Active or Idle pumps here today.</li>
 		{/each}
 	</ul>
 </div>
@@ -103,10 +115,19 @@
 	.pump-row:hover {
 		background: var(--surface-subtle);
 	}
-	.pump-row--fraud {
+	/* Light red: nobody counted at this pump today (same rule as the 9 am email's red row). */
+	.pump-row--none,
+	.pump-row--none:hover {
 		background: var(--alert-tint);
 	}
+	/* Fraud is louder: the tint plus a solid red edge. Hover keeps both reds. */
+	.pump-row--fraud,
+	.pump-row--fraud:hover {
+		background: var(--alert-tint);
+		box-shadow: inset 4px 0 0 var(--alert);
+	}
 	.pump-row__who,
+	.pump-row__status,
 	.pump-row__shift {
 		display: flex;
 		flex-wrap: wrap;
@@ -148,10 +169,9 @@
 		.pump-list__head,
 		.pump-row {
 			display: grid;
-			grid-template-columns: minmax(10rem, 1.2fr) minmax(12rem, 1.6fr) minmax(7rem, 0.7fr) minmax(
-					9rem,
-					0.9fr
-				);
+			grid-template-columns:
+				minmax(10rem, 1.2fr) minmax(5.5rem, 0.5fr) minmax(12rem, 1.5fr) minmax(7rem, 0.7fr)
+				minmax(9rem, 0.9fr);
 			align-items: center;
 			gap: var(--space-3);
 			padding: var(--space-2) var(--space-4);
@@ -167,6 +187,7 @@
 			gap: 0;
 		}
 		.pump-row__who,
+		.pump-row__status,
 		.pump-row__shift {
 			grid-column: auto;
 		}

@@ -3,6 +3,7 @@ import { query, queryOne } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
 import { faceMatchThreshold } from '$lib/server/matching';
 import { groupsToday } from '$lib/server/attendanceRollup';
+import { countsAsFraud } from '$lib/server/fraudCount';
 
 export const load: PageServerLoad = async () => {
 	const today = todayIST();
@@ -30,8 +31,8 @@ export const load: PageServerLoad = async () => {
 		),
 		queryOne<any>(`SELECT COUNT(*) AS c FROM persons WHERE status = 'active'`),
 		queryOne<any>(
-			`SELECT COUNT(*) AS c FROM fraud_flags
-			 WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date = $1`,
+			`SELECT COUNT(*) AS c FROM fraud_flags ff
+			 WHERE ${countsAsFraud('ff')} AND (ff.created_at AT TIME ZONE 'Asia/Kolkata')::date = $1`,
 			[today]
 		),
 		queryOne<any>(`SELECT COUNT(*) AS c FROM flagged_guests WHERE reviewed = false`),

@@ -289,6 +289,8 @@ screenshots in `test-output/shift-live/<run>/`. Needs `LIVE_DATABASE_URL`, `LIVE
 | ADM-11 | Admin deletes a fraud-flagged session | Session, flags and new workers gone; audit row records the flag count; pump can submit again | 1 | P0 | Covered (fraud-review-admin.spec) |
 | ADM-12 | Admin deletes a morning that has a paired evening | Both deleted; attendance rows and yearly roll-up reversed | 1 | P0 | Covered (fraud-review-admin.spec) |
 | ADM-13 | Admin clears the test records of a pump | Each session stores whether test mode was on. Refused without the exact pump code, and refused when there is no test-mode shift. Deletes only test-mode shifts and the workers seen only in them; a genuine shift and its worker stay, a part-test part-genuine shift is kept whole (audited as `mixed_shifts_kept`), and the pump can submit again | 1 | P0 | Covered (fraud-review-admin.spec) |
+| ADM-14 | Area and Plant pump lists | Only pumps Active or Idle today are listed, each with that status. A pump with no status, one set Inactive, and one Active only from tomorrow are left out; with none left the list says so. A pump with nobody counted today has a light red row, one with attendance does not | 1 | P1 | Covered (area-pump-list.spec) |
+| ADM-15 | Fraud marked "not fraud" leaves every count (bug 2026-11-12: cleared flags still showed "2 fraud" on the Area and plant cards) | Area, Plant and pump cards, Overview, Insights, the plant manager checklist and the report count only open and confirmed flags (`countsAsFraud` in fraudCount.ts); an open flag still shows. A unit check fails on any new fraud count that leaves the rule out | 1 | P0 | Covered (area-pump-list.spec, unit fraudCount.test) |
 
 ### IMP: CSV import
 
