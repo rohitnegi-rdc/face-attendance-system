@@ -84,3 +84,8 @@ export function daysBetween(from: string, to: string): string[] {
 	}
 	return days;
 }
+
+// "Thu, 5 Nov 2026" for a day key: the plain date people read (regularisation pages).
+export function formatHumanDay(value: string): string {
+	return dayjs.tz(value, IST).format('ddd, D MMM YYYY');
+}

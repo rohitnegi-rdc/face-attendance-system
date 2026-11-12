@@ -14,6 +14,8 @@ export type PumpCheck = {
 	present: number;
 	total: number;
 	fraud: number;
+	// A missed day asked for (regularisation): waiting for approval, or approved and counted.
+	regularisation: 'pending' | 'approved' | null;
 	// What needs a look, worst first; empty when the day is a full shift for everyone.
 	problems: string[];
 	check: { by: string; at: string; note: string | null } | null;
@@ -29,12 +31,16 @@ export function pumpProblems(
 		fraud: number;
 		present: number;
 		total: number;
+		regularisation?: 'pending' | 'approved' | null;
 	},
 	late: boolean
 ) {
 	const problems: string[] = [];
 	if (row.fraud) problems.push(`${row.fraud} fraud`);
 	if (row.failed) problems.push('Photo failed');
+	// An approved missed day is counted without photos; a waiting one is the business manager's to
+	// decide, not a problem for the plant manager.
+	if (!row.startAt && !row.endAt && row.regularisation) return problems;
 	if (!row.startAt && !row.endAt) problems.push('No photo');
 	else if (!row.startAt) problems.push('No start photo');
 	else if (!row.endAt && late) problems.push('No end photo');
@@ -60,6 +66,8 @@ export async function dayChecklist(managerId: string, day: string, late: boolean
 		          WHERE pump_id = pu.id AND session_date = $2) AS total,
 		        (SELECT count(*) FROM fraud_flags ff JOIN attendance_sessions s ON s.id = ff.session_id
 		          WHERE s.pump_id = pu.id AND s.session_date = $2) AS fraud,
+		        (SELECT r.status FROM regularisations r WHERE r.pump_id = pu.id AND r.day = $2
+		          AND r.status IN ('pending', 'approved') LIMIT 1) AS reg_status,
 		        pdc.checked_at, pdc.note, coalesce(pm.name, adm.email) AS checked_by
 		 FROM manager_plants mp JOIN pumps pu ON pu.plant_id = mp.plant_id
 		 JOIN plants pl ON pl.id = pu.plant_id JOIN areas a ON a.id = pl.area_id
@@ -77,7 +85,8 @@ export async function dayChecklist(managerId: string, day: string, late: boolean
 			failed: Number(row.failed),
 			fraud: Number(row.fraud),
 			present: Number(row.present),
-			total: Number(row.total)
+			total: Number(row.total),
+			regularisation: (row.reg_status ?? null) as PumpCheck['regularisation']
 		};
 		return {
 			pumpId: row.id,
@@ -90,6 +99,7 @@ export async function dayChecklist(managerId: string, day: string, late: boolean
 			present: counts.present,
 			total: counts.total,
 			fraud: counts.fraud,
+			regularisation: counts.regularisation,
 			problems: pumpProblems(counts, late),
 			check: row.checked_at
 				? { by: row.checked_by, at: new Date(row.checked_at).toISOString(), note: row.note }

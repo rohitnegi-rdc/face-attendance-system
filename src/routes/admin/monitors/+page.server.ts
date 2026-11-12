@@ -184,6 +184,7 @@ export const actions: Actions = {
 			const { rows } = await client.query(
 				`UPDATE plant_managers SET is_monitor = false,
 				   disabled_at = CASE WHEN EXISTS (SELECT 1 FROM plant_manager_assignments WHERE manager_id = $1)
+				     OR (SELECT is_business_manager FROM plant_managers WHERE id = $1)
 				     THEN disabled_at ELSE now() END
 				 WHERE id = $1 RETURNING disabled_at IS NULL AS keeps_plants`,
 				[id]

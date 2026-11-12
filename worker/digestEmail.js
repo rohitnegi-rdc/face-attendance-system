@@ -5,7 +5,7 @@
 // the day beside the month to date; every pump is in one table, with its plant in a column.
 
 /** @typedef {{ full_shift: number, start_only: number, end_only: number, workers: number, mtd_workers: number }} Counts */
-/** @typedef {Counts & { pump_code: string, site_name?: string | null, start_at: string | Date | null, end_at: string | Date | null }} Pump */
+/** @typedef {Counts & { pump_code: string, site_name?: string | null, start_at: string | Date | null, end_at: string | Date | null, regularised?: boolean }} Pump */
 /** @typedef {{ id: string, name: string, pumps: Pump[], totals: Counts }} Plant */
 /** @typedef {{ name: string, plants: Plant[] }} Area */
 /** @typedef {{ pump_days: number, marked: number }} MonthToDate */
@@ -90,12 +90,15 @@ export function renderAttendanceDigest({ area, day, areas, totals, mtd }) {
 			'</td>';
 		const rows = plant.pumps
 			.map((p) =>
-				p.workers
+				p.workers && p.regularised && !p.start_at && !p.end_at
 					? `<tr>${plantCell}${pumpCell(p)}` +
-						`<td ${TD}>${p.start_at ? istTime(p.start_at) : '<strong>No start photo</strong>'}</td>` +
-						`<td ${TD}>${p.end_at ? istTime(p.end_at) : '<strong>No end photo</strong>'}</td>${counts(p)}</tr>`
-					: `<tr ${RED_ROW}>${plantCell}${pumpCell(p)}` +
-						`<td ${TD} colspan="2"><strong>No attendance</strong></td>${counts(p, true)}</tr>`
+						`<td ${TD} colspan="2"><strong>Regularised</strong> (missed day, approved)</td>${counts(p)}</tr>`
+					: p.workers
+						? `<tr>${plantCell}${pumpCell(p)}` +
+							`<td ${TD}>${p.start_at ? istTime(p.start_at) : '<strong>No start photo</strong>'}</td>` +
+							`<td ${TD}>${p.end_at ? istTime(p.end_at) : '<strong>No end photo</strong>'}</td>${counts(p)}</tr>`
+						: `<tr ${RED_ROW}>${plantCell}${pumpCell(p)}` +
+							`<td ${TD} colspan="2"><strong>No attendance</strong></td>${counts(p, true)}</tr>`
 			)
 			.join('');
 		const total =

@@ -443,6 +443,29 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | SAME-01 | Same people at start and end (added 2026-10-29, reworked same day) | When a shift's end has workers not seen at the start, Fix attendance (admin and plant manager) shows "Same people?" at the top; the shift card itself has no badge, only Fix attendance (removed 2026-10-29). One question per new face at the end, "Who is this from the shift start?", with the start faces to tap (the likeliest first, marked Looks alike and picked already: same name first, else face score >= 0.15) and "Someone new". A start face picked for another new face moves there. Save does a real merge per pair (mergeWorkers: days ORed, faces into the kept gallery, merge log with admin or plant manager, undo on the worker page), the day becomes a full shift, audited once (`merge_same_people`). A plant manager of another plant is refused | 1 | P1 | Covered (same-people.spec) |
 | FIX-01 | Plant manager fixes attendance like the admin (added 2026-10-29) | One shared Fix attendance page (`fixAttendance.ts`, `FixAttendance.svelte`) for admin and plant manager. The plant manager renames a worker under the row (named_by `plant-manager`), marks a worker counted twice and undoes it (`resolved_by_manager_id`, migration 043), adds a worker the camera missed (audited with the manager in `by`). The face popup on the shift card (`POST /api/persons/[id]/name`) and the People page rename too. Another plant's manager gets 404 on the page and a failure on every action and the rename API. Screenshots at 390 and 1440, no sideways scroll | 1 | P1 | Covered (pm-fix-attendance.spec) |
 
+### REG: missed day regularisation (regularisation.spec, added 2026-11-07)
+
+| ID | Scenario | Expected | Tier | Pri | Status |
+|---|---|---|---|---|---|
+| REG-01 | Pump asks, business manager approves by email link | The pump lists its missed days (past Active/Idle days, no photo, never today) with the crew; Send makes a pending request; the email is logged (mail off) to the plant's business manager with a signed link; opening the link decides nothing; Approve writes the ticked workers into daily_person_attendance (regularisation_id), the 9 am email counts them and labels the pump Regularised; the link then says settled, a second approve and a tampered link fail | 1 | P1 | Covered |
+| REG-02 | Business manager rejects | Reject with a reason (Other needs a note); nothing counted; the pump sees the reason; the day can be asked again | 1 | P1 | Covered |
+| REG-03 | Which days | Today, a day before the first status row, an Inactive stretch and a day with a photo are refused; workers of another pump, no workers, Other without a note are refused; one open request per day; only the asking pump can withdraw | 1 | P1 | Covered |
+| REG-04 | No business manager, admin decides | The email goes to the admins; admin approves in /admin/regularisations and undoes it (audited, counts removed, day open again); an admin's own request is approved at once | 1 | P1 | Covered |
+| REG-05 | Plant manager and business manager in the app | A plant manager asks for their own pump only and cannot decide; the checklist links a past no-photo day and labels waiting / Regularised; a business-manager-only login lands on Missed days, can view, every other change is 403, and decides in the app | 1 | P1 | Covered |
+| REG-06 | Photo arrived after the request | Approve is refused, request stays pending | 1 | P2 | Covered |
+| REG-07 | Reminders | The worker logs one reminder to the business manager after 24 h and one to the admins after 48 h, never twice | 1 | P1 | Covered |
+| REG-08 | Missed day push | A pump phone with notifications is pushed once a day about its missed days | 1 | P2 | Covered |
+| REG-09 | Phone screens at 390 px | Card, why, who (all ticked, tap to untick), check and send, waiting, the decision link page, approved; no sideways scroll; screenshots saved | 1 | P1 | Covered |
+| REG-10 | Admin pages at 390 px | Missed days and Business managers (give a plant to a new business manager, remove one: flag cleared, sign-in stopped, plants back to the admins) | 1 | P2 | Covered |
+| REG-11 | Who can be selected | Only workers still on the pump with a real photo attendance there; archived, never-attended and only-regularised workers refused by the server | 1 | P0 | Covered |
+| REG-12 | Calendar states | Each state from real data; the calendar and the apply check agree; today, open shift and Inactive cannot be applied for | 1 | P0 | Covered |
+| REG-13 | Half day approve and undo | Only workers missing a half offered; approval completes them; undo removes only the added half and keeps the real photo | 1 | P0 | Covered |
+| REG-14 | Half arrives before approval | That worker skipped; nothing left to add is refused and stays pending | 1 | P1 | Covered |
+| REG-15 | Approver sees the half | Email and decision page name which half each worker is missing | 1 | P1 | Covered |
+| REG-16 | Operator applies at 390 px | Calendar, light red day, three steps, waiting after reload; half stored | 1 | P0 | Covered |
+| REG-17 | Admin applies on the calendar | Pump picker, date, form; the day counts at once and survives reload | 1 | P1 | Covered |
+| REG-18 | Plant manager applies at 390 px | Own pumps only, a foreign pump falls back; form shows the half; sent for approval | 1 | P1 | Covered |
+
 ### PWD: forgot password and resets (added 2026-10-22)
 
 | ID | Scenario | Expected | Tier | Pri | Status |

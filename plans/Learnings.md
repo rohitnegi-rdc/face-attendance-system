@@ -180,3 +180,7 @@ The user asked for "a filter log option PUMP WISE to monitor the attendance for 
 ## 2026-11-05: a pump link's sign-in was given the normal 7-day life
 
 The first version of the pump links reused the normal login's 7-day session. The user corrected it: the link exists because the operator struggles to sign in, so a sign-in that quietly runs out sends them back to the same problem every week. It now lasts until logout, revoke or the pump being disabled. A browser keeps a cookie 400 days at most, so each page opened renews it, and because no end date remains, the session check also refuses a disabled pump. The lesson: a session length follows from who holds the phone, so do not copy the default for a feature built for a different user.
+
+## 2026-11-11: every test passed and the form still looked broken
+
+All 18 regularisation scenarios passed while the admin form showed huge, uneven radio circles: a global input style stretched them inside a flex label, and a click test cannot see that. A crew of 27 also pushed Next off the phone screen. Looking at the screenshots found both. Open the images before reporting, passing tests only prove the flow works.

@@ -55,6 +55,8 @@
 		"eval:golden:run:site": "python scripts/run-golden-site-eval.py",
 		"test": "npm run test:e2e",
 		"test:regression": "node scripts/run-regression.mjs",
+		"test:visual": "node scripts/run-regression.mjs playwright test --config=playwright.regularisation.config.ts tests/visual",
+		"test:visual:update": "node scripts/run-regression.mjs playwright test --config=playwright.regularisation.config.ts tests/visual --update-snapshots",
 		"test:unit": "node scripts/run-unit.mjs",
 		"seed": "tsx --import ./scripts/lib/load-env.mjs scripts/seed.ts",
 		"migrate": "tsx --import ./scripts/lib/load-env.mjs scripts/migrate.ts",

@@ -34,11 +34,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 	let auth = token ? verifyToken(token) : null;
 	// A plant-manager login an admin switched off (a removed monitor) is signed out at once,
 	// not when its 7-day session runs out.
+	// A business manager that manages no plants of its own (and monitors none) only looks: it may
+	// change nothing but its regularisation decisions.
+	let businessManagerOnly = false;
 	if (auth?.role === 'plant-manager') {
-		const manager = await queryOne<{ disabled: boolean }>(
-			'SELECT disabled_at IS NOT NULL AS disabled FROM plant_managers WHERE id = $1',
+		const manager = await queryOne<{ disabled: boolean; read_only: boolean }>(
+			`SELECT disabled_at IS NOT NULL AS disabled,
+			        is_business_manager AND NOT is_monitor
+			          AND NOT EXISTS (SELECT 1 FROM plant_manager_assignments WHERE manager_id = $1)
+			          AS read_only
+			 FROM plant_managers WHERE id = $1`,
 			[auth.id]
 		);
+		businessManagerOnly = Boolean(manager?.read_only);
 		if (!manager || manager.disabled) {
 			event.cookies.delete(isHttps ? 'session' : 'session_http', {
 				path: COOKIE_PATH,
@@ -84,6 +92,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return new Response(null, {
 			status: 302,
 			headers: { location: resolvePath('/change-password') }
+		});
+	}
+	if (
+		businessManagerOnly &&
+		event.request.method !== 'GET' &&
+		event.request.method !== 'HEAD' &&
+		!path.startsWith('/plant-manager/regularisations') &&
+		!path.startsWith('/api/auth/')
+	) {
+		return new Response(JSON.stringify({ error: 'This login can only view' }), {
+			status: 403,
+			headers: { 'content-type': 'application/json' }
 		});
 	}
 	const guardedPrefix = (['/admin', '/vendor', '/plant-manager', '/pump'] as const).find((p) =>

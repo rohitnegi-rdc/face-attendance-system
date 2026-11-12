@@ -5,7 +5,13 @@
 import pg from 'pg';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { sendAttendanceDigestEmail, sendFraudAlertEmail } from './mailer.js';
+import {
+	sendAttendanceDigestEmail,
+	sendFraudAlertEmail,
+	sendRegularisationEmail
+} from './mailer.js';
+import { sendRegularisationReminders } from './regularisationEmail.js';
+import { sendRegularisationPushes } from './regularisationPush.js';
 import { checkRecapture } from './recaptureCheck.js';
 import { pollPumpGps } from './gpsFeed.js';
 import { sendEndReminders } from './endReminders.js';
@@ -870,6 +876,21 @@ async function loop() {
 				(err) => log('error', { error: String(err?.message || err) }, 'attendance digest failed')
 			),
 		5 * 60 * 1000
+	).unref();
+
+	// Regularisations (worker/regularisationEmail.js, worker/regularisationPush.js): a reminder email
+	// 24 hours after a request, the admins after 48, and once a day a push to a pump phone that has a
+	// missed day it has not asked about.
+	const regularisationSweep = () =>
+		Promise.all([
+			sendRegularisationReminders(pool, log, testModeOn, sendRegularisationEmail),
+			sendRegularisationPushes(pool, log, new Date())
+		]).catch((err) =>
+			log('error', { error: String(err?.message || err) }, 'regularisation sweep failed')
+		);
+	setInterval(
+		regularisationSweep,
+		Number(process.env.REGULARISATION_POLL_SECONDS || 300) * 1000
 	).unref();
 
 	// Pump GPS positions for the shift start location check (worker/gpsFeed.js).

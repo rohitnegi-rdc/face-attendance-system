@@ -14,7 +14,8 @@ export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
 			locals.user!.id,
 			sectionForPath(url.pathname, {
 				attendance: resolve('/admin/attendance'),
-				fraud: resolve('/admin/fraud-flags')
+				fraud: resolve('/admin/fraud-flags'),
+				regularisations: resolve('/admin/regularisations')
 			})
 		)
 	};

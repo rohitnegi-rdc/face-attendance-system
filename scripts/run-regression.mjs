@@ -36,8 +36,12 @@ fs.mkdirSync(outDir, { recursive: true });
 fs.mkdirSync(cacheDir, { recursive: true });
 const runLog = fs.createWriteStream(path.join(outDir, 'run.log'));
 
-const playwrightArgs = process.argv.slice(2);
-const LANES = Math.max(1, Number(process.env.REGRESSION_LANES ?? 3) || 1);
+// `run-regression.mjs playwright test --config=... ` runs exactly that Playwright command on this
+// stack, in one lane, so its reporter and screenshots are in one place (npm run test:visual).
+const givenArgs = process.argv.slice(2);
+const ownCommand = givenArgs[0] === 'playwright' && givenArgs[1] === 'test';
+const playwrightArgs = ownCommand ? givenArgs.slice(2) : givenArgs;
+const LANES = ownCommand ? 1 : Math.max(1, Number(process.env.REGRESSION_LANES ?? 3) || 1);
 // Lane 1 keeps the ports the tests default to (6104 database, 6105 app, 6106 stub); each
 // further lane moves up by 10.
 const BASE_PORT = Number(process.env.REGRESSION_DB_PORT ?? 6104);
@@ -359,6 +363,8 @@ function serviceEnv(lane) {
 		// Shift end reminders (REM-01): checked every second, sent to the stub's stand-in push
 		// service over http (production takes https push services only).
 		END_REMINDER_POLL_SECONDS: '1',
+		REGULARISATION_POLL_SECONDS: '1',
+		REGULARISATION_PUSH_HOUR: '0',
 		PUSH_TEST_ENDPOINTS: 'true',
 		TZ: 'UTC' // proves IST handling does not rely on the machine time zone
 	};
@@ -386,7 +392,7 @@ function runScenarios(lane) {
 		[
 			'playwright',
 			'test',
-			'--config=playwright.regression.config.ts',
+			...(ownCommand ? [] : ['--config=playwright.regression.config.ts']),
 			...(LANES > 1 ? [`--shard=${lane.index + 1}/${LANES}`, '--pass-with-no-tests'] : []),
 			...playwrightArgs
 		],

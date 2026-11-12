@@ -132,3 +132,38 @@ export async function sendAttendanceDigestEmail(message, log) {
 		log('error', { error: err.message }, 'attendance digest email failed to send');
 	}
 }
+
+// Regularisation reminder and escalation emails (worker/regularisationEmail.js). Logged instead of
+// sent while test mode is on or mail is off.
+export async function sendRegularisationEmail(message, log, { regularisationId, kind, testMode }) {
+	const fields = {
+		regularisationId,
+		kind,
+		to: message.to,
+		subject: message.subject,
+		approveUrl: message.approveUrl,
+		rejectUrl: message.rejectUrl
+	};
+	if (testMode) return log('info', fields, 'regularisation email NOT sent (test mode)');
+	if (process.env.MAIL_ENABLED !== 'true') {
+		return log('info', fields, 'regularisation email NOT sent (mail off)');
+	}
+	const client = getTransporter();
+	if (!client) return log('warn', fields, 'regularisation email skipped: SMTP not configured');
+	try {
+		await client.sendMail({
+			from: mailFrom(),
+			to: message.to,
+			subject: message.subject,
+			html: message.html,
+			text: message.text
+		});
+		log('info', { regularisationId, kind, subject: message.subject }, 'regularisation email sent');
+	} catch (err) {
+		log(
+			'error',
+			{ regularisationId, kind, error: err.message },
+			'regularisation email failed to send'
+		);
+	}
+}

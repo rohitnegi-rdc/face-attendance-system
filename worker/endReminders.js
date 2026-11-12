@@ -75,56 +75,9 @@ export async function sendEndReminders(db, log, pairingWindowHours) {
 		[gapMinutes, String(await pairingWindowHours(db)), REMINDER_EVERY_MINUTES, MAX_REMINDERS]
 	);
 
-	const vapidDetails = {
-		subject: keys.subject,
-		publicKey: keys.public_key,
-		privateKey: keys.private_key
-	};
 	for (const shift of due) {
-		const { rows: phones } = await db.query(
-			'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE pump_id = $1',
-			[shift.pump_id]
-		);
 		const payload = JSON.stringify(message(shift.reminder, gapMinutes, shift.id));
-		let delivered = 0;
-		for (const phone of phones) {
-			let status;
-			try {
-				// web-push encrypts and signs; fetch sends. sendNotification itself always speaks
-				// https, even to an http:// address, so the regression stub could not receive it.
-				const request = webpush.generateRequestDetails(
-					{ endpoint: phone.endpoint, keys: { p256dh: phone.p256dh, auth: phone.auth } },
-					payload,
-					{ vapidDetails, TTL: 60 * 60, urgency: 'high' }
-				);
-				const response = await fetch(request.endpoint, {
-					method: request.method,
-					headers: request.headers,
-					body: request.body,
-					signal: AbortSignal.timeout(10_000)
-				});
-				status = response.status;
-				if (response.ok) {
-					delivered++;
-					await db.query('UPDATE push_subscriptions SET last_sent_at = now() WHERE id = $1', [
-						phone.id
-					]);
-					continue;
-				}
-				if (status === 404 || status === 410) {
-					await db.query('DELETE FROM push_subscriptions WHERE id = $1', [phone.id]);
-					log('info', { pumpId: shift.pump_id }, 'push subscription gone, removed');
-					continue;
-				}
-				log('warn', { pumpId: shift.pump_id, status }, 'shift end reminder not delivered');
-			} catch (err) {
-				log(
-					'warn',
-					{ pumpId: shift.pump_id, status, error: String(err?.message || err) },
-					'shift end reminder not delivered'
-				);
-			}
-		}
+		const delivered = await pushToPump(db, log, keys, shift.pump_id, payload, 'shift end reminder');
 		log(
 			'info',
 			{ sessionId: shift.id, pumpId: shift.pump_id, reminder: shift.reminder, delivered },
@@ -132,4 +85,54 @@ export async function sendEndReminders(db, log, pairingWindowHours) {
 		);
 	}
 	return due.length;
+}
+
+// Sends one notification to every phone of a pump that allowed them; returns how many took it.
+// Also used by the regularisation reminder (worker/regularisationPush.js).
+export async function pushToPump(db, log, keys, pumpId, payload, what) {
+	const vapidDetails = {
+		subject: keys.subject,
+		publicKey: keys.public_key,
+		privateKey: keys.private_key
+	};
+	const { rows: phones } = await db.query(
+		'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE pump_id = $1',
+		[pumpId]
+	);
+	let delivered = 0;
+	for (const phone of phones) {
+		let status;
+		try {
+			// web-push encrypts and signs; fetch sends. sendNotification itself always speaks
+			// https, even to an http:// address, so the regression stub could not receive it.
+			const request = webpush.generateRequestDetails(
+				{ endpoint: phone.endpoint, keys: { p256dh: phone.p256dh, auth: phone.auth } },
+				payload,
+				{ vapidDetails, TTL: 60 * 60, urgency: 'high' }
+			);
+			const response = await fetch(request.endpoint, {
+				method: request.method,
+				headers: request.headers,
+				body: request.body,
+				signal: AbortSignal.timeout(10_000)
+			});
+			status = response.status;
+			if (response.ok) {
+				delivered++;
+				await db.query('UPDATE push_subscriptions SET last_sent_at = now() WHERE id = $1', [
+					phone.id
+				]);
+				continue;
+			}
+			if (status === 404 || status === 410) {
+				await db.query('DELETE FROM push_subscriptions WHERE id = $1', [phone.id]);
+				log('info', { pumpId }, 'push subscription gone, removed');
+				continue;
+			}
+			log('warn', { pumpId, status }, `${what} not delivered`);
+		} catch (err) {
+			log('warn', { pumpId, status, error: String(err?.message || err) }, `${what} not delivered`);
+		}
+	}
+	return delivered;
 }

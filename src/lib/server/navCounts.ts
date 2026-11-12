@@ -4,7 +4,12 @@
 import { query, queryOne } from './db';
 
 export type NavRole = 'admin' | 'vendor' | 'plant-manager';
-export type NavCounts = { attendance: number; fraud: number; approvals: number };
+export type NavCounts = {
+	attendance: number;
+	fraud: number;
+	approvals: number;
+	regularisations: number;
+};
 
 // SQL condition putting a pump alias in the user's scope ($1 = user id).
 export function pumpScope(role: NavRole, alias: string) {
@@ -44,15 +49,17 @@ export async function markSeen(role: NavRole, userId: string, section: string) {
 
 // Which badge the page being opened clears: Attendance, or the fraud list (admin Fraud flags,
 // vendor Fraud, plant manager Approvals).
-export type NavSection = 'attendance' | 'fraud';
+// Regularisations: requests to decide that came in, and decisions on one's own requests.
+export type NavSection = 'attendance' | 'fraud' | 'regularisations';
 
 // The section a path opens: the page itself or anything under it (an approval's detail page).
 export function sectionForPath(
 	pathname: string,
-	paths: Record<NavSection, string>
+	paths: Partial<Record<NavSection, string>>
 ): NavSection | null {
-	for (const section of ['attendance', 'fraud'] as const) {
+	for (const section of ['attendance', 'fraud', 'regularisations'] as const) {
 		const path = paths[section];
+		if (!path) continue;
 		if (pathname === path || pathname.startsWith(`${path}/`)) return section;
 	}
 	return null;
@@ -76,7 +83,7 @@ export async function loadNavCounts(
 	// Marked before counting, so the page and the badge never race each other.
 	if (openingSection) await markSeen(role, userId, openingSection);
 	const params = [userId];
-	const [attendance, fraud, location] = await Promise.all([
+	const [attendance, fraud, location, regularisations] = await Promise.all([
 		queryOne<{ n: number }>(
 			`SELECT count(*)::int AS n
 			 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
@@ -101,13 +108,29 @@ export async function loadNavCounts(
 					   AND s.submitted_at > ${seenSince(role, 'fraud')}`,
 					params
 				)
-			: Promise.resolve({ n: 0 })
+			: Promise.resolve({ n: 0 }),
+		// Admin: every new request. Plant manager: new requests of its business-manager plants, and
+		// a decision on a request it sent.
+		role === 'vendor'
+			? Promise.resolve({ n: 0 })
+			: queryOne<{ n: number }>(
+					role === 'admin'
+						? `SELECT count(*)::int AS n FROM regularisations
+						   WHERE status = 'pending' AND requested_at > ${seenSince(role, 'regularisations')}`
+						: `SELECT count(*)::int AS n FROM regularisations r JOIN pumps pu ON pu.id = r.pump_id
+						   WHERE (r.status = 'pending' AND r.requested_at > ${seenSince(role, 'regularisations')}
+						          AND pu.plant_id IN (SELECT plant_id FROM business_manager_plants WHERE manager_id = $1))
+						      OR (r.requested_by_id = $1 AND r.status IN ('approved', 'rejected')
+						          AND r.decided_at > ${seenSince(role, 'regularisations')})`,
+					params
+				)
 	]);
 	const fraudCount = fraud?.n ?? 0;
 	return {
 		attendance: attendance?.n ?? 0,
 		fraud: fraudCount,
 		// The plant manager's Approvals page lists both: locations to decide and fraud to watch.
-		approvals: (location?.n ?? 0) + fraudCount
+		approvals: (location?.n ?? 0) + fraudCount,
+		regularisations: regularisations?.n ?? 0
 	};
 }

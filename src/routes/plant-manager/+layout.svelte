@@ -8,6 +8,7 @@
 	userEmail={data.user?.email}
 	isMonitor={data.isMonitor}
 	monitorOnly={data.monitorOnly}
+	businessManagerOnly={data.businessManagerOnly}
 	navCounts={data.navCounts}
 >
 	{@render children()}

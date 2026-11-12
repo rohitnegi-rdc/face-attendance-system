@@ -13,7 +13,7 @@
 /**
  * @typedef {{ id: string, pump_code: string, plant_id: string, plant_name: string, area_name: string,
  *   site_name: string | null, start_at: Date | null, end_at: Date | null, full_shift: number, start_only: number,
- *   end_only: number, workers: number, mtd_workers: number }} DigestPump
+ *   end_only: number, workers: number, mtd_workers: number, regularised: boolean }} DigestPump
  */
 /** @typedef {{ full_shift: number, start_only: number, end_only: number, workers: number, mtd_workers: number }} Counts */
 /**
@@ -90,6 +90,7 @@ export async function digestPumps(db, day, areaId) {
 		          AND s.session_date = $1 AND s.session_type = 'morning' AND s.status <> 'failed') AS start_at,
 		        (SELECT max(s.submitted_at) FROM attendance_sessions s WHERE s.pump_id = pu.id
 		          AND s.session_date = $1 AND s.session_type = 'evening' AND s.status <> 'failed') AS end_at,
+		        bool_or(d.regularisation_id IS NOT NULL) IS TRUE AS regularised,
 		        count(d.person_id) FILTER (WHERE d.morning_matched AND d.evening_matched)::int AS full_shift,
 		        count(d.person_id) FILTER (WHERE d.morning_matched AND NOT d.evening_matched)::int AS start_only,
 		        count(d.person_id) FILTER (WHERE d.evening_matched AND NOT d.morning_matched)::int AS end_only

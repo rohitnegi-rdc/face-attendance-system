@@ -24,10 +24,17 @@
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import Settings from '@lucide/svelte/icons/settings';
 	import ScrollText from '@lucide/svelte/icons/scroll-text';
+	import CalendarPlus from '@lucide/svelte/icons/calendar-plus';
+	import BriefcaseBusiness from '@lucide/svelte/icons/briefcase-business';
 	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 	import RdcLogo from '$lib/components/RdcLogo.svelte';
 
-	type NavCounts = { attendance: number; fraud: number; approvals: number };
+	type NavCounts = {
+		attendance: number;
+		fraud: number;
+		approvals: number;
+		regularisations?: number;
+	};
 	type BadgeKey = keyof NavCounts;
 
 	let {
@@ -35,6 +42,7 @@
 		userEmail = '',
 		isMonitor = false,
 		monitorOnly = false,
+		businessManagerOnly = false,
 		navCounts,
 		children
 	} = $props<{
@@ -44,6 +52,8 @@
 		isMonitor?: boolean;
 		// A monitor with no plants of its own: no Overview, Approvals or Kept photos (for now).
 		monitorOnly?: boolean;
+		// A business manager with no plants of its own: Regularisations, Attendance, Pumps, People.
+		businessManagerOnly?: boolean;
 		navCounts?: NavCounts;
 		children: import('svelte').Snippet;
 	}>();
@@ -59,7 +69,7 @@
 	});
 
 	function badgeCount(key: BadgeKey | undefined) {
-		return key && navCounts ? navCounts[key] : 0;
+		return key && navCounts ? (navCounts[key] ?? 0) : 0;
 	}
 
 	// Badges are news since the user last opened the page (src/lib/server/navCounts.ts).
@@ -69,6 +79,7 @@
 			return `${n} new shift ${n === 1 ? 'photo' : 'photos'} since your last visit`;
 		if (key === 'fraud')
 			return `${n} new fraud ${n === 1 ? 'case' : 'cases'} since your last visit`;
+		if (key === 'regularisations') return `${n} new on missed days since your last visit`;
 		return navCounts?.fraud
 			? `${n} new since your last visit, ${navCounts.fraud} of them fraud (same person at two pumps)`
 			: `${n} new since your last visit`;
@@ -80,7 +91,10 @@
 	}
 
 	const anyBadge = $derived(
-		Boolean(navCounts && (navCounts.attendance || navCounts.fraud || navCounts.approvals))
+		Boolean(
+			navCounts &&
+			(navCounts.attendance || navCounts.fraud || navCounts.approvals || navCounts.regularisations)
+		)
 	);
 
 	async function signOut(event: SubmitEvent) {
@@ -128,6 +142,12 @@
 			icon: TriangleAlert,
 			badge: 'fraud'
 		},
+		{
+			href: resolve('/admin/regularisations'),
+			label: 'Missed days',
+			icon: CalendarPlus,
+			badge: 'regularisations'
+		},
 		{ href: resolve('/admin/review-flags'), label: 'Flagged errors', icon: Flag },
 		{ href: resolve('/admin/flagged-guests'), label: 'Guest review', icon: ScanFace },
 		{ href: resolve('/admin/merge-candidates'), label: 'Merge review', icon: UsersRound },
@@ -135,6 +155,11 @@
 		{ href: resolve('/admin/vendors'), label: 'Vendors', icon: Building2 },
 		{ href: resolve('/admin/plant-managers'), label: 'Plant managers', icon: Building2 },
 		{ href: resolve('/admin/monitors'), label: 'Monitors', icon: Eye },
+		{
+			href: resolve('/admin/business-managers'),
+			label: 'Business managers',
+			icon: BriefcaseBusiness
+		},
 		{ href: resolve('/admin/import'), label: 'Imports', icon: FileUp },
 		{ href: resolve('/admin/logs'), label: 'Logs', icon: ScrollText },
 		{ href: resolve('/admin/settings'), label: 'Settings', icon: Settings }
@@ -171,6 +196,12 @@
 			icon: MapPin,
 			badge: 'approvals'
 		},
+		{
+			href: resolve('/plant-manager/regularisations'),
+			label: 'Missed days',
+			icon: CalendarPlus,
+			badge: 'regularisations'
+		},
 		{ href: resolve('/plant-manager/photo-backups'), label: 'Kept photos', icon: ImageOff },
 		{ href: resolve('/plant-manager/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/plant-manager/pump-status'), label: 'Pump status', icon: Power },
@@ -182,14 +213,22 @@
 		resolve('/plant-manager/approvals'),
 		resolve('/plant-manager/photo-backups')
 	];
+	const businessManagerShown: string[] = [
+		resolve('/plant-manager/regularisations'),
+		resolve('/plant-manager/attendance'),
+		resolve('/plant-manager/pumps'),
+		resolve('/plant-manager/people')
+	];
 	let items = $derived(
 		role === 'admin'
 			? adminItems
 			: role === 'vendor'
 				? vendorItems
-				: monitorOnly
-					? plantManagerItems.filter((item) => !monitorHidden.includes(item.href))
-					: plantManagerItems
+				: businessManagerOnly
+					? plantManagerItems.filter((item) => businessManagerShown.includes(item.href))
+					: monitorOnly
+						? plantManagerItems.filter((item) => !monitorHidden.includes(item.href))
+						: plantManagerItems
 	);
 
 	function isActive(item: { href: string; exact?: boolean }) {

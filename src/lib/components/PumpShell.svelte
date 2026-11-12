@@ -5,6 +5,7 @@
 	import PumpGuide from '$lib/components/PumpGuide.svelte';
 	import RdcLogo from '$lib/components/RdcLogo.svelte';
 	import PumpReminders from '$lib/components/PumpReminders.svelte';
+	import PumpRegularise from '$lib/components/PumpRegularise.svelte';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 	import { loadPumpLang, pumpLang, setPumpHindi, t } from '$lib/pumpLang.svelte';
@@ -102,6 +103,7 @@
 	</header>
 	<main id="main-content" inert={guideShown}>
 		<PumpReminders onhold={(hold) => (remindersHold = hold)} />
+		{#if decided && !guideShown && !remindersHold}<PumpRegularise />{/if}
 		{@render children()}
 	</main>
 	{#if guideShown}
