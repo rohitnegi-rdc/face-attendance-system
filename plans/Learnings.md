@@ -188,3 +188,7 @@ All 18 regularisation scenarios passed while the admin form showed huge, uneven 
 ## 2026-11-12: fraud marked "not fraud" still showed on the Area and plant cards
 
 Clearing a flag keeps the row (resolution 'not_fraud', so the decision stays on record), but the cards, Overview, Insights, the plant manager checklist and the report each counted fraud_flags with their own SQL and none of them looked at the decision. Only the nav badge did, through `NOT ff.reviewed`. The rule now lives once in `countsAsFraud` (src/lib/server/fraudCount.ts) and a unit test fails on any fraud count that leaves it out. The lesson: when a record gets a decision instead of being deleted, every count of it needs the decision, so put that condition in one shared place.
+
+## 2026-11-13: a monitor's Attendance page answered 502 Bad Gateway after a deploy
+
+SvelteKit sends a `link` header listing every script of a page, on top of the same list inside the page. The regularisation release added menu items, icons and components, and on the biggest page (a monitor's Attendance, under the `/pump-attendance` base path, with the session cookie) the headers passed nginx's default 4 KB buffer, so nginx gave 502 for that page only while every other login worked. The app now drops the `link` header in `hooks.server.ts`, and OPS-09 checks header size. The lesson: a 502 on one page while the app is up points at the response itself (headers too big), not at the app being down.

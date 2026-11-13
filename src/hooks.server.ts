@@ -171,5 +171,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 		});
 	}
 
-	return resolve(event);
+	const response = await resolve(event);
+	// SvelteKit lists every script of a page in a `link` header as well as in the page itself. On a
+	// big page (a monitor's Attendance) that header passed nginx's 4 KB limit for response headers,
+	// and nginx answered 502 Bad Gateway. The page's own preload tags stay, so loading is the same.
+	if (response.headers.has('link')) {
+		try {
+			response.headers.delete('link');
+		} catch {
+			// Immutable headers (a fetched response passed through): leave them.
+		}
+	}
+	return response;
 };

@@ -414,6 +414,7 @@ Areas with `location_check_enabled` (Mumbai first) compare the operator's phone 
 | OPS-06 | Server `deploy.sh` when the server copy has local edits or has diverged from `origin/main` | Refuses, nothing changes | 0 | P0 | Missing |
 | OPS-07 | App starts without `JWT_SECRET` or with a short one | Fails fast with a clear message | 1 | P1 | Missing |
 | OPS-08 | Logs contain no passwords, tokens or photo bytes | grep of logs after a Tier 1 run | 1 | P1 | Missing |
+| OPS-09 | Page response headers fit nginx (bug 2026-11-13: a monitor's Attendance page gave 502 Bad Gateway) | No SvelteKit `link` preload header; every page's headers under 4 KB (monitor and admin pages) | 1 | P0 | Covered (response-headers.spec) |
 
 ### UI: browser behaviour per role
 
