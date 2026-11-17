@@ -785,6 +785,11 @@ textarea::placeholder {
 	box-shadow: inset 4px 0 0 var(--alert);
 }
 
+/* Pump lists: an Active or Idle pump with nobody counted today (same light red as the 9 am email). */
+.data-table tbody tr.row-none td {
+	background: var(--alert-tint);
+}
+
 .fraud-row-badge {
 	display: inline-block;
 	margin-top: var(--space-1);

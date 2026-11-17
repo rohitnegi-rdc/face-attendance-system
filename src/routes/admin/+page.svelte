@@ -4,8 +4,10 @@
 	import CalendarCheck from '@lucide/svelte/icons/calendar-check';
 	import ScanSearch from '@lucide/svelte/icons/scan-search';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
+	import RegularisationDecideCard from '$lib/components/RegularisationDecideCard.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import ShiftSplit from '$lib/components/ShiftSplit.svelte';
 	import TodayCards from '$lib/components/TodayCards.svelte';
 	import { formatDate } from '$lib/date';
 
@@ -64,6 +66,32 @@
 		>
 	</header>
 
+	{#if data.overdueRegularisations.length}
+		<section class="overdue" aria-labelledby="overdue-heading" data-testid="overdue-regularisations">
+			<div class="overdue__head">
+				<h2 id="overdue-heading">
+					Missed days waiting over 2 days <span class="overdue__count"
+						>{data.overdueRegularisations.length}</span
+					>
+				</h2>
+				<a href={resolve('/admin/regularisations')}>All missed days</a>
+			</div>
+			<p class="overdue__hint">
+				The business manager has not decided these. Approve or reject them here.
+			</p>
+			<ul class="overdue__list">
+				{#each data.overdueRegularisations as r (r.id)}
+					<RegularisationDecideCard
+						{r}
+						role="admin"
+						action={resolve('/admin/regularisations') + '?/decide'}
+						showWaiting
+					/>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
 	<section class="today-summary" aria-labelledby="today-heading">
 		<div class="today-summary__lead">
 			<div class="today-summary__icon"><CalendarCheck size={22} /></div>
@@ -73,6 +101,12 @@
 					<strong>{data.metrics.presentToday}</strong> fully present out of
 					<strong>{data.metrics.totalToday}</strong> recorded workers
 				</p>
+				<ShiftSplit
+					testId="today-split"
+					full={data.metrics.presentToday}
+					startOnly={data.metrics.startOnlyToday}
+					endOnly={data.metrics.endOnlyToday}
+				/>
 			</div>
 		</div>
 		<div class="coverage" aria-label={`${data.metrics.attendancePct}% attendance today`}>
@@ -195,6 +229,48 @@
 </div>
 
 <style>
+	/* Escalated missed day requests: first on the page, decided in place. */
+	.overdue {
+		margin-bottom: var(--space-4);
+	}
+	.overdue__head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--space-2);
+	}
+	.overdue__head h2 {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		margin: 0;
+		font-size: var(--text-lg);
+	}
+	.overdue__count {
+		min-width: 1.75rem;
+		padding: 0 0.5rem;
+		color: var(--surface-raised);
+		font-size: var(--text-sm);
+		text-align: center;
+		background: var(--alert);
+		border-radius: 999px;
+	}
+	.overdue__hint {
+		margin: var(--space-1) 0 var(--space-2);
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
+	}
+	.overdue__list {
+		display: grid;
+		gap: var(--space-3);
+		max-height: 70vh;
+		margin: 0;
+		padding: 0;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		list-style: none;
+	}
 	.today-summary {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.65fr);

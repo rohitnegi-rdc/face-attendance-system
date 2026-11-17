@@ -638,14 +638,22 @@ export type RequestRow = {
 	canDecide: boolean;
 	canCancel: boolean;
 	approverName: string | null;
+	// Whole days since it was asked for; over ESCALATE_HOURS it shows on the admin Overview.
+	waitingDays: number;
 };
 
 export type ListFilter = {
 	status?: 'pending' | 'decided' | 'all';
 	pumpId?: string;
 	decideOnly?: boolean;
+	// Only requests still waiting after ESCALATE_HOURS (the admin Overview).
+	overdueOnly?: boolean;
 	limit?: number;
 };
+
+// A request waiting this long goes to the admins: the worker emails those with a mailbox
+// (worker/regularisationEmail.js, the same 48) and the admin Overview lists it to decide.
+export const ESCALATE_HOURS = 48;
 
 type RequestDbRow = {
 	id: string;
@@ -668,6 +676,7 @@ type RequestDbRow = {
 	bm_id: string | null;
 	bm_name: string | null;
 	workers: string[];
+	waiting_days: number;
 };
 
 // Requests a login sees, waiting ones first. canDecide: an admin any waiting one, a business
@@ -682,6 +691,11 @@ export async function listRequests(viewer: Viewer, filter: ListFilter = {}): Pro
 		where.push(`r.pump_id = $${params.length}`);
 	}
 	if (filter.decideOnly && viewer.role === 'plant-manager') where.push('bmp.manager_id = $1::uuid');
+	if (filter.overdueOnly) {
+		where.push(
+			`r.status = 'pending' AND r.requested_at <= now() - ${ESCALATE_HOURS} * interval '1 hour'`
+		);
+	}
 	params.push(Math.min(filter.limit ?? 200, 500));
 	const rows = await query<RequestDbRow>(
 		`SELECT r.id, r.pump_id, pu.pump_code, pl.name AS plant_name, a.name AS area_name,
@@ -689,6 +703,7 @@ export async function listRequests(viewer: Viewer, filter: ListFilter = {}): Pro
 		        r.voice_path IS NOT NULL AS has_voice, r.status, r.requested_by_role, r.requested_by_id,
 		        r.requested_by_name, r.requested_at, r.decided_by_name, r.decided_at, r.decision_reason,
 		        bmp.manager_id AS bm_id, bm.name AS bm_name,
+		        floor(extract(epoch FROM now() - r.requested_at) / 86400)::int AS waiting_days,
 		        ARRAY(SELECT ${WORKER_LABEL_SQL}
 		              FROM regularisation_workers rw JOIN persons p ON p.id = rw.person_id
 		              WHERE rw.regularisation_id = r.id ORDER BY p.display_seq) AS workers
@@ -698,7 +713,7 @@ export async function listRequests(viewer: Viewer, filter: ListFilter = {}): Pro
 		 LEFT JOIN business_manager_plants bmp ON bmp.plant_id = pl.id
 		 LEFT JOIN plant_managers bm ON bm.id = bmp.manager_id
 		 WHERE ${where.join(' AND ')}
-		 ORDER BY (r.status = 'pending') DESC, r.requested_at DESC
+		 ORDER BY (r.status = 'pending') DESC, r.requested_at ${filter.overdueOnly ? 'ASC' : 'DESC'}
 		 LIMIT $${params.length}`,
 		params
 	);
@@ -725,7 +740,8 @@ export async function listRequests(viewer: Viewer, filter: ListFilter = {}): Pro
 			(viewer.role === 'admin' || (viewer.role === 'plant-manager' && r.bm_id === viewer.id)),
 		canCancel:
 			r.status === 'pending' && (viewer.role === 'admin' || r.requested_by_id === viewer.id),
-		approverName: r.bm_name ?? null
+		approverName: r.bm_name ?? null,
+		waitingDays: Number(r.waiting_days)
 	}));
 }
 

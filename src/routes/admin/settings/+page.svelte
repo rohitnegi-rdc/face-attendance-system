@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { formatDate, formatDateTime } from '$lib/date';
 	let { data, form } = $props();
 	// Ticked areas first, so the ones that get the email are seen without scrolling.
@@ -20,6 +22,18 @@
 	}
 	const nextDay = (value: string) =>
 		new Date(Date.parse(`${value}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+	// CC by area: 5 areas before anything is typed (ticked first, then A to Z), the 4 best
+	// matches while typing (names starting with the text first).
+	let areaQuery = $state('');
+	const shownAreas = $derived.by(() => {
+		const q = areaQuery.trim().toLowerCase();
+		if (!q) return pickOrder.slice(0, 5);
+		const starts = pickOrder.filter((a) => a.name.toLowerCase().startsWith(q));
+		const contains = pickOrder.filter(
+			(a) => !a.name.toLowerCase().startsWith(q) && a.name.toLowerCase().includes(q)
+		);
+		return [...starts, ...contains].slice(0, 4);
+	});
 	const enabledAreas = $derived(
 		data.digestAreas.filter((area) => area.digest_enabled).map((area) => area.name)
 	);
@@ -33,6 +47,11 @@
 		set_approval_email: 'Switched location approval emails',
 		update_digest_cc: 'Changed attendance email copies',
 		update_digest_areas: 'Changed attendance email areas',
+		update_area_cc: 'Changed an area CC',
+		business_head_assign: 'Gave a plant to a business head',
+		business_head_unassign: 'Took a plant from a business head',
+		business_head_remove: 'Removed a business head',
+		business_head_import: 'Uploaded the business heads list',
 		delete_session: 'Deleted a session',
 		clear_pump_attendance: 'Cleared pump data',
 		clear_test_attendance: 'Cleared test records'
@@ -128,8 +147,10 @@
 		<p class="supporting-text">
 			Every morning at 9 am, one email per ticked area with the attendance of the day before: full
 			shift, start only and end only for every Active and Idle pump (set at Pump status), a pump
-			with no one counted in red. It goes to the admins and the area's monitors, with a copy to
-			everyone on the CC list below and no one else.
+			with no one counted in red, and each missed day request with its reason and where it stands.
+			It goes to the admins, the area's monitors and the business managers of its plants, with a
+			copy to everyone on the global CC, the area's own CC and the business heads of its plants, and
+			no one else.
 		</p>
 		{#if data.digestFirstDay}
 			<p class="supporting-text" data-testid="digest-first">
@@ -161,7 +182,7 @@
 			</div>
 		</form>
 		<div class="cc-block" data-testid="digest-cc">
-			<h3 class="cc-title">CC ({data.digestCc.length})</h3>
+			<h3 class="cc-title">Global CC, every area ({data.digestCc.length})</h3>
 			{#if form?.formKind === 'digest-cc' && form?.message}
 				<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
 			{/if}
@@ -198,6 +219,95 @@
 				</label>
 				<button type="submit" class="button button--primary">Add</button>
 			</form>
+		</div>
+		<div class="cc-block recipients" data-testid="area-cc">
+			<h3 class="cc-title">CC by area</h3>
+			<p class="supporting-text">
+				Copied on that area's email only, beside the global CC. Each card also shows who gets it
+				from the area's plants: business managers in To (<a
+					href={resolve('/admin/business-managers')}>Business managers</a
+				>) and business heads in CC (<a href={resolve('/admin/business-heads')}>Business heads</a>).
+			</p>
+			<label class="field">
+				<span>Search for an area</span>
+				<input
+					type="search"
+					bind:value={areaQuery}
+					placeholder="Type an area name"
+					autocomplete="off"
+					data-testid="area-cc-search"
+				/>
+			</label>
+			<p class="supporting-text muted" data-testid="area-cc-count">
+				{#if areaQuery.trim()}
+					{shownAreas.length
+						? `Best ${shownAreas.length === 1 ? 'match' : `${shownAreas.length} matches`} for "${areaQuery.trim()}".`
+						: `No area matches "${areaQuery.trim()}".`}
+				{:else}
+					Showing {shownAreas.length} of {pickOrder.length} areas, ticked ones first. Type to find another.
+				{/if}
+			</p>
+			<ul class="area-recipients">
+				{#each shownAreas as area (area.id)}
+					<li class="area-card" data-testid="digest-area" data-area={area.name}>
+						<p class="area-card__head">
+							<strong>{area.name}</strong>
+							{#if !area.digest_enabled}<span class="muted">Not ticked above: no email</span>{/if}
+						</p>
+						<div class="who" data-testid="digest-area-cc">
+							<span class="who__label">CC for {area.name} ({area.cc.length}):</span>
+							{#if area.cc.length}
+								<ul class="cc-list">
+									{#each area.cc as email (email)}
+										<li>
+											<span class="cc-email">{email}</span>
+											<form method="POST" action="?/removeAreaCc" use:enhance>
+												<input type="hidden" name="area" value={area.id} />
+												<input type="hidden" name="email" value={email} />
+												<button
+													type="submit"
+													class="button button--secondary cc-remove"
+													aria-label="Remove {email} from {area.name}">Remove</button
+												>
+											</form>
+										</li>
+									{/each}
+								</ul>
+							{:else}<span class="muted">No one yet.</span>{/if}
+						</div>
+						{#if form?.formKind === 'area-cc' && form?.areaId === area.id && form?.message}
+							<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+						{/if}
+						<form method="POST" action="?/addAreaCc" class="cc-add" use:enhance>
+							<input type="hidden" name="area" value={area.id} />
+							<label class="field">
+								<span>Add to CC for {area.name}</span>
+								<input
+									name="email"
+									type="text"
+									inputmode="email"
+									autocomplete="off"
+									placeholder="name@rdc.in"
+									data-testid="area-cc-add"
+								/>
+							</label>
+							<button type="submit" class="button button--primary">Add</button>
+						</form>
+						<p class="who" data-testid="digest-area-managers">
+							<span class="who__label">To, business managers:</span>
+							{#if area.managers.length}
+								{area.managers.map((m) => `${m.name} (${m.email})`).join(', ')}
+							{:else}<span class="muted">none</span>{/if}
+						</p>
+						<p class="who" data-testid="digest-area-heads">
+							<span class="who__label">CC, business heads:</span>
+							{#if area.heads.length}
+								{area.heads.map((m) => `${m.name} (${m.email})`).join(', ')}
+							{:else}<span class="muted">none</span>{/if}
+						</p>
+					</li>
+				{/each}
+			</ul>
 		</div>
 	</section>
 
@@ -359,6 +469,48 @@
 	}
 	.cc-remove {
 		flex-shrink: 0;
+	}
+	.recipients {
+		margin-top: var(--space-5);
+	}
+	/* One card per area, ticked first, in a bounded scroll box. */
+	.area-recipients {
+		display: grid;
+		gap: var(--space-3);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		max-height: 36rem;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+	.area-card {
+		display: grid;
+		gap: var(--space-2);
+		padding: var(--space-3);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+		min-width: 0;
+	}
+	.area-card__head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--space-1) var(--space-2);
+		margin: 0;
+	}
+	.who {
+		display: grid;
+		gap: var(--space-1);
+		margin: 0;
+		overflow-wrap: anywhere;
+	}
+	.who__label {
+		font-size: var(--text-sm);
+		font-weight: 600;
+	}
+	.muted {
+		color: var(--ink-muted);
 	}
 	.cc-add {
 		display: flex;

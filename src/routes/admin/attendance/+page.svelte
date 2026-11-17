@@ -16,12 +16,25 @@
 		dateMode = data.isSingleDay ? 'day' : 'range';
 	});
 
-	const metrics = $derived([
-		{ label: 'Present', value: data.summary.present },
-		{ label: 'Absent', value: data.summary.absent },
-		{ label: 'Records', value: data.summary.total },
-		{ label: 'Attendance', value: `${data.summary.attendancePct}%` }
-	]);
+	// Full day: the workers split by shift, like the plant manager's checklist and the 9 am email.
+	// With a Session filter: present or absent for that half.
+	const fullDay = $derived(!data.filters.session);
+	const metrics = $derived(
+		fullDay
+			? [
+					{ label: 'Full shift', value: data.summary.present },
+					{ label: 'Start only', value: data.summary.startOnly },
+					{ label: 'End only', value: data.summary.endOnly },
+					{ label: 'Records', value: data.summary.total },
+					{ label: 'Attendance', value: `${data.summary.attendancePct}%` }
+				]
+			: [
+					{ label: 'Present', value: data.summary.present },
+					{ label: 'Absent', value: data.summary.absent },
+					{ label: 'Records', value: data.summary.total },
+					{ label: 'Attendance', value: `${data.summary.attendancePct}%` }
+				]
+	);
 
 	function toggle(pumpId: string) {
 		if (expandedPumps.has(pumpId)) expandedPumps.delete(pumpId);
@@ -51,10 +64,21 @@
 		return data.rows.filter((row: any) => row.pump_id === pumpId);
 	}
 
-	function isPresent(row: any) {
-		if (data.filters.session === 'morning') return row.morning_matched;
-		if (data.filters.session === 'evening') return row.evening_matched;
-		return row.morning_matched && row.evening_matched;
+	// One worker's day: with a Session filter present or absent for that half, otherwise full
+	// shift, start only or end only (the attendance calendar's P / M / E).
+	function rowStatus(row: any): {
+		label: string;
+		tone: 'success' | 'pending' | 'attention' | 'neutral';
+	} {
+		if (data.filters.session === 'morning' || data.filters.session === 'evening') {
+			const present =
+				data.filters.session === 'morning' ? row.morning_matched : row.evening_matched;
+			return present ? { label: 'Present', tone: 'success' } : { label: 'Absent', tone: 'neutral' };
+		}
+		if (row.morning_matched && row.evening_matched) return { label: 'Full shift', tone: 'success' };
+		if (row.morning_matched) return { label: 'Start only', tone: 'pending' };
+		if (row.evening_matched) return { label: 'End only', tone: 'attention' };
+		return { label: 'Absent', tone: 'neutral' };
 	}
 
 	let groupedByArea = $derived.by(() => {
@@ -165,8 +189,16 @@
 			><span>Status</span><select name="status"
 				><option value="">Any status</option><option
 					value="present"
-					selected={data.filters.status === 'present'}>Present</option
-				><option value="absent" selected={data.filters.status === 'absent'}>Absent</option></select
+					selected={data.filters.status === 'present'}
+					>{data.filters.session ? 'Present' : 'Full shift'}</option
+				>{#if !data.filters.session}<option
+						value="start_only"
+						selected={data.filters.status === 'start_only'}>Start only</option
+					><option value="end_only" selected={data.filters.status === 'end_only'}
+						>End only</option
+					>{/if}<option value="absent" selected={data.filters.status === 'absent'}
+					>{data.filters.session ? 'Absent' : 'Not a full shift'}</option
+				></select
 			></label
 		>
 		<fieldset class="date-mode">
@@ -234,9 +266,11 @@
 								<table class="data-table pump-summary">
 									<thead
 										><tr
-											><th><span class="sr-only">Expand</span></th><th>Pump</th><th>Present</th><th
-												>Absent</th
-											><th>Total</th><th>Action</th></tr
+											><th><span class="sr-only">Expand</span></th><th>Pump</th>{#if fullDay}<th
+													>Full shift</th
+												><th>Start only</th><th>End only</th>{:else}<th>Present</th><th
+													>Absent</th
+												>{/if}<th>Total</th><th>Action</th></tr
 										></thead
 									>
 									<tbody>
@@ -256,7 +290,11 @@
 													><a href={resolve(`/admin/pumps/${pump.pump_id}`)}>{pump.pump_code}</a
 													></td
 												>
-												<td>{pump.present}</td><td>{pump.absent}</td><td>{pump.total}</td>
+												{#if fullDay}<td>{pump.present}</td><td>{pump.start_only}</td><td
+														>{pump.end_only}</td
+													>{:else}<td>{pump.present}</td><td>{pump.absent}</td>{/if}<td
+													>{pump.total}</td
+												>
 												<td
 													><a
 														class="button button--secondary correction-link"
@@ -268,7 +306,7 @@
 											</tr>
 											{#if expandedPumps.has(pump.pump_id)}
 												<tr class="detail-row"
-													><td colspan="6"
+													><td colspan={fullDay ? 7 : 6}
 														><div class="person-records">
 															{#each pumpRows(pump.pump_id) as row}{@const label = personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}<div
 																	class="person-record"
@@ -276,10 +314,7 @@
 																		url={resolve('/api/persons/[id]/face', { id: row.person_id })}
 																		{label}
 																	/><a href={resolve(`/admin/persons/${row.person_id}`)}
-																		><span>{label}</span><StatusBadge
-																			tone={isPresent(row) ? 'success' : 'neutral'}
-																			label={isPresent(row) ? 'Present' : 'Absent'}
-																		/></a
+																		><span>{label}</span><StatusBadge {...rowStatus(row)} /></a
 																	></div
 																>{/each}
 														</div></td
@@ -308,10 +343,10 @@
 					<thead
 						><tr
 							><th><a href={sortUrl('session_date')}>Date</a></th><th>Person</th><th
-								><a href={sortUrl('pump_code')}>Pump</a></th
-							><th><a href={sortUrl('vendor_name')}>Vendor</a></th><th>Plant</th><th
-								><a href={sortUrl('area_name')}>Area</a></th
-							><th><a href={sortUrl('status')}>Status</a></th><th>Action</th></tr
+								><a href={sortUrl('status')}>Status</a></th
+							><th><a href={sortUrl('pump_code')}>Pump</a></th><th
+								><a href={sortUrl('vendor_name')}>Vendor</a></th
+							><th>Plant</th><th><a href={sortUrl('area_name')}>Area</a></th><th>Action</th></tr
 						></thead
 					>
 					<tbody
@@ -325,15 +360,12 @@
 											>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</a
 										></span
 									></td
-								><td><a href={resolve(`/admin/pumps/${row.pump_id}`)}>{row.pump_code}</a></td><td
+								><td><StatusBadge {...rowStatus(row)} /></td><td
+									><a href={resolve(`/admin/pumps/${row.pump_id}`)}>{row.pump_code}</a></td
+								><td
 									><a href={resolve(`/admin/vendors/${row.vendor_id}`)}>{row.vendor_name}</a></td
 								><td>{row.plant_name}</td><td
 									><a href={resolve(`/admin/areas/${row.area_id}`)}>{row.area_name}</a></td
-								><td
-									><StatusBadge
-										tone={isPresent(row) ? 'success' : 'neutral'}
-										label={isPresent(row) ? 'Present' : 'Absent'}
-									/></td
 								><td
 									><a
 										class="button button--secondary correction-link"
@@ -357,10 +389,7 @@
 								/><a href={resolve(`/admin/persons/${row.person_id}`)}
 									>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</a
 								></span
-							><StatusBadge
-								tone={isPresent(row) ? 'success' : 'neutral'}
-								label={isPresent(row) ? 'Present' : 'Absent'}
-							/>
+							><StatusBadge {...rowStatus(row)} />
 						</div>
 						<dl>
 							<div>

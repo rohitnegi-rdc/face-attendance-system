@@ -2,18 +2,27 @@
 // Every Active and Idle pump of the Area that day (pump_day_status, migration 046), grouped by Plant, with
 // its full shift, start only and end only counts; a pump with no one counted is a red row in the
 // email. Inactive (closed) pumps, and pumps never set Active or Idle, are left out. To: every
-// admin and the Area's monitors. CC: only the admin's list (app_settings `digest_cc`, edited at
-// /admin/settings, first filled by migration 045); no list, no CC. The attendance_digest_log row ('area:<id>', day) is
-// claimed before sending, so two workers never both send it. Only Areas ticked at /admin/settings
-// (areas.digest_enabled, Mumbai to start) get it, and no email for an Area whose pumps are all
-// Inactive.
+// admin, the Area's monitors and the business managers of its plants (business_manager_plants).
+// CC: the admin's global list (app_settings `digest_cc`, edited at /admin/settings, first filled
+// by migration 045), the Area's own CC (area_digest_cc, migration 053, same page) and the business
+// heads of its plants (business_head_plants, migration 051);
+// nothing else. A pump with a missed day request for the day shows its reason, note and where it stands.
+// The attendance_digest_log row ('area:<id>', day) is claimed before sending, so two workers never
+// both send it. Only Areas ticked at /admin/settings (areas.digest_enabled, Mumbai to start) get
+// it, and no email for an Area whose pumps are all Inactive.
 
 /** @typedef {{ query: (sql: string, params?: unknown[]) => Promise<{ rows: any[], rowCount?: number | null }> }} Queryable */
 /** @typedef {(level: string, fields: object, message: string) => void} Log */
 /**
  * @typedef {{ id: string, pump_code: string, plant_id: string, plant_name: string, area_name: string,
  *   site_name: string | null, start_at: Date | null, end_at: Date | null, full_shift: number, start_only: number,
- *   end_only: number, workers: number, mtd_workers: number, regularised: boolean }} DigestPump
+ *   end_only: number, workers: number, mtd_workers: number, regularised: boolean,
+ *   request: DigestRequest | null }} DigestPump
+ */
+/**
+ * @typedef {{ status: 'pending' | 'approved' | 'rejected', reason: string, note: string | null,
+ *   voice: boolean, requested_by: string, decided_by: string | null, decision_reason: string | null,
+ *   decider: string | null }} DigestRequest
  */
 /** @typedef {{ full_shift: number, start_only: number, end_only: number, workers: number, mtd_workers: number }} Counts */
 /**
@@ -91,6 +100,15 @@ export async function digestPumps(db, day, areaId) {
 		        (SELECT max(s.submitted_at) FROM attendance_sessions s WHERE s.pump_id = pu.id
 		          AND s.session_date = $1 AND s.session_type = 'evening' AND s.status <> 'failed') AS end_at,
 		        bool_or(d.regularisation_id IS NOT NULL) IS TRUE AS regularised,
+		        (SELECT json_build_object('status', r.status, 'reason', r.reason, 'note', r.note,
+		                  'voice', r.voice_path IS NOT NULL, 'requested_by', r.requested_by_name,
+		                  'decided_by', r.decided_by_name, 'decision_reason', r.decision_reason,
+		                  'decider', (SELECT bm.name FROM business_manager_plants b
+		                     JOIN plant_managers bm ON bm.id = b.manager_id AND bm.disabled_at IS NULL
+		                     WHERE b.plant_id = pl.id))
+		          FROM regularisations r WHERE r.pump_id = pu.id AND r.day = $1
+		            AND r.status IN ('pending', 'approved', 'rejected')
+		          ORDER BY r.requested_at DESC LIMIT 1) AS request,
 		        count(d.person_id) FILTER (WHERE d.morning_matched AND d.evening_matched)::int AS full_shift,
 		        count(d.person_id) FILTER (WHERE d.morning_matched AND NOT d.evening_matched)::int AS start_only,
 		        count(d.person_id) FILTER (WHERE d.evening_matched AND NOT d.morning_matched)::int AS end_only
@@ -218,11 +236,35 @@ export async function sendAttendanceDigests(db, log, testModeOn, now, send) {
 			 WHERE ma.area_id = $1 AND pm.is_monitor AND pm.disabled_at IS NULL`,
 			[area.id]
 		);
+		// The business managers of the Area's plants: they decide its missed day requests.
+		const { rows: managers } = await db.query(
+			`SELECT DISTINCT lower(pm.email) AS email FROM business_manager_plants b
+			 JOIN plants pl ON pl.id = b.plant_id JOIN plant_managers pm ON pm.id = b.manager_id
+			 WHERE pl.area_id = $1 AND pm.disabled_at IS NULL`,
+			[area.id]
+		);
+		// The Area's own CC list (only this Area's email).
+		const { rows: areaCc } = await db.query(
+			'SELECT email FROM area_digest_cc WHERE area_id = $1 ORDER BY email',
+			[area.id]
+		);
+		// The business heads of the Area's plants: copied, they decide nothing.
+		const { rows: heads } = await db.query(
+			`SELECT DISTINCT lower(pm.email) AS email FROM business_head_plants b
+			 JOIN plants pl ON pl.id = b.plant_id JOIN plant_managers pm ON pm.id = b.manager_id
+			 WHERE pl.area_id = $1 AND pm.disabled_at IS NULL ORDER BY 1`,
+			[area.id]
+		);
 		// Logins ending in .rdc are made up by the system (admin@attendance.rdc): no mailbox there.
-		const to = [...new Set([...admins, ...monitors].map((r) => r.email))]
+		const to = [...new Set([...admins, ...monitors, ...managers].map((r) => r.email))]
 			.filter((email) => !email.endsWith('.rdc'))
 			.sort();
-		const cc = ccList(to, fixedCc);
+		const cc = ccList(
+			to,
+			fixedCc,
+			areaCc.map((r) => r.email),
+			heads.map((r) => r.email).filter((email) => !email.endsWith('.rdc'))
+		);
 		const mtd = await digestPumpDays(db, day, area.id);
 		const message = { to, cc, area: area.name, day, ...groupPumps(pumps), mtd };
 		if (await testModeOn(db)) {

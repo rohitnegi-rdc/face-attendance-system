@@ -34,19 +34,26 @@ export const handle: Handle = async ({ event, resolve }) => {
 	let auth = token ? verifyToken(token) : null;
 	// A plant-manager login an admin switched off (a removed monitor) is signed out at once,
 	// not when its 7-day session runs out.
-	// A business manager that manages no plants of its own (and monitors none) only looks: it may
-	// change nothing but its regularisation decisions.
+	// A business manager or business head that manages no plants of its own (and monitors none)
+	// only looks: a business manager may change nothing but its regularisation decisions, a
+	// business head nothing at all.
 	let businessManagerOnly = false;
+	let decidesMissedDays = false;
 	if (auth?.role === 'plant-manager') {
-		const manager = await queryOne<{ disabled: boolean; read_only: boolean }>(
-			`SELECT disabled_at IS NOT NULL AS disabled,
-			        is_business_manager AND NOT is_monitor
+		const manager = await queryOne<{
+			disabled: boolean;
+			read_only: boolean;
+			is_business_manager: boolean;
+		}>(
+			`SELECT disabled_at IS NOT NULL AS disabled, is_business_manager,
+			        (is_business_manager OR is_business_head) AND NOT is_monitor
 			          AND NOT EXISTS (SELECT 1 FROM plant_manager_assignments WHERE manager_id = $1)
 			          AS read_only
 			 FROM plant_managers WHERE id = $1`,
 			[auth.id]
 		);
 		businessManagerOnly = Boolean(manager?.read_only);
+		decidesMissedDays = Boolean(manager?.is_business_manager);
 		if (!manager || manager.disabled) {
 			event.cookies.delete(isHttps ? 'session' : 'session_http', {
 				path: COOKIE_PATH,
@@ -98,7 +105,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		businessManagerOnly &&
 		event.request.method !== 'GET' &&
 		event.request.method !== 'HEAD' &&
-		!path.startsWith('/plant-manager/regularisations') &&
+		!(decidesMissedDays && path.startsWith('/plant-manager/regularisations')) &&
 		!path.startsWith('/api/auth/')
 	) {
 		return new Response(JSON.stringify({ error: 'This login can only view' }), {

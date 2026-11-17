@@ -10,8 +10,9 @@ export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
 		is_monitor: boolean;
 		manages_plants: boolean;
 		is_business_manager: boolean;
+		is_business_head: boolean;
 	}>(
-		`SELECT is_monitor, is_business_manager,
+		`SELECT is_monitor, is_business_manager, is_business_head,
 		        EXISTS (SELECT 1 FROM plant_manager_assignments WHERE manager_id = $1) AS manages_plants
 		 FROM plant_managers WHERE id = $1`,
 		[locals.user!.id]
@@ -20,10 +21,13 @@ export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
 	// A monitor that manages no plants of its own sees Attendance, Pumps and People only (for now):
 	// Overview, Approvals and Kept photos send it to Attendance.
 	const monitorOnly = isMonitor && !manager?.manages_plants;
-	// A business manager with no plants of its own (and no Areas) only looks and decides missed
-	// days: Regularisations, Attendance, Pumps and People; hooks.server.ts refuses its other changes.
+	// A business manager or business head with no plants of its own (and no Areas) only looks:
+	// Missed days, Attendance, Pumps and People. hooks.server.ts refuses its changes, except a
+	// business manager's missed day decisions.
 	const businessManagerOnly =
-		Boolean(manager?.is_business_manager) && !isMonitor && !manager?.manages_plants;
+		Boolean(manager?.is_business_manager || manager?.is_business_head) &&
+		!isMonitor &&
+		!manager?.manages_plants;
 	if (businessManagerOnly) {
 		const path = url.pathname.replace(/\/$/, '');
 		const shown = ['regularisations', 'attendance', 'pumps', 'people'].map((p) =>

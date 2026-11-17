@@ -373,3 +373,217 @@ describe('the 9 am attendance tracker', () => {
 		);
 	});
 });
+
+// Area F (2026-11-17): the business managers of its plants get the email, the business heads of
+// its plants are copied (business_head_plants, from the mapping BHBMPLANTSMAPPING.MD), and each pump with a missed day request for the day shows the reason and where it stands.
+describe('business managers, business heads and missed day requests', () => {
+	let f: {
+		name: string;
+		bm: { id: string; email: string };
+		gone: { id: string; email: string };
+		codes: { waiting: string; approved: string; rejected: string; none: string };
+	};
+
+	async function businessManager(name: string, disabled = false) {
+		const { rows } = await db.query(
+			`INSERT INTO plant_managers (name, email, password_hash, is_business_manager, disabled_at)
+			 VALUES ($1, $2, 'x', true, $3) RETURNING id, email`,
+			[name, `${name}.${randomUUID().slice(0, 8)}@Unit.test`, disabled ? new Date() : null]
+		);
+		return { id: rows[0].id as string, email: (rows[0].email as string).toLowerCase() };
+	}
+
+	// A business head login (Google sign-in, no password) given one plant.
+	async function businessHead(email: string, plantId: string, disabled = false) {
+		const { rows } = await db.query(
+			`INSERT INTO plant_managers (name, email, password_hash, is_business_head, disabled_at)
+			 VALUES ($1, $2, NULL, true, $3) RETURNING id`,
+			[email.split('@')[0], email, disabled ? new Date() : null]
+		);
+		await db.query('INSERT INTO business_head_plants (plant_id, manager_id) VALUES ($1, $2)', [
+			plantId,
+			rows[0].id
+		]);
+	}
+
+	async function request(
+		pumpId: string,
+		status: string,
+		extra: { note?: string; voice?: boolean; by?: string; why?: string } = {}
+	) {
+		await db.query(
+			`INSERT INTO regularisations (pump_id, day, reason, note, voice_path, requested_by_role,
+			   requested_by_id, requested_by_name, status, decided_by_role, decided_by_name,
+			   decision_reason, link_base)
+			 VALUES ($1, $2, 'phone_problem', $3, $4, 'pump', $1, 'Pump', $5, $6, $7, $8, 'http://x')`,
+			[
+				pumpId,
+				DAY,
+				extra.note ?? null,
+				extra.voice ? 'regularisations/x.webm' : null,
+				status,
+				extra.by ? 'business_manager' : null,
+				extra.by ?? null,
+				extra.why ?? null
+			]
+		);
+	}
+
+	before(async () => {
+		const a = await area();
+		const { rows: p2 } = await db.query(
+			"INSERT INTO plants (area_id, name) VALUES ($1, 'BMPLANT-' || substr(md5(random()::text), 1, 8)) RETURNING id",
+			[a.areaId]
+		);
+		await db.query('UPDATE areas SET digest_enabled = true WHERE id = $1', [a.areaId]);
+		const waiting = await pump(a.plantId);
+		const approved = await pump(a.plantId);
+		const rejected = await pump(p2[0].id);
+		const none = await pump(p2[0].id);
+		const ids = [waiting, approved, rejected, none];
+		await db.query("UPDATE pumps SET created_at = '2026-09-01' WHERE id = ANY($1)", [ids]);
+		for (const id of ids)
+			await db.query(
+				`INSERT INTO pump_day_status (pump_id, day, status, set_by_role, set_by_id, set_by_name)
+				 VALUES ($1, '2026-09-01', 'active', 'admin', gen_random_uuid(), 'unit')`,
+				[id]
+			);
+		const bm = await businessManager('asha');
+		const gone = await businessManager('left', true);
+		await db.query(
+			'INSERT INTO business_manager_plants (plant_id, manager_id) VALUES ($1, $2), ($3, $4)',
+			[a.plantId, bm.id, p2[0].id, gone.id]
+		);
+		// One head per plant; boss@ is also on the fixed CC list, a removed head gets nothing.
+		const { rows: p3 } = await db.query(
+			"INSERT INTO plants (area_id, name) VALUES ($1, 'BHPLANT-' || substr(md5(random()::text), 1, 8)) RETURNING id",
+			[a.areaId]
+		);
+		await businessHead('Head@unit.test', a.plantId);
+		await businessHead('boss@unit.test', p2[0].id);
+		await businessHead('gone.head@unit.test', p3[0].id, true);
+		// The Area's own CC (migration 053); cc.two@ is also on the global list.
+		await db.query(
+			`INSERT INTO area_digest_cc (area_id, email) VALUES ($1, 'area.only@unit.test'),
+			   ($1, 'cc.two@unit.test')`,
+			[a.areaId]
+		);
+		await request(waiting, 'pending', { note: 'Phone fell in water', voice: true });
+		await request(approved, 'approved', { by: 'Asha' });
+		await worker(approved, true, true);
+		await db.query(
+			`UPDATE daily_person_attendance SET regularisation_id =
+			   (SELECT id FROM regularisations WHERE pump_id = $1) WHERE pump_id = $1`,
+			[approved]
+		);
+		await request(rejected, 'rejected', { by: 'Asha', why: 'The workers listed are not right' });
+		// A cancelled request is not news.
+		await request(none, 'cancelled');
+		f = {
+			name: await areaName(a.areaId),
+			bm,
+			gone,
+			codes: {
+				waiting: await code(waiting),
+				approved: await code(approved),
+				rejected: await code(rejected),
+				none: await code(none)
+			}
+		};
+	});
+
+	test("To has the Area's business managers; CC adds its own CC and business heads, never twice", async () => {
+		await sendAttendanceDigests(db, quiet, testModeOff, AT_0930, send);
+		const [mail] = mailFor(f.name);
+		assert.ok(mail.to.includes(f.bm.email), 'the business manager of a plant in the Area');
+		assert.ok(!mail.to.includes(f.gone.email), 'a removed business manager gets nothing');
+		assert.deepEqual(mail.cc, [
+			'boss@unit.test',
+			'cc.two@unit.test',
+			'area.only@unit.test',
+			'head@unit.test'
+		]);
+		const [other] = mailFor(world.names.a);
+		assert.ok(!other.to.includes(f.bm.email), 'only the Area of their plants');
+		assert.ok(!other.cc.includes('area.only@unit.test'), "an area CC only on that Area's email");
+		assert.ok(!other.cc.includes('head@unit.test'), "a business head only for their plants' Area");
+	});
+
+	test('each request shows its reason, note and where it stands', async () => {
+		await sendAttendanceDigests(db, quiet, testModeOff, AT_0930, send);
+		const [mail] = mailFor(f.name);
+		const byCode = Object.fromEntries(pumpsIn(mail).map((p) => [p.pump_code, p]));
+		assert.equal(byCode[f.codes.waiting].request.status, 'pending');
+		assert.equal(byCode[f.codes.waiting].request.decider, 'asha');
+		assert.equal(byCode[f.codes.approved].request.status, 'approved');
+		assert.equal(byCode[f.codes.rejected].request.decider, null, 'its manager was removed');
+		assert.equal(byCode[f.codes.none].request, null, 'a cancelled request is left out');
+
+		const { html } = renderAttendanceDigest(mail);
+		const line = (status: string) =>
+			html.match(new RegExp(`data-request="${status}">(.*?)</td>`))?.[1] ?? '';
+		assert.equal(
+			line('pending').replace(/<[^>]+>/g, ''),
+			'Missed day request: Phone dead or broken, &ldquo;Phone fell in water&rdquo;, with a voice note in the app. Waiting for approval by asha (business manager).'
+		);
+		assert.equal(
+			line('approved').replace(/<[^>]+>/g, ''),
+			'Missed day request: Phone dead or broken. Approved by Asha.'
+		);
+		assert.equal(
+			line('rejected').replace(/<[^>]+>/g, ''),
+			'Missed day request: Phone dead or broken. Rejected by Asha: The workers listed are not right.'
+		);
+		assert.equal(html.match(/data-request=/g)?.length, 3);
+		assert.match(html, /<strong>Regularised<\/strong> \(missed day, approved\)/);
+		assert.match(
+			html,
+			/<li><strong>Missed day request:<\/strong> the pump asked/,
+			'the legend says what it is'
+		);
+	});
+
+	test('a note is escaped in the email', () => {
+		const { html } = renderAttendanceDigest({
+			area: 'X',
+			day: DAY,
+			mtd: { pump_days: 1, marked: 0 },
+			totals: {
+				pumps: 1,
+				marked: 0,
+				full_shift: 0,
+				start_only: 0,
+				end_only: 0,
+				workers: 0,
+				mtd_workers: 0
+			},
+			areas: [
+				{
+					name: 'X',
+					plants: [
+						{
+							id: 'p',
+							name: 'P',
+							totals: { full_shift: 0, start_only: 0, end_only: 0, workers: 0, mtd_workers: 0 },
+							pumps: [
+								{
+									pump_code: 'PX',
+									start_at: null,
+									end_at: null,
+									full_shift: 0,
+									start_only: 0,
+									end_only: 0,
+									workers: 0,
+									mtd_workers: 0,
+									request: { status: 'pending', reason: 'other', note: '<b>hi</b>', decider: null }
+								}
+							]
+						}
+					]
+				}
+			]
+		});
+		assert.ok(html.includes('&lt;b&gt;hi&lt;/b&gt;'));
+		assert.ok(html.includes('Waiting for approval</strong> by an admin.'));
+	});
+});

@@ -14,7 +14,10 @@ export type GroupToday = {
 	plants: number;
 	pumps: number;
 	reporting: number;
+	// present = full shift (start and end both matched); startOnly / endOnly = only one half.
 	present: number;
+	startOnly: number;
+	endOnly: number;
 	total: number;
 	pct: number;
 	fraud: number;
@@ -30,6 +33,8 @@ export type PumpToday = {
 	startAt: string | null;
 	endAt: string | null;
 	present: number;
+	startOnly: number;
+	endOnly: number;
 	total: number;
 	rangePresent: number;
 	rangeTotal: number;
@@ -63,6 +68,12 @@ export async function groupsToday(
 		        (SELECT count(*) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched)
 		          FROM daily_person_attendance dpa JOIN pumps pu ON pu.id = dpa.pump_id
 		          WHERE ${pumpsOf} AND dpa.session_date = $1) AS present,
+		        (SELECT count(*) FILTER (WHERE dpa.morning_matched AND NOT dpa.evening_matched)
+		          FROM daily_person_attendance dpa JOIN pumps pu ON pu.id = dpa.pump_id
+		          WHERE ${pumpsOf} AND dpa.session_date = $1) AS start_only,
+		        (SELECT count(*) FILTER (WHERE dpa.evening_matched AND NOT dpa.morning_matched)
+		          FROM daily_person_attendance dpa JOIN pumps pu ON pu.id = dpa.pump_id
+		          WHERE ${pumpsOf} AND dpa.session_date = $1) AS end_only,
 		        (SELECT count(*) FROM daily_person_attendance dpa JOIN pumps pu ON pu.id = dpa.pump_id
 		          WHERE ${pumpsOf} AND dpa.session_date = $1) AS total,
 		        (SELECT count(*) FROM fraud_flags ff JOIN attendance_sessions s ON s.id = ff.session_id
@@ -94,6 +105,8 @@ export async function groupsToday(
 				pumps: Number(row.pumps),
 				reporting: Number(row.reporting),
 				present,
+				startOnly: Number(row.start_only),
+				endOnly: Number(row.end_only),
 				total,
 				pct: pct(present, total),
 				fraud: Number(row.fraud)
@@ -121,6 +134,10 @@ export async function pumpsToday(
 		          AND s.session_date = $2 AND s.session_type = 'evening' AND s.status <> 'failed') AS end_at,
 		        (SELECT count(*) FILTER (WHERE morning_matched AND evening_matched) FROM daily_person_attendance
 		          WHERE pump_id = pu.id AND session_date = $2) AS present,
+		        (SELECT count(*) FILTER (WHERE morning_matched AND NOT evening_matched) FROM daily_person_attendance
+		          WHERE pump_id = pu.id AND session_date = $2) AS start_only,
+		        (SELECT count(*) FILTER (WHERE evening_matched AND NOT morning_matched) FROM daily_person_attendance
+		          WHERE pump_id = pu.id AND session_date = $2) AS end_only,
 		        (SELECT count(*) FROM daily_person_attendance
 		          WHERE pump_id = pu.id AND session_date = $2) AS total,
 		        (SELECT count(*) FILTER (WHERE morning_matched AND evening_matched) FROM daily_person_attendance
@@ -151,6 +168,8 @@ export async function pumpsToday(
 			startAt: row.start_at ? new Date(row.start_at).toISOString() : null,
 			endAt: row.end_at ? new Date(row.end_at).toISOString() : null,
 			present: Number(row.present),
+			startOnly: Number(row.start_only),
+			endOnly: Number(row.end_only),
 			total: Number(row.total),
 			rangePresent,
 			rangeTotal,

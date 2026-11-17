@@ -7,6 +7,8 @@
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import StatusBadge from '$lib/components/StatusBadge.svelte';
+	import { PUMP_WORK_STATUS_LABELS } from '$lib/pumpWorkStatus';
 	import { formatDate, formatTime } from '$lib/date';
 	import type { PumpCheck } from '$lib/server/pumpChecks';
 
@@ -81,8 +83,8 @@
 
 	{#if !data.pumps.length}
 		<EmptyState
-			title="No pumps yet"
-			description="Ask an administrator to give you plants or areas to look after."
+			title="No Active or Idle pumps {isToday ? 'today' : 'this day'}"
+			description="Only pumps set Active or Idle on the Pump status page are listed here."
 		/>
 	{/if}
 
@@ -97,10 +99,23 @@
 				{/if}
 				<ul>
 					{#each group.pumps as pump (pump.pumpId)}
-						<li class="pump" data-testid="checklist-pump">
+						<li
+							class="pump"
+							class:pump--none={pump.total === 0}
+							class:pump--fraud={pump.fraud > 0}
+							data-testid="checklist-pump"
+							data-status={pump.workStatus}
+							data-attendance={pump.total === 0 ? 'none' : 'some'}
+						>
 							<a class="pump__open" href={fixLink(pump.pumpId)}>
 								<span class="pump__text">
-									<strong>{pump.pumpCode}</strong>
+									<span class="pump__name"
+										><strong>{pump.pumpCode}</strong>
+										<StatusBadge
+											tone={pump.workStatus === 'active' ? 'success' : 'pending'}
+											label={PUMP_WORK_STATUS_LABELS[pump.workStatus]}
+										/></span
+									>
 									<small>{pump.plantName}</small>
 									<span class="pump__says" class:pump__says--fraud={pump.fraud > 0}
 										>{says(pump)}</span
@@ -217,6 +232,7 @@
 	ul {
 		margin: 0;
 		padding: 0;
+		overflow: hidden;
 		list-style: none;
 		background: var(--surface-raised);
 		border: 1px solid var(--brand-mist);
@@ -231,6 +247,20 @@
 	}
 	.pump + .pump {
 		border-top: 1px solid var(--brand-mist);
+	}
+	/* Light red: nobody counted at this pump this day. Fraud: the tint plus a solid red edge. */
+	.pump--none,
+	.pump--fraud {
+		background: var(--alert-tint);
+	}
+	.pump--fraud {
+		box-shadow: inset 4px 0 0 var(--alert);
+	}
+	.pump__name {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2);
 	}
 	.pump__open {
 		display: flex;

@@ -7,9 +7,11 @@
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import FacePeek from '$lib/components/FacePeek.svelte';
+	import PumpDiary from '$lib/components/PumpDiary.svelte';
+	import ShiftSplit from '$lib/components/ShiftSplit.svelte';
 	import ShiftLog from '$lib/components/ShiftLog.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { formatDate, formatDateTime, formatDayLabel } from '$lib/date';
+	import { formatDate, formatDateTime } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 	import { shiftTypeLabel } from '$lib/shiftLabels';
 
@@ -42,11 +44,8 @@
 			{ present: 0, morningOnly: 0, eveningOnly: 0 }
 		)
 	);
-	let showEmptyDays = $state(false);
-	const hasAttendance = (d: any) => d.present + d.morningOnly + d.eveningOnly > 0;
-	const emptyDayCount = $derived(data.dailyBreakdown.filter((d: any) => !hasAttendance(d)).length);
-	const summaryDays = $derived(
-		[...data.dailyBreakdown].reverse().filter((d: any) => showEmptyDays || hasAttendance(d))
+	const dailyCounts = $derived(
+		Object.fromEntries(data.dailyBreakdown.map((d: any) => [d.day, d]))
 	);
 	const rangeLabel = $derived(`${formatDate(data.range.from)} – ${formatDate(data.range.to)}`);
 	const trendData = $derived(data.dailyBreakdown.slice(-5));
@@ -111,55 +110,26 @@
 				<AttendanceDailyBars data={trendData} />
 			</div>
 		</section>
-		<section class="surface surface--padded">
+		<section class="surface surface--padded" aria-labelledby="diary-heading">
 			<div class="section-header">
 				<div>
-					<h2>Daily attendance summary</h2>
-					<p class="supporting-text">People counted per day, {rangeLabel}.</p>
+					<h2 id="diary-heading">Day by day</h2>
+					<p class="supporting-text">
+						{rangeLabel}: what the pump sent each day, by the time it was sent. Refused photos are
+						kept for 30 days.
+					</p>
 				</div>
 			</div>
-			{#if summaryDays.length === 0}
-				<p class="supporting-text">No attendance in this range.</p>
-			{:else}
-				<div class="table-wrap daily-summary-frame">
-					<table class="data-table daily-summary-table">
-						<thead>
-							<tr>
-								<th>Day</th>
-								<th>Full</th>
-								<th>Start only</th>
-								<th>End only</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each summaryDays as d (d.day)}
-								{@const label = formatDayLabel(d.day)}
-								<tr>
-									<td class="day-cell">{label.weekday} {label.date}</td>
-									<td class:zero={!d.present}>{d.present}</td>
-									<td class:zero={!d.morningOnly}>{d.morningOnly}</td>
-									<td class:zero={!d.eveningOnly}>{d.eveningOnly}</td>
-								</tr>
-							{/each}
-						</tbody>
-						<tfoot>
-							<tr>
-								<th>Total</th>
-								<th>{dailyBreakdownTotals.present}</th>
-								<th>{dailyBreakdownTotals.morningOnly}</th>
-								<th>{dailyBreakdownTotals.eveningOnly}</th>
-							</tr>
-						</tfoot>
-					</table>
-				</div>
-			{/if}
-			{#if emptyDayCount > 0}
-				<button type="button" class="link-button" onclick={() => (showEmptyDays = !showEmptyDays)}>
-					{showEmptyDays
-						? 'Hide days with no attendance'
-						: `Show ${emptyDayCount} day${emptyDayCount === 1 ? '' : 's'} with no attendance`}
-				</button>
-			{/if}
+			<p class="range-total" data-testid="diary-total">
+				In this range:
+				<ShiftSplit
+					full={dailyBreakdownTotals.present}
+					startOnly={dailyBreakdownTotals.morningOnly}
+					endOnly={dailyBreakdownTotals.eveningOnly}
+					testId="diary-total-split"
+				/>
+			</p>
+			<PumpDiary days={data.diary} counts={dailyCounts} />
 			{#if data.rejectionCounts.morningOnly > 0}
 				<p class="footnote">
 					Shifts with no end photo: {data.rejectionCounts.morningExpired} closed &middot;
@@ -568,55 +538,17 @@
 	}
 	.pump-summary {
 		display: grid;
-		grid-template-columns: minmax(0, 55fr) minmax(20rem, 35fr);
+		grid-template-columns: minmax(0, 1fr) minmax(22rem, 1fr);
 		gap: var(--space-4);
+		align-items: start;
 	}
-	.daily-summary-table th,
-	.daily-summary-table td {
-		text-align: right;
-	}
-	.daily-summary-table th:first-child,
-	.daily-summary-table td:first-child {
-		text-align: left;
-	}
-	.daily-summary-table .day-cell {
-		white-space: nowrap;
-	}
-	.daily-summary-table td.zero {
-		color: var(--ink-muted);
-	}
-	.link-button {
-		margin-top: var(--space-2);
-		padding: 0;
-		border: 0;
-		background: none;
-		color: var(--brand-teal);
-		font: inherit;
+	.range-total {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2);
+		margin: 0 0 var(--space-3);
 		font-size: var(--text-sm);
-		text-decoration: underline;
-		cursor: pointer;
-	}
-	.daily-summary-frame {
-		max-height: 25rem;
-		overflow-x: hidden;
-		overflow-y: auto;
-		overscroll-behavior: contain;
-		scrollbar-gutter: stable;
-		scrollbar-width: thin;
-		scrollbar-color: var(--brand-mist) var(--surface-muted);
-	}
-	.daily-summary-table thead th {
-		position: sticky;
-		top: 0;
-		z-index: 3;
-	}
-	.daily-summary-table tfoot th {
-		position: sticky;
-		top: auto;
-		bottom: 0;
-		z-index: 3;
-		background: var(--surface-muted);
-		box-shadow: 0 -1px 0 var(--brand-mist);
 	}
 	.daily-bars-frame {
 		overflow: hidden;

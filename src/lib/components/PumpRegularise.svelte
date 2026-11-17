@@ -39,6 +39,9 @@
 	let voice = $state<Blob | null>(null);
 	let voiceUrl = $state<string | null>(null);
 	let recording = $state(false);
+	let starting = $state(false);
+	let seconds = $state(0);
+	let ticker: ReturnType<typeof setInterval> | undefined;
 	let micRefused = $state(false);
 	let sending = $state(false);
 	let error = $state('');
@@ -146,40 +149,64 @@
 		voiceUrl = null;
 	}
 
-	async function startRecording(event: PointerEvent) {
-		event.preventDefault();
-		if (recording) return;
+	// Tap to start, tap to stop. Holding did not work: the first press opens the browser's microphone
+	// prompt, the finger lifts while it shows, and the stop came before the recording started.
+	async function toggleRecording() {
+		if (recording) return stopRecording();
+		if (starting) return;
 		reason = 'other';
 		clearVoice();
+		micRefused = false;
+		if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+			micRefused = true;
+			return;
+		}
+		starting = true;
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 			const type = ['audio/webm', 'audio/mp4', 'audio/ogg'].find((t) =>
 				MediaRecorder.isTypeSupported?.(t)
 			);
-			recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+			const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+			recorder = rec;
 			chunks = [];
-			recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-			recorder.onstop = () => {
+			rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+			rec.onstop = () => {
 				stream.getTracks().forEach((t) => t.stop());
-				const blob = new Blob(chunks, { type: recorder?.mimeType || 'audio/webm' });
+				const blob = new Blob(chunks, { type: rec.mimeType || type || 'audio/webm' });
 				if (blob.size > 0) {
 					voice = blob;
 					voiceUrl = URL.createObjectURL(blob);
 				}
 				recording = false;
+				clearInterval(ticker);
 			};
-			recorder.start();
+			rec.start();
 			recording = true;
+			seconds = 0;
 			// Two minutes at most: the note is a sentence or two, and the upload stays small.
-			setTimeout(stopRecording, 120_000);
+			ticker = setInterval(() => {
+				seconds += 1;
+				if (seconds >= 120) stopRecording();
+			}, 1000);
 		} catch {
 			micRefused = true;
+		} finally {
+			starting = false;
 		}
 	}
 
 	function stopRecording() {
 		if (recorder && recorder.state !== 'inactive') recorder.stop();
 	}
+
+	// Leaving the screen mid-recording frees the microphone.
+	$effect(() => () => {
+		clearInterval(ticker);
+		stopRecording();
+	});
+
+	const clock = (n: number) => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
 
 	async function send() {
 		if (!reason || sending) return;
@@ -320,39 +347,50 @@
 						class:recording
 						aria-pressed={reason === 'other'}
 						data-testid="reg-reason-other"
-						onpointerdown={startRecording}
-						onpointerup={stopRecording}
-						onpointerleave={stopRecording}
-						onpointercancel={stopRecording}
-						oncontextmenu={(e) => e.preventDefault()}
+						onclick={toggleRecording}
 					>
-						<span class="emoji" aria-hidden="true">🎤</span>
+						<span class="emoji" aria-hidden="true">{recording ? '⏹️' : '🎤'}</span>
 						{#if recording}
-							{@render two('बोलिए… छोड़ें तो रुकेगा', 'Speak… let go to stop')}
+							{@render two(
+								`बोलिए… रोकने के लिए दबाएँ ${clock(seconds)}`,
+								`Speak… tap to stop ${clock(seconds)}`
+							)}
+						{:else if starting}
+							{@render two('माइक चालू हो रहा है…', 'Starting the microphone…')}
 						{:else}
-							{@render two('दबाकर बोलें (कुछ और)', 'Hold and speak (other)')}
+							{@render two('दबाएँ और बोलें (कुछ और)', 'Tap and speak (something else)')}
 						{/if}
 					</button>
 				</div>
+				{#if micRefused}
+					<p class="mic-off" role="status" data-testid="reg-mic-off">
+						{@render two('माइक नहीं चला। नीचे लिखें।', 'The microphone did not work. Write below.')}
+					</p>
+				{/if}
 				{#if voiceUrl}
 					<div class="voice">
-						<audio controls src={voiceUrl}></audio>
+						<audio controls src={voiceUrl} data-testid="reg-voice-preview"></audio>
 						<button type="button" class="quiet" onclick={clearVoice}
 							>{@render two('हटाएँ', 'Remove')}</button
 						>
 					</div>
 				{/if}
-				{#if reason === 'other' && (micRefused || !voiceUrl)}
-					<label class="note">
-						{@render two('या लिखें क्या हुआ', 'Or write what happened')}
-						<input bind:value={note} maxlength="500" data-testid="reg-note" />
-					</label>
-				{/if}
+				<label class="note">
+					{#if reason === 'other' && !voice}
+						{@render two('लिखें क्या हुआ', 'Write what happened')}
+					{:else}
+						{@render two('कुछ और लिखना है? (ज़रूरी नहीं)', 'Anything to add? (optional)')}
+					{/if}
+					<textarea bind:value={note} maxlength="500" rows="3" data-testid="reg-note"></textarea>
+				</label>
 				<div class="row">
 					<button
 						class="big"
 						type="button"
-						disabled={!reason || (reason === 'other' && !voice && !note.trim())}
+						disabled={recording ||
+							starting ||
+							!reason ||
+							(reason === 'other' && !voice && !note.trim())}
 						onclick={() => (step = 2)}
 						data-testid="reg-next">{@render two('आगे', 'Next')}</button
 					>
@@ -568,6 +606,9 @@
 		background: var(--surface-raised);
 		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 		display: grid;
+		/* One column the width of the sheet: an auto column grows to the widest content (the voice
+		   preview's audio bar) and pushed every step past the screen edge. */
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--space-4);
 	}
 	.sheet h2 {
@@ -604,7 +645,7 @@
 		border: 2px solid var(--brand-mist);
 		border-radius: var(--radius-lg);
 		cursor: pointer;
-		touch-action: none;
+		touch-action: manipulation;
 		user-select: none;
 		-webkit-user-select: none;
 	}
@@ -636,7 +677,17 @@
 		display: grid;
 		gap: var(--space-1);
 	}
-	.note input {
+	.mic-off {
+		margin: 0;
+		color: var(--alert);
+		font-weight: 600;
+	}
+	.note textarea {
+		box-sizing: border-box;
+		width: 100%;
+		min-width: 0;
+		font: inherit;
+		resize: vertical;
 		min-height: 3rem;
 		padding: var(--space-2) var(--space-3);
 		font-size: 1rem;

@@ -160,6 +160,7 @@
 			label: 'Business managers',
 			icon: BriefcaseBusiness
 		},
+		{ href: resolve('/admin/business-heads'), label: 'Business heads', icon: BriefcaseBusiness },
 		{ href: resolve('/admin/import'), label: 'Imports', icon: FileUp },
 		{ href: resolve('/admin/logs'), label: 'Logs', icon: ScrollText },
 		{ href: resolve('/admin/settings'), label: 'Settings', icon: Settings }

@@ -6,6 +6,7 @@ import { error, fail } from '@sveltejs/kit';
 import { todayStr, addDaysStr, dateKey, daysBetween } from '$lib/date';
 import { createAttendanceReviewFlag } from '$lib/server/attendanceReview';
 import { logger } from '$lib/server/log';
+import { pumpDiary } from '$lib/server/pumpDiary';
 import {
 	clearTestModeAttendance,
 	deleteSession,
@@ -183,6 +184,8 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		};
 	});
 
+	const diary = await pumpDiary(pump.id, from, to);
+
 	const testSessions = await queryOne<{ sessions: number; first: Date | null; last: Date | null }>(
 		`SELECT count(*)::int AS sessions, min(submitted_at) AS first, max(submitted_at) AS last
 		 FROM attendance_sessions WHERE pump_id = $1 AND test_mode`,
@@ -210,7 +213,8 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		days,
 		attendanceMap,
 		rejectionCounts,
-		dailyBreakdown
+		dailyBreakdown,
+		diary
 	};
 };
 

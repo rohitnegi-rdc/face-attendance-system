@@ -1,8 +1,9 @@
 <script lang="ts">
 	// Today's attendance as one card per area or plant (admin Overview, Areas, Plants, area page):
-	// name and percentage present, a bar, then present of recorded and pumps reported. A card with
-	// fraud today turns red. Cards sit side by side to compare; one column on a phone.
+	// name and percentage present (full shift), a bar, the workers split into full shift, start only
+	// and end only (ShiftSplit), and pumps reported. A card with fraud today turns red. Cards sit side by side to compare; one column on a phone.
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import ShiftSplit from '$lib/components/ShiftSplit.svelte';
 
 	export type TodayCard = {
 		id: string;
@@ -12,6 +13,8 @@
 		sub?: string | null;
 		pct: number;
 		present: number;
+		startOnly: number;
+		endOnly: number;
 		total: number;
 		reporting: number;
 		pumps: number;
@@ -53,8 +56,9 @@
 				<span class="card__track" aria-hidden="true"
 					><span style={`width: ${item.pct}%`}></span></span
 				>
+				<ShiftSplit full={item.present} startOnly={item.startOnly} endOnly={item.endOnly} />
 				<span class="card__foot">
-					<span><strong>{item.present}</strong> of {item.total} present</span>
+					<span><strong>{item.total}</strong> {item.total === 1 ? 'worker' : 'workers'}</span>
 					<span>{item.reporting} of {item.pumps} {item.pumps === 1 ? 'pump' : 'pumps'}</span>
 					{#if item.fraud}<span class="card__fraud">{item.fraud} fraud</span>{/if}
 				</span>

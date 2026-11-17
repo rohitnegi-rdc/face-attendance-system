@@ -2,10 +2,17 @@
 // builds the data, sendAttendanceDigestEmail in worker/mailer.js sends it). No database or mail here, so
 // the unit tests render it directly. Dates and times are written for people, in IST. A pump with
 // no one counted is a red row, and the count of them is in red under the summary. The summary puts
-// the day beside the month to date; every pump is in one table, with its plant in a column.
+// the day beside the month to date; every pump is in one table, with its plant in a column. A pump
+// with a missed day request for the day has a line under its row: the reason, the note, and
+// whether it waits for the business manager, was approved or was rejected (and why).
+import { REASON_LABELS } from './regularisationEmail.js';
 
 /** @typedef {{ full_shift: number, start_only: number, end_only: number, workers: number, mtd_workers: number }} Counts */
-/** @typedef {Counts & { pump_code: string, site_name?: string | null, start_at: string | Date | null, end_at: string | Date | null, regularised?: boolean }} Pump */
+/**
+ * @typedef {{ status: string, reason: string, note: string | null, voice?: boolean, requested_by?: string,
+ *   decided_by?: string | null, decision_reason?: string | null, decider?: string | null }} Request
+ */
+/** @typedef {Counts & { pump_code: string, site_name?: string | null, start_at: string | Date | null, end_at: string | Date | null, regularised?: boolean, request?: Request | null }} Pump */
 /** @typedef {{ id: string, name: string, pumps: Pump[], totals: Counts }} Plant */
 /** @typedef {{ name: string, plants: Plant[] }} Area */
 /** @typedef {{ pump_days: number, marked: number }} MonthToDate */
@@ -62,6 +69,26 @@ const counts = (t, bold = false) =>
 		.join('');
 const RED = '#b3261e';
 const RED_ROW = `style="background:#fdecea;color:${RED}"`;
+const AMBER = '#8a5300';
+const GREEN = '#1e6b34';
+
+// "Missed day request: Phone dead or broken, "Phone fell in water". Waiting for Asha (business
+// manager)." One line, for the row under the pump.
+/** @param {Request} r */
+export function requestLine(r) {
+	const reason = escapeHtml(REASON_LABELS[r.reason] ?? r.reason);
+	const note = r.note ? `, &ldquo;${escapeHtml(r.note)}&rdquo;` : '';
+	const voice = r.voice ? ', with a voice note in the app' : '';
+	const state =
+		r.status === 'approved'
+			? `<strong style="color:${GREEN}">Approved</strong>${r.decided_by ? ` by ${escapeHtml(r.decided_by)}` : ''}.`
+			: r.status === 'rejected'
+				? `<strong style="color:${RED}">Rejected</strong>${r.decided_by ? ` by ${escapeHtml(r.decided_by)}` : ''}` +
+					(r.decision_reason ? `: ${escapeHtml(r.decision_reason)}.` : '.')
+				: `<strong style="color:${AMBER}">Waiting for approval</strong> by ` +
+					(r.decider ? `${escapeHtml(r.decider)} (business manager).` : 'an admin.');
+	return `<strong>Missed day request:</strong> ${reason}${note}${voice}. ${state}`;
+}
 
 // The 9 am attendance email (worker/attendanceDigest.js): subject and HTML for one recipient.
 /**
@@ -88,19 +115,25 @@ export function renderAttendanceDigest({ area, day, areas, totals, mtd }) {
 			`<td ${TD}><strong>${escapeHtml(p.pump_code)}</strong>` +
 			(p.site_name ? `<br><span style="font-size:12px">${escapeHtml(p.site_name)}</span>` : '') +
 			'</td>';
-		const rows = plant.pumps
-			.map((p) =>
-				p.workers && p.regularised && !p.start_at && !p.end_at
+		/** @param {Pump} p */
+		const pumpRow = (p) =>
+			p.workers && p.regularised && !p.start_at && !p.end_at
+				? `<tr>${plantCell}${pumpCell(p)}` +
+					`<td ${TD} colspan="2"><strong>Regularised</strong> (missed day, approved)</td>${counts(p)}</tr>`
+				: p.workers
 					? `<tr>${plantCell}${pumpCell(p)}` +
-						`<td ${TD} colspan="2"><strong>Regularised</strong> (missed day, approved)</td>${counts(p)}</tr>`
-					: p.workers
-						? `<tr>${plantCell}${pumpCell(p)}` +
-							`<td ${TD}>${p.start_at ? istTime(p.start_at) : '<strong>No start photo</strong>'}</td>` +
-							`<td ${TD}>${p.end_at ? istTime(p.end_at) : '<strong>No end photo</strong>'}</td>${counts(p)}</tr>`
-						: `<tr ${RED_ROW}>${plantCell}${pumpCell(p)}` +
-							`<td ${TD} colspan="2"><strong>No attendance</strong></td>${counts(p, true)}</tr>`
-			)
-			.join('');
+						`<td ${TD}>${p.start_at ? istTime(p.start_at) : '<strong>No start photo</strong>'}</td>` +
+						`<td ${TD}>${p.end_at ? istTime(p.end_at) : '<strong>No end photo</strong>'}</td>${counts(p)}</tr>`
+					: `<tr ${RED_ROW}>${plantCell}${pumpCell(p)}` +
+						`<td ${TD} colspan="2"><strong>No attendance</strong></td>${counts(p, true)}</tr>`;
+		// The request line sits under its pump, on the pump row's background.
+		/** @param {Pump} p */
+		const requestRow = (p) =>
+			p.request
+				? `<tr${p.workers ? '' : ' style="background:#fdecea"'}><td ${TD}></td>` +
+					`<td ${TD} colspan="8" data-request="${escapeHtml(p.request.status)}">${requestLine(p.request)}</td></tr>`
+				: '';
+		const rows = plant.pumps.map((p) => pumpRow(p) + requestRow(p)).join('');
 		const total =
 			plant.pumps.length > 1
 				? `<tr${plant.totals.workers ? '' : ` ${RED_ROW}`}><td ${TD} colspan="4"><strong>${escapeHtml(plant.name)} total</strong></td>${counts(plant.totals, true)}</tr>`
@@ -135,6 +168,7 @@ export function renderAttendanceDigest({ area, day, areas, totals, mtd }) {
 			<li><strong>No attendance:</strong> the pump sent no photo, or no worker was counted in it.</li>
 			<li><strong>MTD (month to date):</strong> the pump's total attendance from the 1st of this month till this day. A worker present on 3 days counts as 3.</li>
 			<li><strong>Pump days:</strong> the days pumps were Active or Idle this month. One pump for 3 days is 3 pump days.</li>
+			<li><strong>Missed day request:</strong> the pump asked for the day to be counted. The plant's business manager approves or rejects it from their email or in Face Attendance.</li>
 			<li>Only pumps that are Active or Idle are listed.</li>
 			<li>To correct a Start only or End only worker, open Attendance in Face Attendance.</li>
 		</ul>

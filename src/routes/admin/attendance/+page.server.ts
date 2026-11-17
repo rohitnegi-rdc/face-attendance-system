@@ -28,7 +28,10 @@ export const load: PageServerLoad = async ({ url }) => {
 	const session = ['morning', 'evening'].includes(url.searchParams.get('session') || '')
 		? url.searchParams.get('session')!
 		: '';
-	const status = ['present', 'absent'].includes(url.searchParams.get('status') || '')
+	// Start only / End only are halves of a full day, so they only apply without a Session filter.
+	const status = ['present', 'absent', ...(session ? [] : ['start_only', 'end_only'])].includes(
+		url.searchParams.get('status') || ''
+	)
 		? url.searchParams.get('status')!
 		: '';
 	const attendanceExpression =
@@ -80,7 +83,15 @@ export const load: PageServerLoad = async ({ url }) => {
 		conditions.push(`dpa.session_date <= $${params.length}`);
 	}
 	if (status) {
-		conditions.push(status === 'present' ? attendanceExpression : `NOT ${attendanceExpression}`);
+		conditions.push(
+			status === 'present'
+				? attendanceExpression
+				: status === 'start_only'
+					? '(dpa.morning_matched AND NOT dpa.evening_matched)'
+					: status === 'end_only'
+						? '(dpa.evening_matched AND NOT dpa.morning_matched)'
+						: `NOT ${attendanceExpression}`
+		);
 	}
 	const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 	const filterParams = [...params];
@@ -105,6 +116,8 @@ export const load: PageServerLoad = async ({ url }) => {
 			        pu.id AS pump_id, pu.pump_code,
 			        COUNT(*) FILTER (WHERE ${attendanceExpression}) AS present,
 			        COUNT(*) FILTER (WHERE NOT ${attendanceExpression}) AS absent,
+			        COUNT(*) FILTER (WHERE dpa.morning_matched AND NOT dpa.evening_matched) AS start_only,
+			        COUNT(*) FILTER (WHERE dpa.evening_matched AND NOT dpa.morning_matched) AS end_only,
 			        COUNT(*) AS total
 			 FROM daily_person_attendance dpa
 			 JOIN pumps pu ON pu.id = dpa.pump_id
@@ -153,6 +166,8 @@ export const load: PageServerLoad = async ({ url }) => {
 		`SELECT
 		   COUNT(*) FILTER (WHERE ${attendanceExpression}) AS present,
 		   COUNT(*) FILTER (WHERE NOT ${attendanceExpression}) AS absent,
+		   COUNT(*) FILTER (WHERE dpa.morning_matched AND NOT dpa.evening_matched) AS start_only,
+		   COUNT(*) FILTER (WHERE dpa.evening_matched AND NOT dpa.morning_matched) AS end_only,
 		   COUNT(*) AS total
 		 FROM daily_person_attendance dpa
 		 JOIN pumps pu ON pu.id = dpa.pump_id
@@ -176,7 +191,14 @@ export const load: PageServerLoad = async ({ url }) => {
 		rows,
 		grouped,
 		isSingleDay,
-		summary: { present, absent, total, attendancePct },
+		summary: {
+			present,
+			absent,
+			startOnly: Number(summary?.start_only ?? 0),
+			endOnly: Number(summary?.end_only ?? 0),
+			total,
+			attendancePct
+		},
 		options: { areas, vendors, plants, pumps },
 		filters: {
 			area: areaId,

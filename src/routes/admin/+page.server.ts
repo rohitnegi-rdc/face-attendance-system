@@ -4,8 +4,9 @@ import { todayIST } from '$lib/server/time';
 import { faceMatchThreshold } from '$lib/server/matching';
 import { groupsToday } from '$lib/server/attendanceRollup';
 import { countsAsFraud } from '$lib/server/fraudCount';
+import { listRequests } from '$lib/server/regularisation';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ locals }) => {
 	const today = todayIST();
 	const [
 		attendanceToday,
@@ -17,10 +18,13 @@ export const load: PageServerLoad = async () => {
 		pendingMerges,
 		trend,
 		recentActivity,
-		areas
+		areas,
+		overdueRegularisations
 	] = await Promise.all([
 		queryOne<any>(
 			`SELECT COUNT(*) FILTER (WHERE morning_matched AND evening_matched) AS present,
+			        COUNT(*) FILTER (WHERE morning_matched AND NOT evening_matched) AS start_only,
+			        COUNT(*) FILTER (WHERE evening_matched AND NOT morning_matched) AS end_only,
 			        COUNT(*) AS total
 			 FROM daily_person_attendance WHERE session_date = $1`,
 			[today]
@@ -80,7 +84,10 @@ export const load: PageServerLoad = async () => {
 			 ORDER BY s.submitted_at DESC LIMIT 12`
 		),
 		// Today per area, on the same counts as the totals above, so the areas add up to them.
-		groupsToday('area', today)
+		groupsToday('area', today),
+		// Missed day requests no business manager decided in 2 days: the admins decide them here
+		// (escalation; the email only reaches admins with a real mailbox).
+		listRequests({ role: 'admin', id: locals.user!.id }, { overdueOnly: true, limit: 50 })
 	]);
 
 	const present = Number(attendanceToday?.present ?? 0);
@@ -88,6 +95,8 @@ export const load: PageServerLoad = async () => {
 	return {
 		metrics: {
 			presentToday: present,
+			startOnlyToday: Number(attendanceToday?.start_only ?? 0),
+			endOnlyToday: Number(attendanceToday?.end_only ?? 0),
 			totalToday: total,
 			attendancePct: total > 0 ? Math.round((present / total) * 100) : 0,
 			activePumps: Number(activePumps?.c ?? 0),
@@ -99,6 +108,7 @@ export const load: PageServerLoad = async () => {
 		},
 		trend,
 		recentActivity,
-		areas
+		areas,
+		overdueRegularisations
 	};
 };

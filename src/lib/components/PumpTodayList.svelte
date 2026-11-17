@@ -1,8 +1,9 @@
 <script lang="ts">
 	// The Active and Idle pumps of an area or plant (attendanceRollup.ts pumpsToday): their status,
-	// today's shift start and end photo times, workers present today, and attendance over the chosen
-	// range. Each row opens the pump page. Phone: the row stacks; wide screens line the columns up.
+	// today's shift start and end photo times, today's workers split into full shift, start only
+	// and end only, and attendance over the chosen range. Each row opens the pump page. Phone: the row stacks; wide screens line the columns up.
 	import { resolve } from '$app/paths';
+	import ShiftSplit from '$lib/components/ShiftSplit.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatTime } from '$lib/date';
 	import { PUMP_WORK_STATUS_LABELS } from '$lib/pumpWorkStatus';
@@ -24,7 +25,7 @@
 
 <div class="pump-list" data-testid="pump-today-list">
 	<div class="pump-list__head" aria-hidden="true">
-		<span>Pump</span><span>Status</span><span>Today</span><span>Present today</span><span
+		<span>Pump</span><span>Status</span><span>Today</span><span>Workers today</span><span
 			>{rangeLabel}</span
 		>
 	</div>
@@ -62,9 +63,9 @@
 						{/if}
 						{#if pump.fraud}<span class="tag tag--fraud">{pump.fraud} fraud</span>{/if}
 					</span>
-					<span class="pump-row__num">
-						<span class="pump-row__label">Present today</span>
-						<span><strong>{pump.present}</strong> of {pump.total}</span>
+					<span class="pump-row__num pump-row__workers">
+						<span class="pump-row__label">Workers today</span>
+						<ShiftSplit full={pump.present} startOnly={pump.startOnly} endOnly={pump.endOnly} />
 					</span>
 					<span class="pump-row__num">
 						<span class="pump-row__label">{rangeLabel}</span>
@@ -148,6 +149,11 @@
 		font-size: var(--text-sm);
 		font-variant-numeric: tabular-nums;
 	}
+	/* Phone: the three shift counts get the full row width. */
+	.pump-row__workers {
+		gap: var(--space-1);
+		grid-column: 1 / -1;
+	}
 	.pump-row__num strong {
 		color: var(--ink-strong);
 	}
@@ -170,8 +176,8 @@
 		.pump-row {
 			display: grid;
 			grid-template-columns:
-				minmax(10rem, 1.2fr) minmax(5.5rem, 0.5fr) minmax(12rem, 1.5fr) minmax(7rem, 0.7fr)
-				minmax(9rem, 0.9fr);
+				minmax(9rem, 1fr) minmax(5.5rem, 0.5fr) minmax(11rem, 1.3fr) minmax(12rem, 1.3fr)
+				minmax(8rem, 0.8fr);
 			align-items: center;
 			gap: var(--space-3);
 			padding: var(--space-2) var(--space-4);
@@ -188,7 +194,8 @@
 		}
 		.pump-row__who,
 		.pump-row__status,
-		.pump-row__shift {
+		.pump-row__shift,
+		.pump-row__workers {
 			grid-column: auto;
 		}
 		.pump-row__label {

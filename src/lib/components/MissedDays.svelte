@@ -3,14 +3,13 @@
 	// phone first: requests to decide (evidence inline: reason, voice note, workers), the calendar of
 	// one pump to apply for a date (the form opens under it), and every request with its outcome.
 	import { enhance } from '$app/forms';
-	import { base } from '$app/paths';
-	import Check from '@lucide/svelte/icons/check';
-	import X from '@lucide/svelte/icons/x';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import RegularisationCalendar from '$lib/components/RegularisationCalendar.svelte';
+	import RegularisationDecideCard from '$lib/components/RegularisationDecideCard.svelte';
+	import RegularisationEvidence from '$lib/components/RegularisationEvidence.svelte';
 	import { formatHumanDay } from '$lib/date';
 	import { applyOnSelect } from '$lib/liveSearch';
-	import { HALF_TEXT, REASON_TEXT, REJECT_TEXT, STATUS_TEXT } from '$lib/regularisationLabels';
+	import { HALF_TEXT, REASON_TEXT, STATUS_TEXT } from '$lib/regularisationLabels';
 	import type { Crew, RequestablePump, RequestRow } from '$lib/server/regularisation';
 	import type { CalendarDay, CalendarMonth } from '$lib/server/regularisationDays';
 
@@ -33,43 +32,13 @@
 
 	const toDecide = $derived(data.requests.filter((r) => r.canDecide));
 	const others = $derived(data.requests.filter((r) => !r.canDecide));
-	const voiceUrl = (id: string) => `${base}/api/regularisation/${id}/voice`;
 	const monthHref = (month: string) => `?pump=${data.pump?.id}&month=${month}`;
 	const dayHref = (day: string) => `?pump=${data.pump?.id}&month=${day.slice(0, 7)}&day=${day}`;
-	const asker = (r: RequestRow) =>
-		r.requestedByRole === 'pump'
-			? 'The pump operator'
-			: `${r.requestedByName}${r.requestedByRole === 'plant_manager' ? ' (plant manager)' : ' (admin)'}`;
 	const keep =
 		() =>
 		async ({ update }: { update: (o?: { reset?: boolean }) => Promise<void> }) =>
 			update({ reset: false });
-	let rejecting = $state<string | null>(null);
 </script>
-
-{#snippet evidence(r: RequestRow)}
-	<div class="evidence">
-		<p class="reason">
-			<span aria-hidden="true">{REASON_TEXT[r.reason]?.icon}</span>
-			<strong>{REASON_TEXT[r.reason]?.en ?? r.reason}</strong>{#if r.note}: {r.note}{/if}
-		</p>
-		{#if r.hasVoice}
-			<audio controls preload="none" src={voiceUrl(r.id)} data-testid="reg-voice">
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- a file, already under base -->
-				<a href={voiceUrl(r.id)}>Play the voice note</a>
-			</audio>
-		{/if}
-		<p class="workers">
-			<span class="muted">{r.workers.length} {r.workers.length === 1 ? 'worker' : 'workers'}:</span>
-			{r.workers.join(', ')}
-		</p>
-		<p class="muted small">
-			Asked by {asker(r)} on {r.requestedAt}{role === 'admin'
-				? ` · Approver: ${r.approverName ?? 'Admins (plant has no business manager)'}`
-				: ''}
-		</p>
-	</div>
-{/snippet}
 
 {#snippet rowMessage(r: RequestRow)}
 	{#if form?.formKind === 'row' && form?.id === r.id && form?.message}
@@ -98,57 +67,7 @@
 			{#if toDecide.length}
 				<ul class="cards">
 					{#each toDecide as r (r.id)}
-						<li
-							class="card surface surface--padded"
-							data-testid="reg-decide"
-							data-pump={r.pumpCode}
-						>
-							<div class="card__head">
-								<strong class="day">{formatHumanDay(r.day)}</strong>
-								<span>{r.pumpCode} · {r.plantName}, {r.areaName}</span>
-							</div>
-							{@render evidence(r)}
-							{@render rowMessage(r)}
-							<div class="actions">
-								<form method="POST" action="?/decide" use:enhance={keep}>
-									<input type="hidden" name="id" value={r.id} />
-									<input type="hidden" name="decision" value="approve" />
-									<button class="button button--primary" type="submit" data-testid="reg-approve"
-										><Check size={17} /> Approve</button
-									>
-								</form>
-								{#if rejecting === r.id}
-									<form method="POST" action="?/decide" class="reject" use:enhance={keep}>
-										<input type="hidden" name="id" value={r.id} />
-										<input type="hidden" name="decision" value="reject" />
-										<label class="field"
-											><span>Why reject?</span>
-											<select name="reject_reason" required data-testid="reg-reject-reason">
-												{#each Object.entries(REJECT_TEXT) as [key, text] (key)}
-													<option value={key}>{text}</option>
-												{/each}
-											</select></label
-										>
-										<label class="field"
-											><span>Note (needed for Other)</span><input
-												name="note"
-												maxlength="400"
-											/></label
-										>
-										<button class="button button--danger" type="submit" data-testid="reg-reject"
-											><X size={17} /> Reject</button
-										>
-									</form>
-								{:else}
-									<button
-										class="button button--secondary"
-										type="button"
-										data-testid="reg-reject-open"
-										onclick={() => (rejecting = r.id)}>Reject…</button
-									>
-								{/if}
-							</div>
-						</li>
+						<RegularisationDecideCard {r} {role} />
 					{/each}
 				</ul>
 			{:else}
@@ -285,7 +204,7 @@
 							<span>{r.pumpCode} · {r.plantName}</span>
 							<span class="status status--{r.status}">{STATUS_TEXT[r.status]}</span>
 						</div>
-						{@render evidence(r)}
+						<RegularisationEvidence {r} {role} />
 						{#if r.status !== 'pending' && r.decidedAt}
 							<p class="small">
 								{STATUS_TEXT[r.status]}{r.decidedByName ? ` by ${r.decidedByName}` : ''} on {r.decidedAt}{#if r.decisionReason}:
@@ -358,26 +277,10 @@
 	.day {
 		font-size: var(--text-lg);
 	}
-	.evidence {
-		display: grid;
-		gap: var(--space-1);
-	}
-	.evidence p {
-		margin: 0;
-		overflow-wrap: anywhere;
-	}
-	.reason span {
-		margin-right: var(--space-1);
-	}
-	audio {
-		width: 100%;
-		max-width: 22rem;
-	}
 	.small {
 		font-size: var(--text-sm);
 		margin: 0;
 	}
-	.actions,
 	.reject {
 		display: flex;
 		flex-wrap: wrap;

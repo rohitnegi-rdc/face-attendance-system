@@ -192,3 +192,31 @@ Clearing a flag keeps the row (resolution 'not_fraud', so the decision stays on 
 ## 2026-11-13: a monitor's Attendance page answered 502 Bad Gateway after a deploy
 
 SvelteKit sends a `link` header listing every script of a page, on top of the same list inside the page. The regularisation release added menu items, icons and components, and on the biggest page (a monitor's Attendance, under the `/pump-attendance` base path, with the session cookie) the headers passed nginx's default 4 KB buffer, so nginx gave 502 for that page only while every other login worked. The app now drops the `link` header in `hooks.server.ts`, and OPS-09 checks header size. The lesson: a 502 on one page while the app is up points at the response itself (headers too big), not at the app being down.
+
+## 2026-11-13: the Active or Idle rule was built for the admin Area list only
+
+The user asked for Area pages to show only Active and Idle pumps with light red rows, and next day had to ask again for the plant manager and monitor pages. The rule was about pumps, not about one admin page: every list of pumps for a day (admin Area and plant, plant manager checklist and Pumps page) now uses the same status join and the same colours (`row-none` and `row-fraud` in global.css for tables). The lesson: when a display rule is given for one list, apply it to every list of the same thing for every role, and say so.
+
+## 2026-11-13: admins only saw "present" while plant managers saw start only and end only
+
+The admin pages counted a worker as present (full shift) or not, so a crew that sent only a start photo looked absent, while the plant manager's checklist, calendar and the 9 am email already split full shift, start only and end only. Admins now get the same split everywhere they see a day's workers (`ShiftSplit.svelte`, `startOnly` / `endOnly` in attendanceRollup.ts). The lesson: when two roles look at the same day, give them the same counts, and build the count once so a new view cannot fall back to present / absent.
+
+## 2026-11-16: the 48-hour escalation went to inboxes that do not exist
+
+A request the business manager has not decided in 48 hours escalates to admins, but only by email, and every admin login ends in `.rdc`, so on production the escalation was flagged in the database and reached nobody. Escalated requests now sit at the top of the admin Overview with Approve and Reject (the same card as the Missed days page, `RegularisationDecideCard.svelte`), and the worker logs a warning when an escalation has no mailbox. The lesson: a notification that is only an email is not delivered until someone has a real mailbox; anything that needs a decision also belongs on the screen of the person who decides.
+
+## 2026-11-17: "we did our morning attendance" but the day showed nothing
+
+PUMPMU6 works nights. Its 6:58 am photo on the 16th was the end of the shift that started at 9:17 pm on the 15th, so every page showed it under the 15th and the 16th looked empty. Finding that took four rounds of server commands, because no page listed photos by the time they were sent, and a refused photo was only in the logs. The admin pump page now has Day by day (`pumpDiary.ts`): each day lists what was sent that day and which shift it counted for, plus refusals with the operator's reason. The lesson: when a question needs server commands to answer, the answer belongs on a page; and show events by the day people remember them (sent), not only by the day they are booked to.
+
+## 2026-11-17: "hold and speak" never recorded on a phone
+
+The voice note started on press and stopped on release. The first press opens the browser's microphone prompt; the finger lifts while it shows, so the stop ran before the recorder existed and the recording then ran silently for two minutes. Even with permission granted, a short hold could end before the microphone was ready. It is now tap to start, tap to stop, with a timer, and Next is off while recording. The same check found the sheet's grid column was "auto", so the voice preview pushed every step past the screen edge (now `minmax(0, 1fr)`, with a width guard in REG-20). The lesson: a press-and-hold control must not wait on anything asynchronous (permissions, devices) between press and release; and test a recording flow with a fake microphone, not only the screen before it.
+
+## 2026-11-17: the business manager decided missed days but never saw the daily email
+
+The 9 am email went to admins and monitors only, so the business manager who approves a missed day saw the request alone, without the day around it, and the email showed a red "No attendance" row with no word of the request already raised for it. The email now goes To the business managers of the Area's plants and CC the business heads of its plants (see the next entry), and each pump with a missed day request has a line under it: reason, note, voice note, and waiting for whom, approved, or rejected and why. The lesson: whoever decides on an exception should get the report that shows it, and a report that flags a problem should say what is already being done about it.
+
+## 2026-11-17: business heads are per plant, not per Area (rework)
+
+Asked for "BH" on the 9 am email, I asked whether it was one per Area and built a per-Area address list at /admin/settings with no login. The user's mapping (`BHBMPLANTSMAPPING.MD`) then gave a business head per plant, beside each plant's business manager and plant manager, and asked for them to see their plants "just like BM, plant manager and other users". The per-Area table was dropped before it shipped; business heads are now plant-manager logins with `business_head_plants`, the same shape as business managers (one admin page and module for both roles), copied on the email of every Area that holds one of their plants. Why the guess was wrong: I picked the shape from the title (a "head" sounds regional) instead of asking for the list the company already keeps. The lesson: when a new role is named, ask for (or look for) the real assignment list first; a role that sits beside an existing per-plant role is per plant too, and anyone the business names usually needs a login, not only an email address.

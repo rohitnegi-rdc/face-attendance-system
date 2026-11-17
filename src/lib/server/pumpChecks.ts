@@ -1,5 +1,5 @@
 // The daily checklist of a plant manager or monitor (plant-manager Overview): every pump they can
-// see for one day, what needs a look, and who marked it Checked (pump_day_checks). The 9 am
+// see that is Active or Idle on that day, what needs a look, and who marked it Checked (pump_day_checks). The 9 am
 // attendance email (worker/attendanceDigest.js) counts the same full shift, start only and end only.
 import { query, queryOne } from '$lib/server/db';
 import { countsAsFraud } from '$lib/server/fraudCount';
@@ -10,6 +10,8 @@ export type PumpCheck = {
 	plantName: string;
 	areaName: string;
 	vendorName: string;
+	// Pump status that day (pump_day_status): only Active and Idle pumps are on the checklist.
+	workStatus: 'active' | 'idle';
 	startAt: string | null;
 	endAt: string | null;
 	present: number;
@@ -69,10 +71,13 @@ export async function dayChecklist(managerId: string, day: string, late: boolean
 		          WHERE s.pump_id = pu.id AND s.session_date = $2 AND ${countsAsFraud('ff')}) AS fraud,
 		        (SELECT r.status FROM regularisations r WHERE r.pump_id = pu.id AND r.day = $2
 		          AND r.status IN ('pending', 'approved') LIMIT 1) AS reg_status,
-		        pdc.checked_at, pdc.note, coalesce(pm.name, adm.email) AS checked_by
+		        st.status AS work_status, pdc.checked_at, pdc.note, coalesce(pm.name, adm.email) AS checked_by
 		 FROM manager_plants mp JOIN pumps pu ON pu.plant_id = mp.plant_id
 		 JOIN plants pl ON pl.id = pu.plant_id JOIN areas a ON a.id = pl.area_id
 		 JOIN vendors v ON v.id = pu.vendor_id
+		 JOIN LATERAL (SELECT ds.status FROM pump_day_status ds
+		   WHERE ds.pump_id = pu.id AND ds.day <= $2 ORDER BY ds.day DESC LIMIT 1) st
+		   ON st.status IN ('active', 'idle')
 		 LEFT JOIN pump_day_checks pdc ON pdc.pump_id = pu.id AND pdc.session_date = $2
 		 LEFT JOIN plant_managers pm ON pm.id = pdc.checked_by_manager_id
 		 LEFT JOIN admins adm ON adm.id = pdc.checked_by_admin_id
@@ -95,6 +100,7 @@ export async function dayChecklist(managerId: string, day: string, late: boolean
 			plantName: row.plant_name,
 			areaName: row.area_name,
 			vendorName: row.vendor_name,
+			workStatus: row.work_status,
 			startAt: row.start_at ? new Date(row.start_at).toISOString() : null,
 			endAt: row.end_at ? new Date(row.end_at).toISOString() : null,
 			present: counts.present,

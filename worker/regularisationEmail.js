@@ -58,25 +58,27 @@ export function readDecisionToken(secret, token) {
 	return { id, role, actorId };
 }
 
-// A business manager row of the list joins its plant once the plant is in the system (pumps added):
-// by plant code, else by name (ignoring case, spaces and punctuation), and only when exactly one
-// plant without a business manager matches.
-export const ATTACH_WAITING_SQL = `
+// A row of the business manager (or business head, migration 051) list joins its plant once the
+// plant is in the system (pumps added): by plant code, else by name (ignoring case, spaces and
+// punctuation), and only when exactly one plant without one matches.
+/** @param {string} plants @param {string} waiting */
+export const attachWaitingSql = (plants, waiting) => `
 	WITH matched AS (
 	  SELECT w.plant_code, w.manager_id, (array_agg(pl.id))[1] AS plant_id, count(*) AS n
-	  FROM business_manager_waiting w
+	  FROM ${waiting} w
 	  JOIN plants pl ON pl.external_code = w.plant_code
 	    OR regexp_replace(lower(pl.name), '[^a-z0-9]+', '', 'g') = regexp_replace(lower(w.plant_name), '[^a-z0-9]+', '', 'g')
-	  WHERE NOT EXISTS (SELECT 1 FROM business_manager_plants b WHERE b.plant_id = pl.id)
+	  WHERE NOT EXISTS (SELECT 1 FROM ${plants} b WHERE b.plant_id = pl.id)
 	  GROUP BY w.plant_code, w.manager_id
 	), moved AS (
-	  INSERT INTO business_manager_plants (plant_id, manager_id)
+	  INSERT INTO ${plants} (plant_id, manager_id)
 	  SELECT plant_id, manager_id FROM matched WHERE n = 1
 	  ON CONFLICT (plant_id) DO NOTHING
 	  RETURNING plant_id
 	)
-	DELETE FROM business_manager_waiting w USING matched m
+	DELETE FROM ${waiting} w USING matched m
 	WHERE w.plant_code = m.plant_code AND m.n = 1 AND m.plant_id IN (SELECT plant_id FROM moved)`;
+export const ATTACH_WAITING_SQL = attachWaitingSql('business_manager_plants', 'business_manager_waiting');
 
 // A worker on a request (rw, p): the name, and on a half-counted day which half is asked for.
 export const WORKER_LABEL_SQL = `COALESCE(NULLIF(p.name, ''), 'Worker ' || p.display_seq)
@@ -264,6 +266,17 @@ export async function sendRegularisationReminders(db, log, testModeOn, sendMail)
 		);
 		for (const { id } of rows) {
 			const messages = await buildRegularisationMessages(db, secret, id, kind);
+			// Nobody with a real mailbox: say so on the Logs page instead of passing in silence. An
+			// escalated request is on the admin Overview to decide either way.
+			if (!messages.length) {
+				log(
+					'warn',
+					{ regularisationId: id, kind },
+					kind === 'escalation'
+						? 'regularisation waiting 2 days: no admin mailbox, shown on the admin Overview to decide'
+						: 'regularisation reminder: nobody with a mailbox to send to'
+				);
+			}
 			const testMode = await testModeOn(db);
 			for (const message of messages) {
 				await sendMail(message, log, { regularisationId: id, kind, testMode });
