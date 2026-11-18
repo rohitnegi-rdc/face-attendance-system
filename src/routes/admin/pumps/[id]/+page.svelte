@@ -12,10 +12,16 @@
 	import ShiftLog from '$lib/components/ShiftLog.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDate, formatDateTime } from '$lib/date';
+	import { gpsAgo, gpsState, mapsUrl } from '$lib/gpsAge';
 	import { personDisplayLabel } from '$lib/personLabel';
 	import { shiftTypeLabel } from '$lib/shiftLabels';
 
 	let { data, form } = $props();
+	// Pump GPS: where it comes from and whether the shift start check can use it.
+	const gps = $derived(data.pump.latest_gps);
+	const gpsName = $derived(data.pump.gps_device_id || data.pump.pump_code);
+	const gpsFresh = $derived(gpsState(gps?.age_minutes, data.gpsMaxAgeMinutes) === 'fresh');
+	const ago = gpsAgo;
 	let from = $state('');
 	let to = $state('');
 	$effect(() => {
@@ -44,9 +50,7 @@
 			{ present: 0, morningOnly: 0, eveningOnly: 0 }
 		)
 	);
-	const dailyCounts = $derived(
-		Object.fromEntries(data.dailyBreakdown.map((d: any) => [d.day, d]))
-	);
+	const dailyCounts = $derived(Object.fromEntries(data.dailyBreakdown.map((d: any) => [d.day, d])));
 	const rangeLabel = $derived(`${formatDate(data.range.from)} – ${formatDate(data.range.to)}`);
 	const trendData = $derived(data.dailyBreakdown.slice(-5));
 
@@ -365,19 +369,51 @@
 			{:else}
 				{data.pump.area_name} does not use the location check yet.
 			{/if}
-			Latest position:
-			{#if data.pump.latest_gps}
-				<a
-					href={`https://www.google.com/maps?q=${data.pump.latest_gps.lat},${data.pump.latest_gps.lng}`}
-					target="_blank"
-					rel="noopener">{data.pump.latest_gps.lat}, {data.pump.latest_gps.lng}</a
-				>
-				({data.pump.latest_gps.source === 'admin' ? 'entered by admin' : 'GPS feed'},
-				{data.pump.latest_gps.at}).
-			{:else}
-				none received yet.
-			{/if}
 		</p>
+		<dl class="gps-status" data-testid="gps-status">
+			<div>
+				<dt>GPS comes from</dt>
+				<dd data-testid="gps-source">
+					<strong>{gpsName}</strong>
+					{#if data.pump.gps_device_id}
+						<span class="gps-note">GPS provider id; the login stays {data.pump.pump_code}</span>
+					{:else}
+						<span class="gps-note">the pump code</span>
+					{/if}
+				</dd>
+			</div>
+			<div>
+				<dt>Last position</dt>
+				<dd data-testid="gps-last">
+					{#if gps}
+						<StatusBadge tone={gpsFresh ? 'success' : 'critical'}
+							>{gpsFresh ? 'Fresh' : 'Too old'}</StatusBadge
+						>
+						<span>{gps.at} ({ago(gps.age_minutes)})</span>
+						<span class="gps-note"
+							>{gps.source === 'admin' ? 'entered by admin' : 'from the GPS feed'},
+							<a href={mapsUrl(gps.lat, gps.lng)} target="_blank" rel="noopener">open map</a></span
+						>
+					{:else}
+						<StatusBadge tone="critical">No GPS received</StatusBadge>
+					{/if}
+				</dd>
+			</div>
+			<div>
+				<dt>Feed positions, last 24 hours</dt>
+				<dd data-testid="gps-count">
+					{data.pump.gps_feed_24h} <span class="gps-note">(about 144 when the tracker works)</span>
+				</dd>
+			</div>
+		</dl>
+		{#if !gpsFresh}
+			<p class="gps-next" data-testid="gps-next">
+				Shift starts {data.pump.location_check_enabled ? 'wait' : 'would wait'} for the plant manager's
+				approval until a position under {data.gpsMaxAgeMinutes} minutes old arrives from
+				<strong>{gpsName}</strong>. If the tracker reports under another name, enter it as the GPS
+				provider id below.
+			</p>
+		{/if}
 		<div class="gps-forms">
 			<form method="POST" action="?/setPumpGps" class="gps-form">
 				<label class="field"
@@ -395,6 +431,8 @@
 						name="gps_device_id"
 						value={data.pump.gps_device_id ?? ''}
 						placeholder={data.pump.pump_code}
+						maxlength="64"
+						data-testid="gps-device-id"
 					/></label
 				>
 				<button class="button button--secondary" type="submit">Save id</button>
@@ -580,6 +618,35 @@
 		.pump-summary {
 			grid-template-columns: 1fr;
 		}
+	}
+	.gps-status {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+		gap: var(--space-3);
+		margin: var(--space-3) 0 0;
+	}
+	.gps-status dt {
+		font-size: var(--text-xs);
+		color: var(--ink-muted);
+		margin-bottom: var(--space-1);
+	}
+	.gps-status dd {
+		margin: 0;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-1) var(--space-2);
+		overflow-wrap: anywhere;
+	}
+	.gps-note {
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
+	}
+	.gps-next {
+		margin: var(--space-3) 0 0;
+		padding: var(--space-2) var(--space-3);
+		border-left: 3px solid var(--alert);
+		background: var(--alert-tint);
 	}
 	.gps-forms {
 		display: flex;

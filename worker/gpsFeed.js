@@ -8,7 +8,9 @@
 // to the plant manager as "no pump GPS"):
 //   PUMP_GPS_DB_HOST / PUMP_GPS_DB_PORT / PUMP_GPS_DB_USER / PUMP_GPS_DB_PASSWORD / PUMP_GPS_DB_NAME
 //
-// A feed row is matched to a pump by pumps.gps_device_id, else pump_code (case-insensitive).
+// A feed row is matched to a pump by pumps.gps_device_id, else pump_code (case-insensitive). The
+// GPS provider id lets a pump keep its login when its tracker reports under another name; it
+// always wins over another pump whose code is that name.
 // event_timestamp is a timestamptz, so no time zone guessing is needed.
 import pg from 'pg';
 
@@ -70,6 +72,9 @@ export async function pollPumpGps(pool, log) {
 					 SELECT pu.id, $2, $3, $4, 'gps_api' FROM pumps pu
 					 WHERE lower(pu.gps_device_id) = lower($1)
 					    OR (pu.gps_device_id IS NULL AND lower(pu.pump_code) = lower($1))
+					 -- A pump given this name as its GPS provider id wins over a pump whose code
+					 -- happens to be the same name (PUMPMU6 keeps its login, GPS from MULP6SST).
+					 ORDER BY (lower(pu.gps_device_id) = lower($1)) IS TRUE DESC
 					 LIMIT 1
 					 ON CONFLICT (pump_id, recorded_at) DO NOTHING
 					 RETURNING id`,

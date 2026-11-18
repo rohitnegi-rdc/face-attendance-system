@@ -15,7 +15,7 @@ import {
 } from '$lib/server/sessionCleanup';
 import { getAttendanceSettings } from '$lib/server/settings';
 import { todayIST } from '$lib/server/time';
-import { validCoordinate } from '$lib/server/locationCheck';
+import { PUMP_GPS_MAX_AGE_MINUTES, validCoordinate } from '$lib/server/locationCheck';
 import { personDayStatuses } from '$lib/server/personCalendar';
 import {
 	ShiftError,
@@ -41,9 +41,13 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		`SELECT pu.id, pu.pump_code, pu.status, pu.disabled_at, pu.disabled_reason, pu.gps_device_id,
 		        a.location_check_enabled,
 		        (SELECT json_build_object('lat', l.lat, 'lng', l.lng, 'source', l.source,
-		                'at', to_char(l.recorded_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am'))
+		                'at', to_char(l.recorded_at AT TIME ZONE 'Asia/Kolkata', 'Dy, FMDD Mon YYYY, FMHH12:MI am'),
+		                'age_minutes', floor(extract(epoch FROM now() - l.recorded_at) / 60)::int)
 		           FROM pump_locations l WHERE l.pump_id = pu.id
 		           ORDER BY l.recorded_at DESC LIMIT 1) AS latest_gps,
+		        (SELECT count(*)::int FROM pump_locations l
+		          WHERE l.pump_id = pu.id AND l.source = 'gps_api'
+		            AND l.recorded_at > now() - interval '24 hours') AS gps_feed_24h,
 		        pl.name AS plant_name, a.name AS area_name, v.name AS vendor_name, v.id AS vendor_id, a.id AS area_id
 		 FROM pumps pu
 		 JOIN plants pl ON pl.id = pu.plant_id
@@ -214,7 +218,8 @@ export const load: PageServerLoad = async ({ params, url }) => {
 		attendanceMap,
 		rejectionCounts,
 		dailyBreakdown,
-		diary
+		diary,
+		gpsMaxAgeMinutes: PUMP_GPS_MAX_AGE_MINUTES
 	};
 };
 
@@ -240,24 +245,73 @@ export const actions: Actions = {
 		logger.info({ pumpId: params.id, adminId: locals.user!.id, lat, lng }, 'pump GPS set by admin');
 		return { success: true, message: `Pump GPS set to ${lat}, ${lng}. Valid for 30 minutes.` };
 	},
-	setGpsDeviceId: async ({ params, request }) => {
+	// The name the pump's tracker reports under in the GPS feed, when it is not the pump code (the
+	// pump keeps its login: PUMPMU6 with GPS from MULP6SST). The worker gives this pump those
+	// positions even if another pump's code is that name. Audited.
+	setGpsDeviceId: async ({ params, request, locals }) => {
 		const form = await request.formData();
-		const deviceId = String(form.get('gps_device_id') ?? '').trim();
+		const raw = String(form.get('gps_device_id') ?? '').trim();
+		if (raw.length > 64) {
+			return fail(400, { success: false, message: 'A GPS provider id is at most 64 characters.' });
+		}
+		const client = await pool.connect();
 		try {
-			await queryOne(`UPDATE pumps SET gps_device_id = NULLIF($2, '') WHERE id = $1`, [
+			await client.query('BEGIN');
+			const current = await client.query(
+				'SELECT pump_code, gps_device_id FROM pumps WHERE id = $1 FOR UPDATE',
+				[params.id]
+			);
+			if (!current.rowCount) {
+				await client.query('ROLLBACK');
+				throw error(404, 'pump not found');
+			}
+			const { pump_code: code, gps_device_id: before } = current.rows[0];
+			// Its own code is the default: store nothing.
+			const deviceId = raw && raw.toLowerCase() !== code.toLowerCase() ? raw : null;
+			if ((before ?? null) === deviceId) {
+				await client.query('ROLLBACK');
+				return { success: true, message: 'No change.' };
+			}
+			await client.query('UPDATE pumps SET gps_device_id = $2 WHERE id = $1', [
 				params.id,
 				deviceId
 			]);
-		} catch (err: any) {
-			if (err?.code === '23505') {
-				return fail(409, { success: false, message: 'Another pump already uses that GPS id.' });
+			await client.query(
+				`INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+				 VALUES ($1, 'set_gps_device_id', 'pump', $2, $3)`,
+				[locals.user!.id, params.id, JSON.stringify({ pump: code, from: before, to: deviceId })]
+			);
+			// Another pump whose code is this name stops getting these positions: say so.
+			const namesake = deviceId
+				? await client.query(
+						`SELECT pump_code FROM pumps WHERE id <> $1 AND lower(pump_code) = lower($2)`,
+						[params.id, deviceId]
+					)
+				: { rows: [] };
+			await client.query('COMMIT');
+			logger.info(
+				{ pumpId: params.id, adminId: locals.user!.id, from: before, to: deviceId },
+				'pump GPS provider id set'
+			);
+			const after = deviceId
+				? `GPS now comes from ${deviceId}. Its next position arrives within 5 minutes.`
+				: `GPS id cleared: GPS comes from ${code} again.`;
+			const also = namesake.rows.length
+				? ` Pump ${namesake.rows[0].pump_code} no longer gets these positions.`
+				: '';
+			return { success: true, message: after + also };
+		} catch (err) {
+			await client.query('ROLLBACK').catch(() => {});
+			if ((err as { code?: string } | null)?.code === '23505') {
+				return fail(409, {
+					success: false,
+					message: 'Another pump already uses that GPS provider id.'
+				});
 			}
 			throw err;
+		} finally {
+			client.release();
 		}
-		return {
-			success: true,
-			message: deviceId ? `GPS id set to ${deviceId}.` : 'GPS id cleared; the pump code is used.'
-		};
 	},
 	reactivatePump: async ({ params }) => {
 		await queryOne(
