@@ -21,6 +21,7 @@
 	import Menu from '@lucide/svelte/icons/menu';
 	import X from '@lucide/svelte/icons/x';
 	import Link2 from '@lucide/svelte/icons/link-2';
+	import MapPinned from '@lucide/svelte/icons/map-pinned';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import Settings from '@lucide/svelte/icons/settings';
 	import ScrollText from '@lucide/svelte/icons/scroll-text';
@@ -129,6 +130,7 @@
 		{ href: resolve('/admin/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/admin/pump-status'), label: 'Pump status', icon: Power },
 		{ href: resolve('/admin/pump-links'), label: 'Pump links', icon: Link2 },
+		{ href: resolve('/admin/pump-gps'), label: 'Pump GPS', icon: MapPinned },
 		{ href: resolve('/admin/insights'), label: 'Insights', icon: ChartNoAxesCombined },
 		{
 			href: resolve('/admin/attendance'),
