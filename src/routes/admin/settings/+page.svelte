@@ -223,10 +223,11 @@
 		<div class="cc-block recipients" data-testid="area-cc">
 			<h3 class="cc-title">CC by area</h3>
 			<p class="supporting-text">
-				Copied on that area's email only, beside the global CC. Each card also shows who gets it
-				from the area's plants: business managers in To (<a
-					href={resolve('/admin/business-managers')}>Business managers</a
-				>) and business heads in CC (<a href={resolve('/admin/business-heads')}>Business heads</a>).
+				Copied on that area's email only, beside the global CC. The email goes to admins and the
+				area's monitors; each card also shows who is copied from the area's plants: business heads (<a
+					href={resolve('/admin/business-heads')}>Business heads</a
+				>), business managers (<a href={resolve('/admin/business-managers')}>Business managers</a>)
+				and plant managers (<a href={resolve('/admin/plant-managers')}>Plant managers</a>).
 			</p>
 			<label class="field">
 				<span>Search for an area</span>
@@ -293,16 +294,22 @@
 							</label>
 							<button type="submit" class="button button--primary">Add</button>
 						</form>
-						<p class="who" data-testid="digest-area-managers">
-							<span class="who__label">To, business managers:</span>
-							{#if area.managers.length}
-								{area.managers.map((m) => `${m.name} (${m.email})`).join(', ')}
-							{:else}<span class="muted">none</span>{/if}
-						</p>
 						<p class="who" data-testid="digest-area-heads">
 							<span class="who__label">CC, business heads:</span>
 							{#if area.heads.length}
 								{area.heads.map((m) => `${m.name} (${m.email})`).join(', ')}
+							{:else}<span class="muted">none</span>{/if}
+						</p>
+						<p class="who" data-testid="digest-area-managers">
+							<span class="who__label">CC, business managers:</span>
+							{#if area.managers.length}
+								{area.managers.map((m) => `${m.name} (${m.email})`).join(', ')}
+							{:else}<span class="muted">none</span>{/if}
+						</p>
+						<p class="who" data-testid="digest-area-plant-managers">
+							<span class="who__label">CC, plant managers:</span>
+							{#if area.plant_managers.length}
+								{area.plant_managers.map((m) => `${m.name} (${m.email})`).join(', ')}
 							{:else}<span class="muted">none</span>{/if}
 						</p>
 					</li>

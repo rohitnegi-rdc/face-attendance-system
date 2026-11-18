@@ -94,13 +94,21 @@ test('SET-05 an admin gives a plant to a business head; settings lists them for 
 	await page.goto('/admin/business-managers');
 	await expect(page.getByTestId('bm-list')).not.toContainText(email);
 
-	// Settings shows who gets the email for the area: the head in CC, from the plant.
+	// Settings shows who gets the email for the area: the head in CC, from the plant, and the
+	// plant's manager also in CC (2026-11-18: "add plant managers and business managers in cc not TO").
+	const pm = await createPlantManager(plantId);
+	const { rows: pmRow } = await db.query('SELECT name FROM plant_managers WHERE id = $1', [pm.id]);
 	await page.goto('/admin/settings');
 	await page.getByTestId('area-cc-search').fill(areaName);
 	const card = page.locator(`[data-testid="digest-area"][data-area="${areaName}"]`);
 	await card.scrollIntoViewIfNeeded();
 	await expect(card.getByTestId('digest-area-heads')).toContainText(`${name} (${email})`);
+	await expect(card.getByTestId('digest-area-managers')).toContainText('CC, business managers:');
 	await expect(card.getByTestId('digest-area-managers')).toContainText('none');
+	await expect(card.getByTestId('digest-area-plant-managers')).toContainText(
+		`CC, plant managers: ${pmRow[0].name} (${pm.email})`
+	);
+	await expect(card).not.toContainText('To, ');
 	await expect(page.getByTestId('bh-add')).toHaveCount(0);
 	await noSidewaysScroll(page);
 	await card.screenshot({ path: 'artifacts/deep-build/screenshots/digest-heads-mobile.png' });

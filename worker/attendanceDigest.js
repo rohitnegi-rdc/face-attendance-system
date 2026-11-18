@@ -2,11 +2,11 @@
 // Every Active and Idle pump of the Area that day (pump_day_status, migration 046), grouped by Plant, with
 // its full shift, start only and end only counts; a pump with no one counted is a red row in the
 // email. Inactive (closed) pumps, and pumps never set Active or Idle, are left out. To: every
-// admin, the Area's monitors and the business managers of its plants (business_manager_plants).
+// admin and the Area's monitors.
 // CC: the admin's global list (app_settings `digest_cc`, edited at /admin/settings, first filled
-// by migration 045), the Area's own CC (area_digest_cc, migration 053, same page) and the business
-// heads of its plants (business_head_plants, migration 051);
-// nothing else. A pump with a missed day request for the day shows its reason, note and where it stands.
+// by migration 045), the Area's own CC (area_digest_cc, migration 053, same page), and from its
+// plants the business heads (business_head_plants, migration 051), the business managers
+// (business_manager_plants) and the plant managers (plant_manager_assignments); nothing else. A pump with a missed day request for the day shows its reason, note and where it stands.
 // The attendance_digest_log row ('area:<id>', day) is claimed before sending, so two workers never
 // both send it. Only Areas ticked at /admin/settings (areas.digest_enabled, Mumbai to start) get
 // it, and no email for an Area whose pumps are all Inactive.
@@ -243,6 +243,14 @@ export async function sendAttendanceDigests(db, log, testModeOn, now, send) {
 			 WHERE pl.area_id = $1 AND pm.disabled_at IS NULL`,
 			[area.id]
 		);
+		// The plant managers of the Area's plants (2026-11-18: "Still the plant manager, BM, BH is not
+		// there in the daily email for that area"), copied. Own plants only: monitors come from monitor_areas.
+		const { rows: plantManagers } = await db.query(
+			`SELECT DISTINCT lower(pm.email) AS email FROM plant_manager_assignments pa
+			 JOIN plants pl ON pl.id = pa.plant_id JOIN plant_managers pm ON pm.id = pa.manager_id
+			 WHERE pl.area_id = $1 AND pm.disabled_at IS NULL`,
+			[area.id]
+		);
 		// The Area's own CC list (only this Area's email).
 		const { rows: areaCc } = await db.query(
 			'SELECT email FROM area_digest_cc WHERE area_id = $1 ORDER BY email',
@@ -256,21 +264,25 @@ export async function sendAttendanceDigests(db, log, testModeOn, now, send) {
 			[area.id]
 		);
 		// Logins ending in .rdc are made up by the system (admin@attendance.rdc): no mailbox there.
-		const to = [...new Set([...admins, ...monitors, ...managers].map((r) => r.email))]
-			.filter((email) => !email.endsWith('.rdc'))
-			.sort();
+		/** @param {{ email: string }[]} rows */
+		const mailbox = (rows) => rows.map((r) => r.email).filter((email) => !email.endsWith('.rdc'));
+		const to = [...new Set(mailbox([...admins, ...monitors]))].sort();
+		// 2026-11-18: "add plant managers and business managers in cc not TO". Someone already in To
+		// (a monitor who also manages a plant) is not copied again.
 		const cc = ccList(
 			to,
 			fixedCc,
 			areaCc.map((r) => r.email),
-			heads.map((r) => r.email).filter((email) => !email.endsWith('.rdc'))
+			mailbox(heads),
+			mailbox(managers),
+			mailbox(plantManagers)
 		);
 		const mtd = await digestPumpDays(db, day, area.id);
 		const message = { to, cc, area: area.name, day, ...groupPumps(pumps), mtd };
 		if (await testModeOn(db)) {
 			log(
 				'info',
-				{ area: area.name, day, pumps: pumps.length, to: to.length, cc: cc.length },
+				{ area: area.name, day, pumps: pumps.length, to, cc },
 				'attendance digest email NOT sent (test mode)'
 			);
 			continue;

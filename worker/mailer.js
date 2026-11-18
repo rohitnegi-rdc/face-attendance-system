@@ -106,9 +106,10 @@ export async function sendFraudAlertEmail(
 
 export async function sendAttendanceDigestEmail(message, log) {
 	if (process.env.MAIL_ENABLED !== 'true') {
+		// The addresses are logged so a check without real mail shows who would get it.
 		log(
 			'info',
-			{ to: message.to.length, cc: message.cc.length },
+			{ area: message.area, day: message.day, to: message.to, cc: message.cc },
 			'attendance digest email NOT sent (mail off)'
 		);
 		return;
@@ -127,7 +128,11 @@ export async function sendAttendanceDigestEmail(message, log) {
 			subject,
 			html
 		});
-		log('info', { to: message.to.length, cc: message.cc.length }, 'attendance digest email sent');
+		log(
+			'info',
+			{ area: message.area, day: message.day, to: message.to, cc: message.cc },
+			'attendance digest email sent'
+		);
 	} catch (err) {
 		log('error', { error: err.message }, 'attendance digest email failed to send');
 	}

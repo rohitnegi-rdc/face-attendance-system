@@ -26,9 +26,9 @@ export const load: PageServerLoad = async () => {
 			isApprovalEmailOn(),
 			getDigestCc(),
 			getDigestFirstDay(),
-			// Per Area: who the 9 am email goes to besides admins and the global CC list: its own CC
-			// (area_digest_cc, set here), and from its plants the business managers (To, Business
-			// managers page) and business heads (CC, Business heads page).
+			// Per Area: who the 9 am email copies besides the global CC list (To is admins and
+			// monitors): its own CC (area_digest_cc, set here), and from its plants the business heads,
+			// business managers and plant managers (worker/attendanceDigest.js, same rules).
 			query<{
 				id: string;
 				name: string;
@@ -36,6 +36,7 @@ export const load: PageServerLoad = async () => {
 				cc: string[];
 				heads: { name: string; email: string }[];
 				managers: { name: string; email: string }[];
+				plant_managers: { name: string; email: string }[];
 			}>(
 				`SELECT a.id, a.name, a.digest_enabled,
 				        COALESCE((SELECT json_agg(c.email ORDER BY c.email) FROM area_digest_cc c
@@ -49,7 +50,12 @@ export const load: PageServerLoad = async () => {
 				                   SELECT DISTINCT pm.name, lower(pm.email) AS email
 				                   FROM business_manager_plants b JOIN plants pl ON pl.id = b.plant_id
 				                   JOIN plant_managers pm ON pm.id = b.manager_id
-				                   WHERE pl.area_id = a.id AND pm.disabled_at IS NULL) m), '[]') AS managers
+				                   WHERE pl.area_id = a.id AND pm.disabled_at IS NULL) m), '[]') AS managers,
+				        COALESCE((SELECT json_agg(m ORDER BY m.name) FROM (
+				                   SELECT DISTINCT pm.name, lower(pm.email) AS email
+				                   FROM plant_manager_assignments pa JOIN plants pl ON pl.id = pa.plant_id
+				                   JOIN plant_managers pm ON pm.id = pa.manager_id
+				                   WHERE pl.area_id = a.id AND pm.disabled_at IS NULL) m), '[]') AS plant_managers
 				 FROM areas a ORDER BY a.name`
 			),
 			query<any>(

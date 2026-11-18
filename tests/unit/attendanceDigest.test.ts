@@ -7,6 +7,11 @@ import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, describe, test } from 'node:test';
 import { sendAttendanceDigests } from '../../worker/attendanceDigest.js';
 import { renderAttendanceDigest } from '../../worker/digestEmail.js';
+// The real mailer, loaded by path so svelte-check does not type-check the untyped worker file.
+const MAILER = '../../worker/mailer.js';
+const { sendAttendanceDigestEmail } = (await import(MAILER)) as {
+	sendAttendanceDigestEmail: (message: unknown, log: unknown) => Promise<void>;
+};
 import { admin, area, db, person, pump, session } from './fixtures';
 
 // The email at 9:30 am IST on 1 Oct is about 30 Sep. No other test uses these days.
@@ -261,17 +266,20 @@ describe('the 9 am attendance tracker', () => {
 		});
 	});
 
-	test("To: the admins and the Area's monitors; CC: exactly the admin's list, no plant managers", async () => {
-		const { names, mon, pm1, adminEmail } = world;
+	// 2026-11-18: "add plant managers and business managers in cc not TO".
+	test("To: the admins and the Area's monitors; CC: the admin's list and its plant managers", async () => {
+		const { names, mon, pm1, pm2, adminEmail } = world;
 		await sendAttendanceDigests(db, quiet, testModeOff, AT_0930, send);
 		const [a] = mailFor(names.a);
 		assert.ok(a.to.includes(mon.email));
 		assert.ok(a.to.includes(adminEmail));
 		assert.ok(!a.to.includes('admin@attendance.rdc'), 'a made-up login has no mailbox');
-		assert.deepEqual(a.cc, ['boss@unit.test', 'cc.two@unit.test']);
-		assert.ok(!a.cc.includes(pm1.email), 'a plant manager is copied only when on the list');
+		assert.ok(!a.to.includes(pm1.email), 'a plant manager is copied, not in To');
+		assert.deepEqual(a.cc, ['boss@unit.test', 'cc.two@unit.test', pm1.email.toLowerCase()]);
+		assert.ok(!a.cc.includes(pm2.email.toLowerCase()), 'a disabled plant manager gets nothing');
 		const [b] = mailFor(names.b);
 		assert.ok(!b.to.includes(mon.email), 'the monitor gets only their own Area');
+		assert.ok(!b.cc.includes(pm1.email.toLowerCase()), 'a plant manager only for their plants');
 	});
 
 	test('no CC list, no CC; an address in To is not repeated in CC', async () => {
@@ -285,7 +293,7 @@ describe('the 9 am attendance tracker', () => {
 			`${world.mon.email}, cec@rdc.in`
 		]);
 		await sendAttendanceDigests(db, quiet, testModeOff, AT_0930, send);
-		assert.deepEqual(mailFor(world.names.a)[0].cc, ['cec@rdc.in']);
+		assert.deepEqual(mailFor(world.names.a)[0].cc, ['cec@rdc.in', world.pm1.email.toLowerCase()]);
 	});
 
 	test('a pump never set Active or Idle is Inactive and not listed', async () => {
@@ -381,6 +389,7 @@ describe('business managers, business heads and missed day requests', () => {
 		name: string;
 		bm: { id: string; email: string };
 		gone: { id: string; email: string };
+		pm: { id: string; email: string };
 		codes: { waiting: string; approved: string; rejected: string; none: string };
 	};
 
@@ -479,10 +488,16 @@ describe('business managers, business heads and missed day requests', () => {
 		await request(rejected, 'rejected', { by: 'Asha', why: 'The workers listed are not right' });
 		// A cancelled request is not news.
 		await request(none, 'cancelled');
+		const pm = await manager('plantmgr');
+		await db.query('INSERT INTO plant_manager_assignments (plant_id, manager_id) VALUES ($1, $2)', [
+			p2[0].id,
+			pm.id
+		]);
 		f = {
 			name: await areaName(a.areaId),
 			bm,
 			gone,
+			pm,
 			codes: {
 				waiting: await code(waiting),
 				approved: await code(approved),
@@ -492,21 +507,77 @@ describe('business managers, business heads and missed day requests', () => {
 		};
 	});
 
-	test("To has the Area's business managers; CC adds its own CC and business heads, never twice", async () => {
+	test('CC: its own CC, business heads, business managers and plant managers, never twice', async () => {
 		await sendAttendanceDigests(db, quiet, testModeOff, AT_0930, send);
 		const [mail] = mailFor(f.name);
-		assert.ok(mail.to.includes(f.bm.email), 'the business manager of a plant in the Area');
-		assert.ok(!mail.to.includes(f.gone.email), 'a removed business manager gets nothing');
+		assert.ok(!mail.to.includes(f.bm.email), 'a business manager is copied, not in To');
+		assert.ok(!mail.to.includes(f.pm.email), 'a plant manager is copied, not in To');
 		assert.deepEqual(mail.cc, [
 			'boss@unit.test',
 			'cc.two@unit.test',
 			'area.only@unit.test',
-			'head@unit.test'
+			'head@unit.test',
+			f.bm.email.toLowerCase(),
+			f.pm.email.toLowerCase()
 		]);
+		assert.ok(
+			!mail.cc.includes(f.gone.email.toLowerCase()),
+			'a removed business manager gets nothing'
+		);
 		const [other] = mailFor(world.names.a);
-		assert.ok(!other.to.includes(f.bm.email), 'only the Area of their plants');
+		assert.ok(!other.cc.includes(f.bm.email.toLowerCase()), 'only the Area of their plants');
 		assert.ok(!other.cc.includes('area.only@unit.test'), "an area CC only on that Area's email");
 		assert.ok(!other.cc.includes('head@unit.test'), "a business head only for their plants' Area");
+	});
+
+	type LogFields = { area?: string; day?: string; to: string[]; cc: string[] };
+	type LogLine = { fields: LogFields; message: string };
+
+	// 2026-11-18: "Still the plant manager, BM, BH is not there in the daily email for that area ...
+	// test with logs that mail is sending but don't send actual mails". The real mailer, mail off:
+	// nothing is sent and the log line names every address it would go to.
+	test('with mail off the real mailer sends nothing and logs plant manager, BM and BH', async () => {
+		const before = process.env.MAIL_ENABLED;
+		delete process.env.MAIL_ENABLED;
+		const lines: LogLine[] = [];
+		const capture = (_level: string, fields: object, message: string) => {
+			lines.push({ fields: fields as LogFields, message });
+		};
+		try {
+			await sendAttendanceDigests(db, capture, testModeOff, AT_0930, sendAttendanceDigestEmail);
+		} finally {
+			if (before === undefined) delete process.env.MAIL_ENABLED;
+			else process.env.MAIL_ENABLED = before;
+		}
+		const line = lines.find((l) => l.fields.area === f.name);
+		assert.ok(line, 'one log line for the Area');
+		assert.equal(line.message, 'attendance digest email NOT sent (mail off)');
+		assert.equal(line.fields.day, DAY);
+		assert.ok(line.fields.cc.includes(f.pm.email.toLowerCase()), 'the plant manager is in CC');
+		assert.ok(line.fields.cc.includes(f.bm.email.toLowerCase()), 'the business manager is in CC');
+		assert.ok(line.fields.cc.includes('head@unit.test'), 'the business head is in CC');
+		assert.ok(line.fields.cc.includes('area.only@unit.test'), "the Area's own CC is in CC");
+		assert.ok(!line.fields.to.includes(f.gone.email));
+		assert.ok(!lines.some((l) => l.message === 'attendance digest email sent'), 'nothing sent');
+	});
+
+	test('in test mode the log names the same people and nothing is sent', async () => {
+		const lines: LogLine[] = [];
+		let mailed = 0;
+		await sendAttendanceDigests(
+			db,
+			(_level, fields, message) => lines.push({ fields: fields as LogFields, message }),
+			async () => true,
+			AT_0930,
+			async () => {
+				mailed++;
+			}
+		);
+		const line = lines.find((l) => l.fields.area === f.name);
+		assert.equal(line?.message, 'attendance digest email NOT sent (test mode)');
+		assert.ok(line?.fields.cc.includes(f.pm.email.toLowerCase()));
+		assert.ok(line?.fields.cc.includes('head@unit.test'));
+		assert.equal(mailed, 0);
 	});
 
 	test('each request shows its reason, note and where it stands', async () => {
