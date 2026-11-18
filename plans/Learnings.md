@@ -220,3 +220,15 @@ The 9 am email went to admins and monitors only, so the business manager who app
 ## 2026-11-17: business heads are per plant, not per Area (rework)
 
 Asked for "BH" on the 9 am email, I asked whether it was one per Area and built a per-Area address list at /admin/settings with no login. The user's mapping (`BHBMPLANTSMAPPING.MD`) then gave a business head per plant, beside each plant's business manager and plant manager, and asked for them to see their plants "just like BM, plant manager and other users". The per-Area table was dropped before it shipped; business heads are now plant-manager logins with `business_head_plants`, the same shape as business managers (one admin page and module for both roles), copied on the email of every Area that holds one of their plants. Why the guess was wrong: I picked the shape from the title (a "head" sounds regional) instead of asking for the list the company already keeps. The lesson: when a new role is named, ask for (or look for) the real assignment list first; a role that sits beside an existing per-plant role is per plant too, and anyone the business names usually needs a login, not only an email address.
+
+## 2026-11-18: GPS tracker names are not pump codes
+
+The telematics feed names trackers its own way (PUMPMU6's tracker reports as MULP6SST, others after the pump make). Renaming the pump login to match would break the operators' habit, so the pump's GPS provider id carries the feed name, and it must win over a pump whose code is that name (the old match took whichever row came first). The admin pump page now shows which name the GPS comes from and how old it is, so a missing or stale tracker is seen without server commands.
+
+## 2026-11-18: "BM and BH are not in the 9 am email" was a deploy gap, plant managers were a rule change
+
+- Symptom: the Mumbai email of 18 Nov had only admins in To and the global list in CC.
+- Business managers, business heads and the Area CC were in commit b1a21b9 on develop, never merged to main, so the server ran the old recipient list. Before calling a recipient bug, compare `git log origin/main` with the commit that added the feature.
+- Plant managers were left out on purpose earlier; the user has now named them, for their plants' Area. I first put plant managers and business managers in To; the user wanted them in CC (To is admins and monitors only). Ask To or CC when adding a recipient role instead of guessing.
+- The mail log only said "NOT sent" with no addresses, so nobody could check recipients without real mail. Every digest log line (sent, mail off, test mode) now lists To and CC.
+
