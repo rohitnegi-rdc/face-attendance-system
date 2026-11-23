@@ -1,7 +1,7 @@
 import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { pool, queryOne } from '$lib/server/db';
-import { logger } from '$lib/server/log';
+import { queryOne } from '$lib/server/db';
+import { decideLocation, type LocationDecision } from '$lib/server/locationDecision';
 import { LOCATION_RADIUS_M, locationIssueText } from '$lib/server/locationCheck';
 import { resolve } from '$app/paths';
 
@@ -50,33 +50,19 @@ async function decide(
 	params: { id: string },
 	locals: App.Locals,
 	request: Request,
-	decision: 'approved' | 'rejected'
+	decision: LocationDecision
 ) {
 	const form = await request.formData();
-	const note = String(form.get('note') ?? '')
-		.trim()
-		.slice(0, 500);
-	if (decision === 'rejected' && !note) {
-		return fail(400, { error: 'Write why you are rejecting it, so the operator and admin know.' });
-	}
 	const session = await loadSession(params.id, locals.user!.id);
 	if (!session) throw error(404, 'Approval not found');
-
-	// Only a pending one can be decided: two managers on the same plant cannot both decide it.
-	const result = await pool.query(
-		`UPDATE attendance_sessions
-		 SET location_status = $2, location_decided_by = $3, location_decided_at = now(),
-		     location_note = NULLIF($4, '')
-		 WHERE id = $1 AND location_status = 'pending'`,
-		[session.id, decision, locals.user!.id, note]
+	const result = await decideLocation(
+		session.id,
+		locals.user!.id,
+		decision,
+		form.get('note'),
+		'app'
 	);
-	if (!result.rowCount) {
-		return fail(409, { error: 'This was already decided. Reload to see the decision.' });
-	}
-	logger.info(
-		{ sessionId: session.id, managerId: locals.user!.id, decision },
-		'location approval decided'
-	);
+	if (!result.ok) return fail(result.status, { error: result.error });
 	return { decided: decision };
 }
 

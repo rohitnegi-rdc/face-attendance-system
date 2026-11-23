@@ -199,6 +199,7 @@ test('SET-05 the email shows each missed day request with its reason, at phone w
 		note: string | null;
 		voice?: boolean;
 		decider?: string;
+		decider_role?: string;
 		decided_by?: string;
 		decision_reason?: string;
 	};
@@ -217,7 +218,8 @@ test('SET-05 the email shows each missed day request with its reason, at phone w
 			reason: 'phone_problem',
 			note: 'Phone fell in water at the site',
 			voice: true,
-			decider: 'Asha Patil'
+			decider: 'Asha Patil',
+			decider_role: 'business manager'
 		}),
 		pumpOf('PUMPMU7', {
 			status: 'rejected',

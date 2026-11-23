@@ -330,65 +330,130 @@ test('REG-04 a plant with no business manager goes to the admins; an admin appro
 	expect(auto[0].status).toBe('approved');
 });
 
-test('REG-05 a plant manager asks for their own pump only; the business manager decides in the app, read only otherwise', async () => {
+// 2026-11-18: "For regularisation approval of kerala BH should not be there plant manager will only
+// do it", then "Everywhere with no BM" and "Don't give option for plant managers to send this
+// approval please remove it". The business manager decides; a plant without one, its plant
+// manager; a business head never; and a plant manager does not apply.
+test('REG-05 a plant with no business manager is decided by its plant manager; plant managers do not apply', async ({
+	page
+}) => {
 	const { pump, plantId, workers } = await missedPump();
-	const bm = await businessManager(plantId);
-	const manager = await login((await createPlantManager(plantId)).email);
-	const stranger = await login((await createPlantManager((await createArea()).plantId)).email);
+	const pmUser = await createPlantManager(plantId);
+	const manager = await login(pmUser.email);
+	const adminUser = await createAdmin();
+	const headEmail = `bh${randomUUID().slice(0, 8)}@regression.test`;
+	const { rows: head } = await db.query(
+		`INSERT INTO plant_managers (name, email, password_hash, must_change_password, is_business_head)
+		 VALUES ('Head', $1, 'x', FALSE, true) RETURNING id`,
+		[headEmail]
+	);
+	await db.query('INSERT INTO business_head_plants (plant_id, manager_id) VALUES ($1, $2)', [
+		plantId,
+		head[0].id
+	]);
 
-	const page = await (await manager.get('/plant-manager/regularisations')).text();
-	expect(page).toContain('data-testid="reg-calendar"');
-	// The checklist links a past day with no photo to the request form.
-	const before = await (await manager.get(`/plant-manager?day=${daysAgo(1)}`)).text();
-	expect(before).toContain('data-testid="checklist-regularise"');
-
-	const form = {
+	// No way to apply: no form, no checklist link, and the server refuses.
+	const missed = await (
+		await manager.get(`/plant-manager/regularisations?pump=${pump.id}&day=${daysAgo(1)}`)
+	).text();
+	expect(missed).toContain('data-testid="reg-calendar"');
+	expect(missed).not.toContain('data-testid="reg-form"');
+	expect(missed).toContain('The operator applies for a missed day on the pump screen');
+	const checklist = await (await manager.get(`/plant-manager?day=${daysAgo(1)}`)).text();
+	expect(checklist).not.toContain('checklist-regularise');
+	const asked = await action(manager, '/plant-manager/regularisations?/request', {
 		pump_id: pump.id,
 		day: daysAgo(1),
 		reason: 'phone_problem',
 		workers: workers[0]
-	};
-	expect((await action(stranger, '/plant-manager/regularisations?/request', form)).type).toBe(
-		'failure'
-	);
-	const asked = await action(manager, '/plant-manager/regularisations?/request', form);
-	expect(asked.type, JSON.stringify(asked)).toBe('success');
-	const { rows } = await db.query(
-		'SELECT id, requested_by_role FROM regularisations WHERE pump_id = $1 AND day = $2',
-		[pump.id, daysAgo(1)]
-	);
-	expect(rows[0].requested_by_role).toBe('plant_manager');
-	await requestMail(rows[0].id, bm.email);
-	const checklist = await (await manager.get(`/plant-manager?day=${daysAgo(1)}`)).text();
-	expect(checklist).toContain('waiting for approval');
+	});
+	expect(asked.type).not.toBe('success');
+	expect(
+		(await db.query('SELECT 1 FROM regularisations WHERE pump_id = $1', [pump.id])).rowCount
+	).toBe(0);
 
-	// The one who asks does not decide.
-	const self = await action(manager, '/plant-manager/regularisations?/decide', {
-		id: rows[0].id,
+	// The pump asks: the plant manager is emailed, not the admins and not the business head.
+	const { id } = await (await askFor(await login(pump.email), daysAgo(1), workers)).json();
+	const mail = await requestMail(id, pmUser.email);
+	const all = await logLines('app', [id, 'regularisation email NOT sent (mail off)']);
+	expect(all.map((l) => l.to)).toEqual([pmUser.email]);
+	expect(all.map((l) => l.to)).not.toContain(adminUser.email);
+	expect(all.map((l) => l.to)).not.toContain(headEmail);
+	// The link page lets them decide.
+	const link = await (await (await anonymous()).get(pathOf(mail.approveUrl))).text();
+	expect(link).toContain('data-testid="reg-facts"');
+	expect(link).not.toContain('data-testid="reg-link-not-yours"');
+
+	// The plant manager decides it in the app, recorded as plant manager.
+	await signIn(page, pmUser.email);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/plant-manager/regularisations');
+	await expect(page.getByTestId('reg-decide')).toContainText(pump.code);
+	await noSidewaysScroll(page);
+	await page.screenshot({
+		path: 'artifacts/deep-build/screenshots/pm-missed-days-mobile.png',
+		fullPage: true
+	});
+	const decided = await action(manager, '/plant-manager/regularisations?/decide', {
+		id,
 		decision: 'approve'
 	});
-	expect(self.type).toBe('failure');
+	expect(decided.type, JSON.stringify(decided)).toBe('success');
+	const { rows } = await db.query(
+		'SELECT status, decided_by_role, decided_by_id FROM regularisations WHERE id = $1',
+		[id]
+	);
+	expect(rows[0]).toEqual({
+		status: 'approved',
+		decided_by_role: 'plant_manager',
+		decided_by_id: pmUser.id
+	});
+	expect(await counted(id)).toBe(3);
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.goto(`/plant-manager/regularisations?pump=${pump.id}`);
+	await expect(page.getByTestId('reg-calendar-hint')).toBeVisible();
+	await page.screenshot({ path: 'artifacts/deep-build/screenshots/pm-missed-days-desktop.png' });
+});
+
+test('REG-05b with a business manager only they decide; the plant manager only sees it', async () => {
+	const { pump, plantId, workers } = await missedPump();
+	const bm = await businessManager(plantId);
+	const pmUser = await createPlantManager(plantId);
+	const manager = await login(pmUser.email);
+
+	const { id } = await (await askFor(await login(pump.email), daysAgo(1), workers)).json();
+	await requestMail(id, bm.email);
+	const all = await logLines('app', [id, 'regularisation email NOT sent (mail off)']);
+	expect(all.map((l) => l.to)).toEqual([bm.email]);
+	const seen = await (await manager.get('/plant-manager/regularisations')).text();
+	expect(seen).toContain(pump.code);
+	expect(seen).not.toContain('data-testid="reg-decide"');
+	const refused = await action(manager, '/plant-manager/regularisations?/decide', {
+		id,
+		decision: 'approve'
+	});
+	expect(refused.type).toBe('failure');
 
 	// The business manager signs in read only: home is Missed days, other changes are refused.
 	const bmContext = await login(bm.email);
 	const home = await bmContext.get('/plant-manager', { maxRedirects: 0 });
 	expect([302, 303, 307]).toContain(home.status());
 	expect(home.headers().location).toContain('/plant-manager/regularisations');
-	expect((await bmContext.get('/plant-manager/attendance', { maxRedirects: 0 })).status()).toBe(
-		200
-	);
 	const blocked = await bmContext.post(`/api/persons/${workers[0]}/name`, {
 		data: { name: 'Not Allowed' }
 	});
 	expect(blocked.status()).toBe(403);
 	const decided = await action(bmContext, '/plant-manager/regularisations?/decide', {
-		id: rows[0].id,
+		id,
 		decision: 'approve'
 	});
 	expect(decided.type, JSON.stringify(decided)).toBe('success');
-	expect((await status(rows[0].id)).status).toBe('approved');
+	const { rows } = await db.query('SELECT decided_by_role FROM regularisations WHERE id = $1', [
+		id
+	]);
+	expect(rows[0].decided_by_role).toBe('business_manager');
 	const labelled = await (await manager.get(`/plant-manager?day=${daysAgo(1)}`)).text();
-	expect(labelled).toContain('Regularised, 1 worker counted');
+	expect(labelled).toContain('Regularised, 3 workers counted');
 });
 
 test('REG-06 approving is refused when a photo arrived after the request', async () => {

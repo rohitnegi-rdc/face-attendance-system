@@ -140,8 +140,12 @@ test('REG-12 the calendar shows each day and only Apply days can be asked for', 
 	expect(waiting.status).toBe('pending');
 	const approved = await (await askFor(phone, daysAgo(5), three)).json();
 	expect(
-		(await action(admin, '/admin/regularisations?/decide', { id: approved.id, decision: 'approve' }))
-			.type
+		(
+			await action(admin, '/admin/regularisations?/decide', {
+				id: approved.id,
+				decision: 'approve'
+			})
+		).type
 	).toBe('success');
 	const rejected = await (await askFor(phone, daysAgo(6), three)).json();
 	expect(
@@ -348,9 +352,10 @@ test('REG-16 the operator picks a light red day and applies in three steps at 39
 	await page.getByTestId('reg-send').click();
 	await expect(page.getByTestId('reg-sent')).toBeVisible();
 	await page.getByTestId('reg-close').click();
-	await expect(
-		page.locator(`[data-testid="reg-cal-day"][data-day="${day}"]`)
-	).toHaveAttribute('data-state', 'waiting');
+	await expect(page.locator(`[data-testid="reg-cal-day"][data-day="${day}"]`)).toHaveAttribute(
+		'data-state',
+		'waiting'
+	);
 
 	// Still there after a reload, and stored as asked.
 	await page.reload();
@@ -408,7 +413,9 @@ test('REG-17 an admin picks a pump and a date on the same calendar and the day c
 	expect(problems).toEqual([]);
 });
 
-test('REG-18 a plant manager applies on the same calendar for their own pumps only, at 390 px', async ({
+// 2026-11-18: "Don't give option for plant managers to send this approval please remove it". A plant
+// manager sees each pump's calendar but only the pump applies.
+test('REG-18 a plant manager sees the same calendar for their own pumps only, with no way to apply, at 390 px', async ({
 	page
 }) => {
 	const { pump, plantId, workers } = await crewPump();
@@ -425,19 +432,17 @@ test('REG-18 a plant manager applies on the same calendar for their own pumps on
 	await page.goto(
 		`/plant-manager/regularisations?pump=${pump.id}&month=${monthOf(day)}&day=${day}`
 	);
-	const form = page.getByTestId('reg-form');
-	await expect(form).toBeVisible();
-	await expect(form.locator('input[name="workers"]')).toHaveCount(1);
-	await expect(form).toContainText('Start done, end missing');
+	await expect(page.locator(`[data-testid="reg-cal-day"][data-day="${day}"]`)).toBeVisible();
+	// The days show what happened but no "Apply": only the pump applies.
+	await expect(page.locator('[data-testid="reg-cal-day"]', { hasText: 'Apply' })).toHaveCount(0);
+	await expect(page.getByTestId('reg-calendar-hint')).toContainText(
+		'The operator applies for a missed day on the pump screen'
+	);
+	await expect(page.getByTestId('reg-form')).toHaveCount(0);
+	await expect(page.getByTestId('reg-send')).toHaveCount(0);
 	await noSidewaysScroll(page);
 	await page.screenshot({
 		path: path.join(shots, 'plant-manager-mobile.png'),
 		fullPage: true
 	});
-	await form.locator('input[value="forgot"]').check();
-	await page.getByTestId('reg-send').click();
-	await expect(page.getByTestId('reg-request-message')).toContainText('Sent for approval');
-	await expect(
-		page.locator(`[data-testid="reg-cal-day"][data-day="${day}"]`)
-	).toHaveAttribute('data-state', 'waiting');
 });

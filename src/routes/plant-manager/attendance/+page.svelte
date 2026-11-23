@@ -5,11 +5,15 @@
 	import Search from '@lucide/svelte/icons/search';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import GangHeadcountGrid from '$lib/components/GangHeadcountGrid.svelte';
 	import ShiftLog from '$lib/components/ShiftLog.svelte';
 	import { calendarDays, dateKey, formatDate, todayStr } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
+	// By pump (attendance %) or By gang (headcount, each worker once a day); By gang only shows
+	// where the Area has gangs on.
+	let dailyView = $state<'pump' | 'gang'>('pump');
 	const days = $derived(calendarDays(data.filters.from, data.filters.to));
 	// The Pump list follows the chosen Plant; the filters apply to every list below.
 	let plant = $state('');
@@ -140,10 +144,33 @@
 		<div class="section-header">
 			<div>
 				<h2>Daily attendance</h2>
-				<p class="supporting-text">Full shift (start and end) matches by pump.</p>
+				<p class="supporting-text">
+					{dailyView === 'gang' && data.gangView
+						? 'Workers of each gang counted per day, wherever the gang worked.'
+						: 'Full shift (start and end) matches by pump.'}
+				</p>
 			</div>
+			{#if data.gangView}
+				<div class="view-toggle" role="group" aria-label="Show daily attendance">
+					<button
+						type="button"
+						aria-pressed={dailyView === 'pump'}
+						onclick={() => (dailyView = 'pump')}>By pump</button
+					>
+					<button
+						type="button"
+						aria-pressed={dailyView === 'gang'}
+						data-testid="by-gang"
+						onclick={() => (dailyView = 'gang')}>By gang</button
+					>
+				</div>
+			{/if}
 		</div>
-		{#if data.daily.length}<AttendanceCalendarGrid
+		{#if dailyView === 'gang' && data.gangView}<GangHeadcountGrid
+				view={data.gangView}
+				{days}
+				base="plant-manager"
+			/>{:else if data.daily.length}<AttendanceCalendarGrid
 				{days}
 				{entities}
 				mode="percent"

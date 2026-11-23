@@ -7,6 +7,7 @@ import { addDaysStr, formatDate, formatDayLabel } from '$lib/date';
 import { todayIST } from '$lib/server/time';
 import { heldShiftStatus } from '$lib/server/locationCheck';
 import type { ReportScope } from '$lib/server/attendanceReport';
+import { foldGangDays, gangDaySql, type GangPumpDay } from '$lib/server/gangs';
 
 const BRAND = 'FF0B6E69';
 const BRAND_LIGHT = 'FFE6F2F1';
@@ -301,6 +302,246 @@ export async function buildHeadcountReport(scope: ReportScope, month: string | n
 	sheet.pageSetup = { orientation: 'landscape', printTitlesRow: '5:5' };
 	sheet.properties.outlineLevelRow = 1;
 
+	await addGangsSheet(workbook, {
+		scope,
+		days,
+		monthStart,
+		to,
+		fyStart,
+		monthLabel,
+		pumpRows: rows,
+		pumpCodes: new Map(pumps.map((pump) => [pump.id, pump.pump_code]))
+	});
+
 	const buffer = await workbook.xlsx.writeBuffer();
 	return { buffer, filename: `pump-headcount-${chosen}.xlsx` };
+}
+
+// The Gangs sheet (pump gangs, migration 056): one row per gang by Area and plant, its headcount
+// per day (each worker once a day, wherever the gang worked), Avg MTD / Avg YTD with the pump
+// sheet's formula, and a + under each gang for the pumps it worked at. Only gangs of Areas with
+// gangs on; no sheet when there are none. The total rows set the gang total beside the pump
+// sheet's total for the same pumps, so a worker seen at two pumps that day shows as the gap.
+async function addGangsSheet(
+	workbook: ExcelJS.Workbook,
+	ctx: {
+		scope: ReportScope;
+		days: string[];
+		monthStart: string;
+		to: string;
+		fyStart: string;
+		monthLabel: string;
+		pumpRows: DayRow[];
+		pumpCodes: Map<string, string>;
+	}
+) {
+	const { scope, days, monthStart, to, fyStart } = ctx;
+	const n = scope.params.length;
+	const rows = await query<GangPumpDay>(gangDaySql(scope.where, n + 1), [
+		...scope.params,
+		fyStart,
+		to
+	]);
+	if (!rows.length) return;
+	const byGang = foldGangDays(rows);
+	const gangs = await query<{
+		id: string;
+		code: number;
+		name: string | null;
+		area_name: string;
+		plant_name: string | null;
+	}>(
+		`SELECT g.id, g.code, g.name, a.name AS area_name,
+		        (SELECT pl.name FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
+		           JOIN plants pl ON pl.id = pu.plant_id
+		         WHERE s.gang_id = g.id AND s.session_date <= $2
+		         ORDER BY s.session_date DESC, s.submitted_at DESC LIMIT 1) AS plant_name
+		 FROM gangs g JOIN areas a ON a.id = g.area_id WHERE g.id = ANY($1::uuid[])
+		 ORDER BY a.name, 5 NULLS LAST, g.code`,
+		[[...byGang.keys()], to]
+	);
+	const pumpIds = new Set(rows.map((row) => row.pump_id));
+	const extraPumps = [...pumpIds].filter((id) => !ctx.pumpCodes.has(id));
+	if (extraPumps.length)
+		for (const pump of await query<{ id: string; pump_code: string }>(
+			'SELECT id, pump_code FROM pumps WHERE id = ANY($1::uuid[])',
+			[extraPumps]
+		))
+			ctx.pumpCodes.set(pump.id, pump.pump_code);
+
+	const sheet = workbook.addWorksheet('Gangs', {
+		properties: { outlineProperties: { summaryBelow: false, summaryRight: false } },
+		views: [{ state: 'frozen', xSplit: 3, ySplit: 5 }]
+	});
+	const fixedCols = ['Gang', 'Area', 'Plant'];
+	const lastCol = fixedCols.length + days.length + 2;
+	sheet.getCell('A1').value = `Gang headcount, ${ctx.monthLabel}`;
+	sheet.getCell('A1').font = { bold: true, size: 16, color: { argb: BRAND } };
+	sheet.getCell('A2').value =
+		`${scope.description}. Data up to ${formatDate(to)}. Financial year from ${formatDate(fyStart)}.`;
+	sheet.getCell('A2').font = { color: { argb: MUTED } };
+	sheet.getCell('A3').value =
+		'A gang is recognised from faces. Number = workers of the gang counted that day, each once, ' +
+		'even when the gang worked at two pumps. "-" = the gang had no shift. Click + on the left of ' +
+		'a gang to see the pumps it worked at. Plant = where it last worked. Averages count only days ' +
+		'with a shift. Amber = waiting for location approval, red = location rejected: shown, but ' +
+		'left out of totals and averages.';
+	sheet.getCell('A3').font = { italic: true, color: { argb: MUTED } };
+	const header = sheet.getRow(5);
+	[
+		...fixedCols,
+		...days.map((d) => `${formatDayLabel(d).weekday}\n${Number(d.slice(8))}`),
+		'Avg MTD',
+		'Avg YTD'
+	].forEach((text, i) => {
+		const cell = header.getCell(i + 1);
+		cell.value = text;
+		cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+		cell.fill = fill(BRAND);
+		cell.border = BORDER;
+		cell.alignment = { wrapText: true, vertical: 'middle', horizontal: i < 3 ? 'left' : 'center' };
+	});
+	header.height = 32;
+	sheet.getColumn(1).width = 18;
+	sheet.getColumn(2).width = 16;
+	sheet.getColumn(3).width = 22;
+	for (let c = 4; c <= lastCol; c++) sheet.getColumn(c).width = c > lastCol - 2 ? 10 : 5.5;
+
+	let r = 6;
+	const write = (
+		values: (string | number | null)[],
+		style: { bold?: boolean; tint?: string; muted?: boolean; level?: number; groupHead?: boolean },
+		held: (DayRow['held'] | undefined)[] = [],
+		note?: string
+	) => {
+		const row = sheet.getRow(r++);
+		values.forEach((value, i) => {
+			const cell = row.getCell(i + 1);
+			cell.value = value ?? '-';
+			cell.border = BORDER;
+			cell.alignment = { vertical: 'middle', horizontal: i < 3 ? 'left' : 'center' };
+			cell.font = { bold: style.bold, color: style.muted ? { argb: MUTED } : undefined };
+			if (style.tint) cell.fill = fill(style.tint);
+			const dayHeld = i >= 3 ? held[i - 3] : null;
+			if (dayHeld) {
+				cell.fill = fill(HELD_FILL[dayHeld]);
+				if (style.groupHead) cell.note = HELD_NOTE[dayHeld];
+			}
+			if (i >= lastCol - 2 && typeof value === 'number') cell.numFmt = '0.0';
+		});
+		if (note) row.getCell(1).note = note;
+		if (style.level) {
+			row.outlineLevel = style.level;
+			row.hidden = true;
+		}
+		if (style.level || style.groupHead) {
+			Object.defineProperty(row, 'collapsed', { get: () => Boolean(style.groupHead) });
+		}
+	};
+	const avg = (sum: number, count: number) => (count ? Math.round((sum / count) * 10) / 10 : null);
+	const span = (from: string) => (day: { session_date: string; held: unknown }) =>
+		!day.held && day.session_date >= from && day.session_date <= to;
+
+	// The day's workers across every gang, once each (a worker counted for two gangs is one).
+	const dayWorkers = new Map<string, Set<string>>();
+	for (const gang of gangs) {
+		const map = byGang.get(gang.id)!;
+		const list = [...map.values()];
+		const mtd = list.filter(span(monthStart));
+		const ytd = list.filter(span(fyStart));
+		const sum = (picked: typeof list) => picked.reduce((t, day) => t + day.people, 0);
+		for (const day of mtd) {
+			const set = dayWorkers.get(day.session_date) ?? new Set<string>();
+			for (const worker of day.workers) set.add(worker);
+			dayWorkers.set(day.session_date, set);
+		}
+		write(
+			[
+				gang.name ? `Gang ${gang.code} (${gang.name})` : `Gang ${gang.code}`,
+				gang.area_name,
+				gang.plant_name ?? '',
+				...days.map((d) => map.get(d)?.people ?? null),
+				avg(sum(mtd), mtd.length),
+				avg(sum(ytd), ytd.length)
+			],
+			{ bold: true, groupHead: true },
+			days.map((d) => map.get(d)?.held)
+		);
+		const gangPumps = [...new Set(list.flatMap((day) => day.pumps.map((p) => p.pump_id)))].sort(
+			(a, b) => (ctx.pumpCodes.get(a) ?? '').localeCompare(ctx.pumpCodes.get(b) ?? '')
+		);
+		for (const pumpId of gangPumps) {
+			const at = (d: string) => map.get(d)?.pumps.find((p) => p.pump_id === pumpId);
+			const pumpDays = list
+				.map((day) => ({ day, pump: day.pumps.find((p) => p.pump_id === pumpId) }))
+				.filter((x) => x.pump);
+			const pick = (from: string) =>
+				pumpDays.filter(
+					(x) => !x.pump!.held && x.day.session_date >= from && x.day.session_date <= to
+				);
+			const pm = pick(monthStart);
+			const py = pick(fyStart);
+			write(
+				[
+					`   at ${ctx.pumpCodes.get(pumpId) ?? 'a pump'}`,
+					'',
+					'',
+					...days.map((d) => at(d)?.people ?? null),
+					avg(
+						pm.reduce((t, x) => t + x.pump!.people, 0),
+						pm.length
+					),
+					avg(
+						py.reduce((t, x) => t + x.pump!.people, 0),
+						py.length
+					)
+				],
+				{ muted: true, level: 1 },
+				days.map((d) => at(d)?.held)
+			);
+		}
+	}
+
+	// The pump sheet's numbers for the same pumps and days, to reconcile the two sheets.
+	const pumpTotal = new Map<string, number>();
+	for (const row of ctx.pumpRows) {
+		if (row.held || !pumpIds.has(row.pump_id) || row.session_date < monthStart) continue;
+		pumpTotal.set(row.session_date, (pumpTotal.get(row.session_date) ?? 0) + row.people);
+	}
+	write(
+		[
+			'All gangs (each worker once a day)',
+			'',
+			`${gangs.length} gangs`,
+			...days.map((d) => dayWorkers.get(d)?.size ?? null),
+			null,
+			null
+		],
+		{ bold: true, tint: BRAND_LIGHT }
+	);
+	write(
+		['   Pump sheet, same pumps', '', '', ...days.map((d) => pumpTotal.get(d) ?? null), null, null],
+		{ muted: true, tint: BRAND_LIGHT }
+	);
+	write(
+		[
+			'   Difference',
+			'',
+			'',
+			...days.map((d) =>
+				pumpTotal.has(d) || dayWorkers.has(d)
+					? (pumpTotal.get(d) ?? 0) - (dayWorkers.get(d)?.size ?? 0)
+					: null
+			),
+			null,
+			null
+		],
+		{ muted: true, tint: BRAND_LIGHT },
+		[],
+		'The pump sheet counts a worker at each pump they were seen at; here a worker counts once a ' +
+			'day. A difference is a worker seen at two pumps that day, or a shift with no faces, ' +
+			'which has no gang.'
+	);
+	sheet.pageSetup = { orientation: 'landscape', printTitlesRow: '5:5' };
+	sheet.properties.outlineLevelRow = 1;
 }

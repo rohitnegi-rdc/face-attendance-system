@@ -3,6 +3,7 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import Camera from '@lucide/svelte/icons/camera';
 	import Check from '@lucide/svelte/icons/check';
+	import Clock from '@lucide/svelte/icons/clock';
 	import Eye from '@lucide/svelte/icons/eye';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Maximize from '@lucide/svelte/icons/maximize';
@@ -11,10 +12,18 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import SwitchCamera from '@lucide/svelte/icons/switch-camera';
 	import Upload from '@lucide/svelte/icons/upload';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import UserRound from '@lucide/svelte/icons/user-round';
 	import Users from '@lucide/svelte/icons/users';
 	import X from '@lucide/svelte/icons/x';
-	import { dateKey, formatDate, formatDateTime, formatDayLabel, todayStr } from '$lib/date';
+	import {
+		dateKey,
+		formatDate,
+		formatDateTime,
+		formatDayLabel,
+		formatTime,
+		todayStr
+	} from '$lib/date';
 	import { askForPosition } from '$lib/pumpLocation';
 	import { personDisplayLabel } from '$lib/personLabel';
 	import { t, tLabel } from '$lib/pumpLang.svelte';
@@ -95,10 +104,46 @@
 	const shownDateIsToday = $derived(shownDate === todayStr());
 	// No photo can be sent now (shift done, or the end not open yet): the photo card goes away
 	// instead of showing grey buttons, and the shift details say why and when.
+	// "2 gangs today" (set by the plant manager in an Area with gangs): each running shift is a card
+	// with its faces, plus "New gang starting". The tap is a hint; the server re-pairs by faces. A
+	// one-gang day never shows any of this.
+	type GangShift = {
+		id: string;
+		gang_code: number | null;
+		submitted_at: string;
+		next_allowed_at: string;
+		end_open: boolean;
+		faces: string[];
+		people: number;
+	};
+	const multiGang = $derived(
+		(today?.gangs ?? 1) > 1 && ['morning', 'evening', 'locked'].includes(today?.state)
+	);
+	const gangShifts = $derived<GangShift[]>(multiGang ? (today?.gang_shifts ?? []) : []);
+	let gangChoice = $state('');
+	// Start photos that failed to load: the card shows an icon instead and keeps its number.
+	let brokenGangPhotos = $state<string[]>([]);
+	const gangOptions = $derived(
+		multiGang
+			? [
+					...gangShifts.filter((shift) => shift.end_open).map((shift) => shift.id),
+					...(today?.can_start_gang ? ['new'] : [])
+				]
+			: []
+	);
+	const chosenGang = $derived(
+		gangOptions.includes(gangChoice) ? gangChoice : gangOptions.length === 1 ? gangOptions[0] : ''
+	);
+	// Shift details follow the picked gang card (user, 2026-11-23): a running gang shows its own
+	// start and "end"; "New gang" shows no start and "start". Nothing picked: the day's details.
+	const pickedGangShift = $derived(gangShifts.find((shift) => shift.id === chosenGang) ?? null);
+	const detailsStartedAt = $derived(
+		chosenGang === 'new' ? null : (pickedGangShift?.submitted_at ?? today?.shift_started_at)
+	);
 	const captureClosed = $derived(
 		status === 'idle' &&
 			!operatorPreviewUrl &&
-			(today?.state === 'locked' || today?.can_submit === false)
+			((today?.state === 'locked' && !multiGang) || today?.can_submit === false)
 	);
 	let todayLoading = $state(true);
 	let processingStep = $state(0);
@@ -457,6 +502,7 @@
 		const form = new FormData();
 		form.append('photo', selectedFile);
 		form.append('operator_photo', operatorFile);
+		if (multiGang && chosenGang) form.append('shift', chosenGang);
 		locationHold = '';
 		const position = await currentPosition();
 		if (position) {
@@ -637,6 +683,8 @@
 
 	// API states keep the database words: morning = shift start, evening = shift end.
 	const sessionTitle = $derived.by(() => {
+		if (multiGang && status === 'idle')
+			return chosenGang === 'new' ? 'Start shift' : chosenGang ? 'End shift' : 'Choose the gang';
 		if (today?.state === 'locked')
 			return today?.shift_outcome === 'start_only' ? 'Shift ended (start only)' : 'Shift complete';
 		if (today?.state === 'review') return 'Review attendance';
@@ -821,6 +869,107 @@
 	<div class="capture-layout">
 		{#if !(status === 'completed' && result) && !captureClosed}
 			<section class="capture-workspace" aria-labelledby="photo-heading">
+				{#if multiGang && status === 'idle'}
+					<fieldset class="gang-picker" data-testid="gang-picker">
+						<!-- Operators choose by picture, not by reading: each running shift shows the group
+						     photo taken at its start (big) and its workers' faces; the number on the photo is
+						     the gang. The text under it only helps. -->
+						<legend>{t('Find your gang in the photos')}</legend>
+						{#each gangShifts as shift, index (shift.id)}
+							{@const label = shift.gang_code
+								? t('Gang {code}', { code: shift.gang_code })
+								: t('Shift {n}', { n: index + 1 })}
+							<label
+								class="gang-card"
+								class:gang-card--chosen={chosenGang === shift.id}
+								class:gang-card--waiting={!shift.end_open}
+								data-testid="gang-shift"
+							>
+								<input
+									class="gang-radio"
+									type="radio"
+									name="gang"
+									value={shift.id}
+									checked={chosenGang === shift.id}
+									disabled={!shift.end_open}
+									onchange={() => (gangChoice = shift.id)}
+								/>
+								<span class="gang-photo">
+									{#if !brokenGangPhotos.includes(shift.id)}
+										<img
+											src={resolve(`/api/attendance/photo/${shift.id}`)}
+											alt={t('Start photo of {gang}', { gang: label })}
+											data-testid="gang-start-photo"
+											onerror={() => (brokenGangPhotos = [...brokenGangPhotos, shift.id])}
+										/>
+									{:else}
+										<span class="gang-photo-missing" aria-hidden="true"><Users size={40} /></span>
+									{/if}
+									<span class="gang-number" aria-hidden="true">{shift.gang_code ?? index + 1}</span>
+									{#if chosenGang === shift.id}
+										<span class="gang-tick" aria-hidden="true"
+											><Check size={22} strokeWidth={3} /></span
+										>
+									{/if}
+									{#if !shift.end_open}
+										<span class="gang-wait-chip">
+											<Clock size={16} />
+											{formatTime(shift.next_allowed_at)}
+										</span>
+									{/if}
+								</span>
+								{#if shift.faces.length}
+									<span class="gang-faces" aria-hidden="true">
+										{#each shift.faces as face (face)}
+											<img
+												src={resolve(`/api/attendance/face/${face}`)}
+												alt=""
+												loading="lazy"
+												data-testid="gang-face"
+											/>
+										{/each}
+									</span>
+								{/if}
+								<span class="gang-text">
+									<strong>{label} · {t('{n} people', { n: shift.people })}</strong>
+									<small>{t('Running since {time}', { time: formatIST(shift.submitted_at) })}</small
+									>
+									<small class:gang-open={shift.end_open}
+										>{shift.end_open
+											? t('End this shift')
+											: t('End after {time}', { time: formatIST(shift.next_allowed_at) })}</small
+									>
+								</span>
+							</label>
+						{/each}
+						{#if today?.can_start_gang}
+							<label
+								class="gang-card gang-card--new"
+								class:gang-card--chosen={chosenGang === 'new'}
+								data-testid="gang-new"
+							>
+								<input
+									class="gang-radio"
+									type="radio"
+									name="gang"
+									value="new"
+									checked={chosenGang === 'new'}
+									onchange={() => (gangChoice = 'new')}
+								/>
+								<span class="gang-new-icon" aria-hidden="true"><UserPlus size={34} /></span>
+								<span class="gang-text">
+									<strong>{t('New gang starting')}</strong>
+									<small>{t('A gang that has not started here today')}</small>
+								</span>
+								{#if chosenGang === 'new'}
+									<span class="gang-tick gang-tick--inline" aria-hidden="true"
+										><Check size={22} strokeWidth={3} /></span
+									>
+								{/if}
+							</label>
+						{/if}
+					</fieldset>
+				{/if}
 				<div class="section-heading">
 					<div>
 						<h2 id="photo-heading">{t('Pump Operator photo')}</h2>
@@ -1240,28 +1389,34 @@
 				<div class="session-details">
 					<h2>{t('Shift details')}</h2>
 					<dl>
-						{#if today?.shift_started_at}
+						{#if detailsStartedAt}
 							<div>
 								<dt>{t('Started')}</dt>
-								<dd>{formatIST(today.shift_started_at)}</dd>
+								<dd data-testid="details-started">{formatIST(detailsStartedAt)}</dd>
 							</div>
 						{/if}
 						<div>
 							<dt>{t('Next step')}</dt>
 							<dd data-testid="next-step">
-								{today?.state === 'locked'
-									? today?.shift_outcome === 'start_only'
-										? t('Shift ended without an end photo. The next shift starts tomorrow.')
-										: t('Shift recorded. The next shift starts tomorrow.')
-									: today?.state === 'review'
-										? t('Finish reviewing the submitted Pump Members photo')
-										: today?.state === 'failed'
-											? t('Retry the photo that could not be processed')
-											: today?.state === 'evening' && today?.can_submit === false
-												? t('Shift end opens {time}', { time: formatIST(today?.next_allowed_at) })
-												: today?.state === 'evening'
-													? t('Send the photos to end the shift')
-													: t('Send the photos to start the shift')}
+								{chosenGang === 'new'
+									? t('Send the photos to start the shift')
+									: pickedGangShift
+										? t('Send the photos to end the shift')
+										: today?.state === 'locked'
+											? today?.shift_outcome === 'start_only'
+												? t('Shift ended without an end photo. The next shift starts tomorrow.')
+												: t('Shift recorded. The next shift starts tomorrow.')
+											: today?.state === 'review'
+												? t('Finish reviewing the submitted Pump Members photo')
+												: today?.state === 'failed'
+													? t('Retry the photo that could not be processed')
+													: today?.state === 'evening' && today?.can_submit === false
+														? t('Shift end opens {time}', {
+																time: formatIST(today?.next_allowed_at)
+															})
+														: today?.state === 'evening'
+															? t('Send the photos to end the shift')
+															: t('Send the photos to start the shift')}
 							</dd>
 						</div>
 					</dl>
@@ -1276,10 +1431,14 @@
 				class="button button--primary"
 				type="button"
 				onclick={submitPhoto}
-				disabled={!selectedFile}
+				disabled={!selectedFile || (multiGang && !chosenGang)}
 			>
 				<Upload size={18} />
-				{selectedFile ? t('Submit photos') : t('Take the Pump Members photo first')}
+				{multiGang && !chosenGang
+					? t('Tap the gang above first')
+					: selectedFile
+						? t('Submit photos')
+						: t('Take the Pump Members photo first')}
 			</button>
 			<button class="button button--ghost" type="button" onclick={resetCapture}
 				>{t('Cancel')}</button
@@ -1460,6 +1619,165 @@
 
 	.capture-workspace {
 		padding: var(--space-5);
+	}
+	.gang-picker {
+		display: grid;
+		gap: var(--space-2);
+		margin: 0 0 var(--space-5);
+		padding: 0;
+		border: 0;
+	}
+	.gang-picker legend {
+		margin-bottom: var(--space-2);
+		font-size: var(--text-lg);
+		font-weight: 700;
+	}
+	.gang-card {
+		position: relative;
+		display: grid;
+		gap: var(--space-2);
+		padding: var(--space-2);
+		background: var(--surface-subtle);
+		border: 3px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+		cursor: pointer;
+	}
+	.gang-card:has(.gang-radio:focus-visible) {
+		outline: 3px solid var(--ink-strong);
+		outline-offset: 2px;
+	}
+	.gang-radio {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		opacity: 0;
+		pointer-events: none;
+	}
+	.gang-card--chosen {
+		background: var(--brand-white);
+		border-color: var(--brand-teal);
+	}
+	.gang-card--waiting {
+		cursor: default;
+	}
+	.gang-card--waiting .gang-photo img,
+	.gang-card--waiting .gang-faces img {
+		filter: grayscale(1);
+		opacity: 0.55;
+	}
+	.gang-photo {
+		position: relative;
+		display: grid;
+		place-items: center;
+		min-height: 7rem;
+		max-height: 11rem;
+		overflow: hidden;
+		background: #1f2a26;
+		border-radius: calc(var(--radius-md) - 4px);
+	}
+	.gang-photo img {
+		width: 100%;
+		max-height: 11rem;
+		object-fit: contain;
+	}
+	.gang-photo-missing {
+		color: var(--brand-mist);
+	}
+	.gang-number {
+		position: absolute;
+		top: var(--space-2);
+		left: var(--space-2);
+		display: grid;
+		place-items: center;
+		min-width: 2.75rem;
+		height: 2.75rem;
+		padding: 0 var(--space-2);
+		color: var(--brand-white);
+		font-size: 1.6rem;
+		font-weight: 800;
+		background: rgb(0 0 0 / 0.72);
+		border: 2px solid var(--brand-white);
+		border-radius: 999px;
+	}
+	.gang-tick {
+		position: absolute;
+		top: var(--space-2);
+		right: var(--space-2);
+		display: grid;
+		place-items: center;
+		width: 2.75rem;
+		height: 2.75rem;
+		color: var(--brand-white);
+		background: var(--brand-teal);
+		border: 2px solid var(--brand-white);
+		border-radius: 50%;
+	}
+	.gang-tick--inline {
+		top: 50%;
+		transform: translateY(-50%);
+	}
+	.gang-wait-chip {
+		position: absolute;
+		bottom: var(--space-2);
+		left: 50%;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 12px;
+		color: var(--brand-white);
+		font-weight: 700;
+		white-space: nowrap;
+		background: rgb(0 0 0 / 0.78);
+		border-radius: 999px;
+		transform: translateX(-50%);
+	}
+	.gang-faces {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+	.gang-faces img {
+		width: 3.25rem;
+		height: 3.25rem;
+		object-fit: cover;
+		border: 2px solid var(--brand-white);
+		border-radius: 50%;
+		box-shadow: 0 0 0 1px var(--brand-mist);
+	}
+	.gang-card--new {
+		grid-template-columns: auto minmax(0, 1fr);
+		align-items: center;
+		gap: var(--space-3);
+		min-height: 5.5rem;
+		padding: var(--space-3) 3.75rem var(--space-3) var(--space-3);
+		border-style: dashed;
+	}
+	.gang-card--new.gang-card--chosen {
+		border-style: solid;
+	}
+	.gang-new-icon {
+		display: grid;
+		place-items: center;
+		width: 3.5rem;
+		height: 3.5rem;
+		color: var(--ink-strong);
+		background: var(--brand-white);
+		border: 2px dashed var(--brand-steel);
+		border-radius: 50%;
+	}
+	.gang-text {
+		display: grid;
+		gap: 2px;
+		min-width: 0;
+		padding: 0 var(--space-1);
+	}
+	.gang-text small {
+		color: var(--ink-muted);
+		font-size: var(--text-sm);
+	}
+	.gang-text .gang-open {
+		color: var(--ink-strong);
+		font-weight: 600;
 	}
 	.session-panel {
 		min-height: 18rem;

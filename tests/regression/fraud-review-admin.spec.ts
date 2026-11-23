@@ -5,6 +5,7 @@ import {
 	count,
 	createAdmin,
 	createArea,
+	fraudCheck,
 	createPump,
 	db,
 	login,
@@ -521,5 +522,8 @@ test('FRD-13 the admin turns test mode on and off: fraud check off, banner, audi
 		expect(audit.rows.map((row) => row.details.on)).toEqual([true, false, true]);
 	} finally {
 		await db.query(`DELETE FROM app_settings WHERE key IN ('test_mode', 'fraud_check_disabled')`);
+		// Reset also turns the same-day fraud check off; put back the suite's baseline (on) so
+		// the fraud specs that run after this one in the same lane keep their meaning.
+		await fraudCheck(true);
 	}
 });

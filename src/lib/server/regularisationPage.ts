@@ -31,8 +31,9 @@ export async function loadMissedDaysPage(viewer: Requester, url: URL) {
 		? ((asked ? await pumpMonth(pump.id, asked) : null) ?? (await pumpMonth(pump.id, fallback)))
 		: null;
 	const selected = calendar?.days.find((d) => d.day === day) ?? null;
+	// Plant managers do not apply (createRequest refuses them): no form, so no crew to tick.
 	const crew =
-		pump && selected?.canApply && selected.kind
+		viewer.role !== 'plant-manager' && pump && selected?.canApply && selected.kind
 			? await crewFor(pump.id, selected.day, selected.kind)
 			: null;
 	return { requests, pumps, pump, calendar, selected, crew };
@@ -61,7 +62,7 @@ export async function requestAction(actor: Requester, request: Request, linkBase
 		message:
 			result.status === 'approved'
 				? 'Regularised. The day now counts.'
-				: 'Sent for approval. The business manager has been emailed.'
+				: 'Sent for approval. The approver has been emailed.'
 	};
 }
 

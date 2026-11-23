@@ -38,7 +38,9 @@ import io
 import json
 import random
 import shutil
+import time
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -172,7 +174,17 @@ def solo_embedding(path: Path, ai_url: str) -> np.ndarray | None:
     canvas.paste(crop, ((640 - crop.width) // 2, (640 - crop.height) // 2))
     buf = io.BytesIO()
     canvas.save(buf, "JPEG", quality=92)
-    r = requests.post(f"{ai_url}/internal/face/extract", files={"file": ("c.jpg", buf.getvalue(), "image/jpeg")}, timeout=120)
+    # The local AI service may be restarted mid-run; wait for it instead of losing the run.
+    for _ in range(30):
+        try:
+            r = requests.post(f"{ai_url}/internal/face/extract", files={"file": ("c.jpg", buf.getvalue(), "image/jpeg")}, timeout=120)
+            if r.status_code < 500:
+                break
+        except requests.RequestException:
+            pass
+        time.sleep(10)
+    else:
+        raise SystemExit(f"AI service at {ai_url} has not answered for 5 minutes")
     r.raise_for_status()
     faces = r.json().get("faces", [])
     if not faces:
@@ -182,45 +194,67 @@ def solo_embedding(path: Path, ai_url: str) -> np.ndarray | None:
     return v / (np.linalg.norm(v) or 1.0)
 
 
-def curate(identities: list[Identity], ai_url: str, cap: int) -> dict[tuple[str, str], float]:
-    """Drop undetectable, mislabelled and near-duplicate frames; returns centroid similarities."""
+def curate(identities: list[Identity], ai_url: str, cap: int, tag: str) -> dict[tuple[str, str], float]:
+    """Drop undetectable, mislabelled and near-duplicate frames; returns centroid similarities.
+
+    Curation takes about an hour on the CPU AI service, so each person's result (kept frames with
+    their scores, and the mean of their face vectors for the look-alike search) is saved as soon as
+    it is done, and a later run resumes from it. The cache sits next to the face images under
+    datasets/ (ignored by git); no single-photo embedding is written."""
     cache = json.loads(CACHE_PATH.read_text(encoding="utf-8")) if CACHE_PATH.exists() else {}
+    section = cache.get(tag)
+    if not (isinstance(section, dict) and section.get("cap") == cap and isinstance(section.get("people"), dict)):
+        section = {"cap": cap, "people": {}}
+        cache[tag] = section
+
     total = sum(min(cap, len(i.frames)) for i in identities)
     done = 0
     for ident in identities:
+        saved = section["people"].get(ident.actor)
+        if saved is not None:
+            by_path = {f.path.relative_to(ROOT).as_posix(): f for f in ident.frames}
+            ident.frames = []
+            for path, score in saved["kept"]:
+                if path in by_path:
+                    by_path[path].score = score
+                    ident.frames.append(by_path[path])
+            ident.centroid = np.asarray(saved["centroid"], dtype=np.float32) if saved["centroid"] else None
+            done += min(cap, saved["tried"])
+            continue
         rng = random.Random(f"{SEED}:{ident.actor}")
         frames = sorted(ident.frames, key=lambda f: (f.movie, f.path.name))
         rng.shuffle(frames)
         frames = sorted(frames[: cap * 2], key=lambda f: -f.side)[:cap]  # prefer larger crops
-        vecs = []
-        for f in frames:
-            v = solo_embedding(f.path, ai_url)
-            if v is not None:
-                vecs.append((f, v))
-            done += 1
-            if done % 200 == 0:
-                print(f"  curation {done}/{total}", flush=True)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda f: solo_embedding(f.path, ai_url), frames))
+        vecs = [(f, v) for f, v in zip(frames, results) if v is not None]
+        done += len(frames)
+        print(f"  curation {done}/{total}", flush=True)
         if len(vecs) < 2:
             ident.frames = [f for f, _ in vecs]
             ident.centroid = vecs[0][1] if vecs else None
-            continue
-        m = np.stack([v for _, v in vecs])
-        sims = m @ m.T
-        medoid = int(np.argmax(sims.mean(axis=1)))
-        kept: list[tuple[Frame, np.ndarray]] = []
-        for (f, v), s in sorted(zip(vecs, sims[medoid]), key=lambda x: -x[1]):
-            if s < CURATION_MIN_SIM or any(float(v @ kv) > CURATION_DUP_SIM for _, kv in kept):
-                continue
-            f.score = round(float(s), 4)
-            kept.append((f, v))
-        ident.frames = [f for f, _ in kept]
-        c = np.mean([v for _, v in kept], axis=0)
-        ident.centroid = c / (np.linalg.norm(c) or 1.0)
-        cache[ident.actor] = {"kept": len(kept), "tried": len(frames)}
-    CACHE_PATH.write_text(json.dumps(cache, indent=2) + "\n", encoding="utf-8")
+        else:
+            m = np.stack([v for _, v in vecs])
+            sims = m @ m.T
+            medoid = int(np.argmax(sims.mean(axis=1)))
+            kept: list[tuple[Frame, np.ndarray]] = []
+            for (f, v), s in sorted(zip(vecs, sims[medoid]), key=lambda x: -x[1]):
+                if s < CURATION_MIN_SIM or any(float(v @ kv) > CURATION_DUP_SIM for _, kv in kept):
+                    continue
+                f.score = round(float(s), 4)
+                kept.append((f, v))
+            ident.frames = [f for f, _ in kept]
+            c = np.mean([v for _, v in kept], axis=0)
+            ident.centroid = c / (np.linalg.norm(c) or 1.0)
+        section["people"][ident.actor] = {
+            "tried": len(frames),
+            "kept": [[f.path.relative_to(ROOT).as_posix(), f.score] for f in ident.frames],
+            "centroid": [round(float(x), 5) for x in ident.centroid] if ident.centroid is not None else None,
+        }
+        CACHE_PATH.write_text(json.dumps(cache) + "\n", encoding="utf-8")
     usable = [i for i in identities if i.centroid is not None]
     return {
-        (a.actor, b.actor): float(a.centroid @ b.centroid)
+        (a.actor, b.actor): round(float(a.centroid @ b.centroid), 4)
         for a in usable for b in usable if a.actor < b.actor
     }
 
@@ -376,7 +410,7 @@ def build_plan(rich: list[Identity], poor: list[Identity], pair_sims: dict[tuple
     fraud_events = []
     # Proxy: a worker in their own pump's start photo is also in another pump's start photo of the
     # same Area on the same date. Their own pump starts first (start times rise with pump order).
-    for src, dst, day in [("PUMP-A1", "PUMP-A3", 1), ("PUMP-A2", "PUMP-A5", 2), ("PUMP-B1", "PUMP-B3", 4), ("PUMP-A4", "PUMP-A6", 5)]:
+    for src, dst, day in [("PUMP-A1", "PUMP-A3", 1), ("PUMP-A2", "PUMP-A5", 2), ("PUMP-B1", "PUMP-B3", 4), ("PUMP-A4", "PUMP-A6", 3)]:
         candidates = sorted(
             w for w in present.get((src, day), {}).get("start", set())
             if w != operators[src] and workers[w].role == "regular"
@@ -394,16 +428,16 @@ def build_plan(rich: list[Identity], poor: list[Identity], pair_sims: dict[tuple
             w = rng.choice(candidates)
             extras[(dst, day, "start")].append((w, "cross_area"))
             cross_area.append({"worker_id": w, "home_pump": src, "pump_id": dst, "day": day + 1})
-    # One-off visitors (driver, supervisor, site staff).
+    # One-off visitors (driver, supervisor, site staff): everyone not already placed, up to 18.
     keys = sorted(present)
-    for n in range(18):
+    for n in range(min(18, len(visitor_pool))):
         pump, day = keys[(n * 7 + 3) % len(keys)]
         kind = "start" if n % 3 else "end"
         wid = add(visitor_pool.pop(), "visitor", None, f"visits {pump} on day {day + 1}")
         extras[(pump, day, kind)].append((wid, "visitor"))
     # A relief operator on one day at four pumps; two operator photos with no face (fail at once).
     relief = {"PUMP-A3": 3, "PUMP-B2": 1, "PUMP-A6": 2, "PUMP-B4": 5}
-    no_face_operator = {("PUMP-A5", 4, "end"), ("PUMP-B3", 2, "start")}
+    no_face_operator = {("PUMP-A5", 3, "end"), ("PUMP-B3", 3, "start")}
 
     sessions: list[SessionPlan] = []
     seen: set[tuple[str, str]] = set()  # (pump, worker) already a person at that pump
@@ -494,10 +528,13 @@ def build_plan(rich: list[Identity], poor: list[Identity], pair_sims: dict[tuple
 # ---------------------------------------------------------------- rendering
 
 
-def pick_frame(identity: Identity, rng: random.Random, dark: bool, min_side: int) -> Frame:
-    """An unused frame if any is left (least used otherwise), lit to suit the photo, big enough."""
-    least = min(identity.used[str(f.path)] for f in identity.frames)
-    pool = [f for f in identity.frames if identity.used[str(f.path)] == least]
+def pick_frame(identity: Identity, rng: random.Random, dark: bool, min_side: int, frontal: bool = False) -> Frame:
+    """An unused frame if any is left (least used otherwise), lit to suit the photo, big enough.
+    frontal: the operator photo is a deliberate photo of one person facing the phone."""
+    frames = [f for f in identity.frames if f.pose == "FRONTAL"] if frontal else []
+    frames = frames or identity.frames
+    least = min(identity.used[str(f.path)] for f in frames)
+    pool = [f for f in frames if identity.used[str(f.path)] == least]
     suited = [f for f in pool if (f.illumination == "BAD") == dark] or pool
     big = [f for f in suited if f.side >= min_side] or suited
     frame = rng.choice(sorted(big, key=lambda f: str(f.path)))
@@ -582,9 +619,9 @@ def draw_person(canvas: Image.Image, cx: int, cy: int, frame: Frame, width: int,
     if helmet != "none":
         # "hat" sits on the hairline; "low" comes down to the eyebrows.
         brim_y = y1 + int(fh * (0.06 if helmet == "hat" else 0.24))
-        dome_w, dome_h = int(fw * 1.3), int(fh * 0.95)
-        d.chord((cx - dome_w // 2, brim_y - dome_h, cx + dome_w // 2, brim_y + dome_h // 3), 180, 360, fill=helmet_color)
-        d.rectangle((cx - dome_w // 2, brim_y - dome_h // 3 - 2, cx + dome_w // 2, brim_y), fill=helmet_color)
+        # A low dome about half a face high, as wide as the head.
+        dome_w, dome_h = int(fw * 1.22), int(fh * 0.5)
+        d.chord((cx - dome_w // 2, brim_y - dome_h, cx + dome_w // 2, brim_y + dome_h), 180, 360, fill=helmet_color)
         d.rounded_rectangle((cx - int(fw * 0.72), brim_y - int(fh * 0.04), cx + int(fw * 0.72), brim_y + int(fh * 0.06)),
                             radius=4, fill=tuple(int(c * 0.85) for c in helmet_color))
     return [x1, y1, x1 + fw, y1 + fh]
@@ -659,7 +696,7 @@ def render_operator(plan: SessionPlan, workers: dict[str, Worker], uniform: tupl
         return apply_light(canvas, plan.lighting, rng, False), {"worker_id": plan.operator_id, "has_face": False,
                                                                 "in_group": plan.operator_in_group}
     width = rng.randint(250, 320)
-    frame = pick_frame(workers[plan.operator_id].identity, rng, plan.lighting in DARK, 110)
+    frame = pick_frame(workers[plan.operator_id].identity, rng, plan.lighting in DARK, 110, frontal=True)
     r = rng.random()
     helmet = "none" if r < 0.6 else ("low" if r < 0.68 else "hat")
     box = draw_person(canvas, w // 2, int(h * 0.42), frame, width, uniform, helmet, rng.choice(HELMET_COLORS),
@@ -750,8 +787,8 @@ def main() -> int:
     print(f"  {len(rich)} identities with {RICH_MIN_IMAGES}+ frames, {len(poor)} with fewer", flush=True)
 
     print("Curating frames with the local AI service ...", flush=True)
-    pair_sims = curate(rich, ai_url, args.frames_per_identity)
-    curate(poor, ai_url, 6)
+    pair_sims = curate(rich, ai_url, args.frames_per_identity, "rich")
+    curate(poor, ai_url, 6, "poor")
     rich = [i for i in rich if len(i.frames) >= 12]
     poor = [i for i in poor if i.frames]
     print(f"  usable after curation: {len(rich)} rich, {len(poor)} for one-off visitors", flush=True)

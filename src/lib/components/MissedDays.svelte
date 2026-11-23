@@ -1,7 +1,8 @@
 <script lang="ts">
 	// Missed days (regularisation), one body for the admin and plant-manager pages. Three blocks,
 	// phone first: requests to decide (evidence inline: reason, voice note, workers), the calendar of
-	// one pump to apply for a date (the form opens under it), and every request with its outcome.
+	// one pump (an admin applies for a date there, the form opens under it; a plant manager only
+	// looks, since 2026-11-18 only the pump applies), and every request with its outcome.
 	import { enhance } from '$app/forms';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import RegularisationCalendar from '$lib/components/RegularisationCalendar.svelte';
@@ -53,10 +54,9 @@
 			<h1>Missed days</h1>
 			<p>
 				A past day with no photo, or where a worker has only a start or only an end, can be counted
-				once it is approved. The operator applies on the pump screen{role === 'plant-manager'
-					? ', or you apply for them below when their phone is broken or lost'
-					: ''}. The plant's business manager approves; an admin can too. An approved day shows as
-				Regularised everywhere.
+				once it is approved. The operator applies on the pump screen. The plant's business manager
+				approves; a plant with no business manager, its plant manager; an admin can too. An approved
+				day shows as Regularised everywhere.
 			</p>
 		</div>
 	</header>
@@ -81,11 +81,11 @@
 
 	{#if data.pump && data.calendar}
 		<section class="section" aria-labelledby="missing-heading" id="ask">
-			<h2 id="missing-heading">Apply for a date</h2>
-			<p class="muted">
+			<h2 id="missing-heading">{role === 'admin' ? 'Apply for a date' : 'Pump calendar'}</h2>
+			<p class="muted" data-testid="reg-calendar-hint">
 				{role === 'admin'
 					? 'Choose a pump and a red day. Regularising here counts the day at once, recorded under your name.'
-					: 'Choose a pump and a red day. Apply only when the operator cannot: the request still goes to the business manager.'}
+					: 'Each pump’s month at a glance. The operator applies for a missed day on the pump screen; it then appears under To decide.'}
 			</p>
 			<form method="GET" class="picker" onchange={applyOnSelect}>
 				<label class="field"
@@ -106,6 +106,7 @@
 					selected={data.selected?.day ?? null}
 					{dayHref}
 					{monthHref}
+					canApply={role === 'admin'}
 				/>
 
 				{#if form?.formKind === 'request' && form?.message}
@@ -182,7 +183,11 @@
 						</form>
 					{/key}
 				{:else if !data.selected}
-					<p class="muted small">Tap a red day to apply, or any day to see what happened.</p>
+					<p class="muted small">
+						{role === 'admin'
+							? 'Tap a red day to apply, or any day to see what happened.'
+							: 'Tap a day to see what happened.'}
+					</p>
 				{/if}
 			</div>
 		</section>

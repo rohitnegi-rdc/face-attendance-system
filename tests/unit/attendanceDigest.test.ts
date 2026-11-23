@@ -27,6 +27,8 @@ type Sent = {
 	areas: any[];
 	totals: any;
 	mtd: any;
+	locationCheck?: boolean;
+	approvals?: { name: string | null; plants: string; waiting: number; oldest: string | null }[];
 };
 
 let sent: Sent[] = [];
@@ -587,7 +589,9 @@ describe('business managers, business heads and missed day requests', () => {
 		assert.equal(byCode[f.codes.waiting].request.status, 'pending');
 		assert.equal(byCode[f.codes.waiting].request.decider, 'asha');
 		assert.equal(byCode[f.codes.approved].request.status, 'approved');
-		assert.equal(byCode[f.codes.rejected].request.decider, null, 'its manager was removed');
+		// Its business manager left, so the plant's plant manager decides (migration 055).
+		assert.equal(byCode[f.codes.rejected].request.decider, 'plantmgr');
+		assert.equal(byCode[f.codes.rejected].request.decider_role, 'plant manager');
 		assert.equal(byCode[f.codes.none].request, null, 'a cancelled request is left out');
 
 		const { html } = renderAttendanceDigest(mail);
@@ -656,5 +660,141 @@ describe('business managers, business heads and missed day requests', () => {
 		});
 		assert.ok(html.includes('&lt;b&gt;hi&lt;/b&gt;'));
 		assert.ok(html.includes('Waiting for approval</strong> by an admin.'));
+	});
+});
+
+// 2026-11-18: "show in the daily tracker that approvals count pending from this plant manager as
+// pump as away from the pump attendance". Area with the location check on: plant 1 (Ravi) has a
+// start away from the pump waiting on DAY and an older one still waiting; plant 2 (Sunil) a start
+// approved by Sunil; plant 3 has no plant manager and a start waiting.
+describe('shift starts away from the pump in the 9 am tracker', () => {
+	let g: {
+		name: string;
+		plants: string[];
+		codes: { waiting: string; approved: string; orphan: string };
+	};
+
+	async function active(pumpId: string) {
+		await db.query("UPDATE pumps SET created_at = '2026-09-01' WHERE id = $1", [pumpId]);
+		await db.query(
+			`INSERT INTO pump_day_status (pump_id, day, status, set_by_role, set_by_id, set_by_name)
+			 VALUES ($1, '2026-09-01', 'active', 'admin', gen_random_uuid(), 'unit')`,
+			[pumpId]
+		);
+	}
+
+	async function heldStart(
+		pumpId: string,
+		day: string,
+		status: string,
+		issue: string,
+		extra: { distance?: number; by?: string; note?: string } = {}
+	) {
+		const id = await session(pumpId, day);
+		await db.query(
+			`UPDATE attendance_sessions SET location_status = $2, location_issue = $3,
+			   location_distance_m = $4, location_decided_by = $5, location_note = $6,
+			   location_decided_at = CASE WHEN $5::uuid IS NULL THEN NULL ELSE now() END
+			 WHERE id = $1`,
+			[id, status, issue, extra.distance ?? null, extra.by ?? null, extra.note ?? null]
+		);
+	}
+
+	before(async () => {
+		const a = await area();
+		await db.query(
+			'UPDATE areas SET digest_enabled = true, location_check_enabled = true WHERE id = $1',
+			[a.areaId]
+		);
+		const plant = async (prefix: string) =>
+			(
+				await db.query(
+					`INSERT INTO plants (area_id, name) VALUES ($1, $2 || substr(md5(random()::text), 1, 6))
+					 RETURNING id, name`,
+					[a.areaId, prefix]
+				)
+			).rows[0] as { id: string; name: string };
+		const p1 = (await db.query('SELECT id, name FROM plants WHERE id = $1', [a.plantId]))
+			.rows[0] as { id: string; name: string };
+		const p2 = await plant('LOCP2-');
+		const p3 = await plant('LOCP3-');
+		const ravi = await manager('Ravi');
+		const sunil = await manager('Sunil');
+		const left = await manager('Left', { disabled: true });
+		await db.query(
+			`INSERT INTO plant_manager_assignments (plant_id, manager_id) VALUES ($1, $2), ($3, $4), ($5, $6)`,
+			[p1.id, ravi.id, p2.id, sunil.id, p3.id, left.id]
+		);
+		const waiting = await pump(p1.id);
+		const older = await pump(p1.id);
+		const approved = await pump(p2.id);
+		const orphan = await pump(p3.id);
+		for (const id of [waiting, approved, orphan]) await active(id);
+		await heldStart(waiting, DAY, 'pending', 'too_far', { distance: 340 });
+		await heldStart(older, '2026-09-28', 'pending', 'stale_pump_gps');
+		await heldStart(approved, DAY, 'approved', 'no_phone_location', { by: sunil.id });
+		await worker(approved, true, false);
+		await heldStart(orphan, DAY, 'pending', 'no_pump_gps');
+		g = {
+			name: await areaName(a.areaId),
+			plants: [p1.name, p2.name, p3.name],
+			codes: {
+				waiting: await code(waiting),
+				approved: await code(approved),
+				orphan: await code(orphan)
+			}
+		};
+	});
+
+	test('each plant manager has the count of starts still waiting, oldest day, no plant manager row', async () => {
+		await sendAttendanceDigests(db, quiet, testModeOff, AT_0930, send);
+		const [mail] = mailFor(g.name);
+		assert.equal(mail.locationCheck, true);
+		assert.deepEqual(
+			mail.approvals?.map((a) => [a.name, a.plants, a.waiting, a.oldest]),
+			[
+				['Ravi', g.plants[0], 2, '2026-09-28'],
+				[null, g.plants[2], 1, DAY],
+				['Sunil', g.plants[1], 0, null]
+			],
+			'waiting first; the disabled manager of plant 3 is not counted as its manager'
+		);
+	});
+
+	test('each pump shows its start away from the pump: waiting for whom, or who approved', async () => {
+		await sendAttendanceDigests(db, quiet, testModeOff, AT_0930, send);
+		const [mail] = mailFor(g.name);
+		const byCode = Object.fromEntries(pumpsIn(mail).map((p: any) => [p.pump_code, p]));
+		assert.deepEqual(byCode[g.codes.waiting].location, {
+			status: 'pending',
+			issue: 'too_far',
+			distance_m: 340,
+			decided_by: null,
+			note: null,
+			approvers: ['Ravi']
+		});
+		assert.equal(byCode[g.codes.approved].location.status, 'approved');
+		assert.equal(byCode[g.codes.approved].location.decided_by, 'Sunil');
+		assert.deepEqual(byCode[g.codes.orphan].location.approvers, []);
+
+		const { html } = renderAttendanceDigest(mail as any);
+		const text = html.replace(/<[^>]+>/g, '').replace(/&#39;/g, "'");
+		for (const sentence of [
+			'Shift start away from the pump: the operator was 340 m from the pump (allowed: 100 m). Waiting for approval by Ravi (plant manager). Not counted until approved.',
+			"Shift start away from the pump: the operator's phone did not share its location. Approved by Sunil.",
+			"Shift start away from the pump: no GPS position had been received for the pump. Waiting for approval by the area's monitors (no plant manager). Not counted until approved."
+		])
+			assert.ok(text.includes(sentence), sentence);
+		assert.ok(html.includes('data-approvals-total="3"'));
+		assert.ok(html.includes('3 shift starts wait</strong>'));
+		assert.ok(html.includes('No plant manager'));
+		assert.ok(html.includes('Mon, 28 Sept 2026') || html.includes('Mon, 28 Sep 2026'));
+	});
+
+	test('an area without the location check and nothing waiting has no approvals table', async () => {
+		await sendAttendanceDigests(db, quiet, testModeOff, AT_0930, send);
+		const [b] = mailFor(world.names.b);
+		assert.equal(b.locationCheck, false);
+		assert.ok(!renderAttendanceDigest(b as any).html.includes('waiting for approval'));
 	});
 });

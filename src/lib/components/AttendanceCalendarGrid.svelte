@@ -8,19 +8,22 @@
 	// horizontally-scrollable columns. `entities` is an array of { id, label, faceUrl? }, rendered
 	// as rows; worker rows pass faceUrl so the face shows beside the name. `cellValue(entityId, day)` returns either a status string
 	// ('present'|'morning_only'|'evening_only'|'absent') or a number 0-100 (attendance %)
-	// when `mode === 'percent'`.
+	// when `mode === 'percent'`, or a headcount when `mode === 'count'` (gangs). `heldCell` marks a
+	// day waiting for or refused a location approval (amber, left out of totals); `href` links a row.
 	let {
 		days = [],
 		entities = [],
 		cellValue,
 		mode = 'status',
-		entityLabel = 'Entity'
+		entityLabel = 'Entity',
+		heldCell
 	} = $props<{
 		days: string[];
-		entities: { id: string; label: string; faceUrl?: string }[];
+		entities: { id: string; label: string; faceUrl?: string; href?: string }[];
 		cellValue: (entityId: string, day: string) => string | number | null;
-		mode?: 'status' | 'percent';
+		mode?: 'status' | 'percent' | 'count';
 		entityLabel?: string;
+		heldCell?: (entityId: string, day: string) => boolean;
 	}>();
 	let scroller: HTMLDivElement;
 	const orderedDays = $derived([...days].sort((a, b) => b.localeCompare(a)));
@@ -33,6 +36,7 @@
 	}
 
 	function statusClass(v: string | number | null): string {
+		if (mode === 'count') return typeof v === 'number' ? 'pct-mid' : 'pct-none';
 		if (mode === 'percent') {
 			const pct = typeof v === 'number' ? v : 0;
 			if (pct >= 90) return 'pct-high';
@@ -53,6 +57,7 @@
 	}
 
 	function cellLabel(v: string | number | null): string {
+		if (mode === 'count') return typeof v === 'number' ? String(v) : '-';
 		if (mode === 'percent') return typeof v === 'number' ? `${v}%` : '-';
 		if (v === 'present') return 'P';
 		if (v === 'morning_only') return 'M';
@@ -61,6 +66,8 @@
 	}
 
 	function accessibleCellLabel(entity: string, day: string, v: string | number | null): string {
+		if (mode === 'count')
+			return `${entity}, ${formatDate(day)}: ${typeof v === 'number' ? `${v} people` : 'No shift'}`;
 		if (mode === 'percent') {
 			return `${entity}, ${formatDate(day)}: ${typeof v === 'number' ? `${v}% attendance` : 'No attendance data'}`;
 		}
@@ -100,7 +107,9 @@
 		class="calendar-grid"
 		aria-label={mode === 'percent'
 			? 'Attendance percentage calendar'
-			: 'Attendance status calendar'}
+			: mode === 'count'
+				? 'Headcount calendar'
+				: 'Attendance status calendar'}
 	>
 		<thead>
 			<tr>
@@ -119,14 +128,17 @@
 				<tr>
 					<th class="entity-col" scope="row" title={e.label}>
 						{#if e.faceUrl}<span class="worker-tag entity-worker"
-								><FacePeek url={e.faceUrl} label={e.label} /><span class="entity-name">{e.label}</span
+								><FacePeek url={e.faceUrl} label={e.label} /><span class="entity-name"
+									>{e.label}</span
 								></span
-							>{:else}{e.label}{/if}
+							>{:else if e.href}<a href={e.href}>{e.label}</a>{:else}{e.label}{/if}
 					</th>
 					{#each orderedDays as day}
 						{@const v = cellValue(e.id, day)}
-						<td class={statusClass(v)} aria-label={accessibleCellLabel(e.label, day, v)}
-							>{cellLabel(v)}</td
+						<td
+							class={statusClass(v)}
+							class:held={heldCell?.(e.id, day)}
+							aria-label={accessibleCellLabel(e.label, day, v)}>{cellLabel(v)}</td
 						>
 					{/each}
 				</tr>
@@ -312,6 +324,11 @@
 	.pct-none {
 		color: var(--ink-strong);
 		background: var(--brand-white);
+	}
+
+	.calendar-grid td.held {
+		color: var(--ink-strong);
+		background: #ffe3a3;
 	}
 
 	.legend {

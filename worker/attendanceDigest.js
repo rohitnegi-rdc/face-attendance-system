@@ -6,10 +6,18 @@
 // CC: the admin's global list (app_settings `digest_cc`, edited at /admin/settings, first filled
 // by migration 045), the Area's own CC (area_digest_cc, migration 053, same page), and from its
 // plants the business heads (business_head_plants, migration 051), the business managers
-// (business_manager_plants) and the plant managers (plant_manager_assignments); nothing else. A pump with a missed day request for the day shows its reason, note and where it stands.
+// (business_manager_plants) and the plant managers (plant_manager_assignments); nothing else.
+// A pump with a missed day request for the day shows its reason, note and where it stands. A pump
+// whose shift start that day was sent away from the pump shows whether it waits for its plant
+// managers or was approved or rejected, and each plant manager's count of starts still waiting.
 // The attendance_digest_log row ('area:<id>', day) is claimed before sending, so two workers never
 // both send it. Only Areas ticked at /admin/settings (areas.digest_enabled, Mumbai to start) get
 // it, and no email for an Area whose pumps are all Inactive.
+// In an Area with pump gangs on (areas.gangs_enabled, migration 056) each pump has a line with the
+// gangs that worked there that day: headcount (the Gangs sheet's rule, gangDaySql in gangs.js),
+// the other pumps the gang worked at that day, and whether a shift end sent away waits.
+
+import { gangDaySql } from './gangs.js';
 
 /** @typedef {{ query: (sql: string, params?: unknown[]) => Promise<{ rows: any[], rowCount?: number | null }> }} Queryable */
 /** @typedef {(level: string, fields: object, message: string) => void} Log */
@@ -17,19 +25,32 @@
  * @typedef {{ id: string, pump_code: string, plant_id: string, plant_name: string, area_name: string,
  *   site_name: string | null, start_at: Date | null, end_at: Date | null, full_shift: number, start_only: number,
  *   end_only: number, workers: number, mtd_workers: number, regularised: boolean,
- *   request: DigestRequest | null }} DigestPump
+ *   request: DigestRequest | null, location: DigestLocation | null, gangs?: DigestGang[] }} DigestPump
+ */
+/**
+ * @typedef {{ code: number, name: string | null, people: number, held: 'pending' | 'rejected' | null,
+ *   also: string[] }} DigestGang
+ */
+/**
+ * @typedef {{ status: 'pending' | 'approved' | 'rejected', issue: string | null, distance_m: number | null,
+ *   decided_by: string | null, note: string | null, approvers: string[] }} DigestLocation
+ */
+/**
+ * @typedef {{ name: string | null, email: string | null, plants: string, waiting: number,
+ *   oldest: string | null }} DigestApprover
  */
 /**
  * @typedef {{ status: 'pending' | 'approved' | 'rejected', reason: string, note: string | null,
  *   voice: boolean, requested_by: string, decided_by: string | null, decision_reason: string | null,
- *   decider: string | null }} DigestRequest
+ *   decider: string | null, decider_role: string | null }} DigestRequest
  */
 /** @typedef {{ full_shift: number, start_only: number, end_only: number, workers: number, mtd_workers: number }} Counts */
 /**
  * @typedef {{ to: string[], cc: string[], area: string, day: string,
  *   areas: { name: string, plants: { id: string, name: string, pumps: DigestPump[], totals: Counts }[] }[],
  *   totals: Counts & { pumps: number, marked: number },
- *   mtd: { pump_days: number, marked: number } }} DigestMessage
+ *   mtd: { pump_days: number, marked: number },
+ *   locationCheck?: boolean, approvals?: DigestApprover[] }} DigestMessage
  */
 
 export const DIGEST_HOUR_IST = 9;
@@ -103,12 +124,23 @@ export async function digestPumps(db, day, areaId) {
 		        (SELECT json_build_object('status', r.status, 'reason', r.reason, 'note', r.note,
 		                  'voice', r.voice_path IS NOT NULL, 'requested_by', r.requested_by_name,
 		                  'decided_by', r.decided_by_name, 'decision_reason', r.decision_reason,
-		                  'decider', (SELECT bm.name FROM business_manager_plants b
-		                     JOIN plant_managers bm ON bm.id = b.manager_id AND bm.disabled_at IS NULL
-		                     WHERE b.plant_id = pl.id))
+		                  'decider', (SELECT string_agg(dm.name, ', ' ORDER BY dm.name)
+		                     FROM missed_day_deciders d JOIN plant_managers dm ON dm.id = d.manager_id
+		                     WHERE d.plant_id = pl.id AND d.manager_id IS DISTINCT FROM r.requested_by_id),
+		                  'decider_role', (SELECT min(d.via) FROM missed_day_deciders d
+		                     WHERE d.plant_id = pl.id AND d.manager_id IS DISTINCT FROM r.requested_by_id))
 		          FROM regularisations r WHERE r.pump_id = pu.id AND r.day = $1
 		            AND r.status IN ('pending', 'approved', 'rejected')
 		          ORDER BY r.requested_at DESC LIMIT 1) AS request,
+		        (SELECT json_build_object('status', s.location_status, 'issue', s.location_issue,
+		                  'distance_m', s.location_distance_m, 'decided_by', dm.name, 'note', s.location_note,
+		                  'approvers', COALESCE((SELECT json_agg(DISTINCT ap.name) FROM plant_manager_assignments pa
+		                     JOIN plant_managers ap ON ap.id = pa.manager_id AND ap.disabled_at IS NULL
+		                     WHERE pa.plant_id = pl.id), '[]'))
+		          FROM attendance_sessions s LEFT JOIN plant_managers dm ON dm.id = s.location_decided_by
+		          WHERE s.pump_id = pu.id AND s.session_date = $1 AND s.session_type = 'morning'
+		            AND s.location_status IN ('pending', 'approved', 'rejected')
+		          ORDER BY s.submitted_at DESC LIMIT 1) AS location,
 		        count(d.person_id) FILTER (WHERE d.morning_matched AND d.evening_matched)::int AS full_shift,
 		        count(d.person_id) FILTER (WHERE d.morning_matched AND NOT d.evening_matched)::int AS start_only,
 		        count(d.person_id) FILTER (WHERE d.evening_matched AND NOT d.morning_matched)::int AS end_only
@@ -123,6 +155,35 @@ export async function digestPumps(db, day, areaId) {
 		...row,
 		workers: row.full_shift + row.start_only + row.end_only
 	}));
+}
+
+// The gangs of the Area's pumps that day, by pump id: headcount at that pump (each worker once),
+// the other pumps the gang worked at that day, and a held location (pending or rejected).
+/**
+ * @param {Queryable} db
+ * @param {string} day
+ * @param {string} areaId
+ * @returns {Promise<Map<string, DigestGang[]>>}
+ */
+export async function digestGangs(db, day, areaId) {
+	const { rows } = await db.query(
+		`WITH g AS (${gangDaySql('pl.area_id = $1', 2)})
+		 SELECT g.gang_id, g.pump_id, g.people, g.held, gg.code, gg.name, pu.pump_code
+		 FROM g JOIN gangs gg ON gg.id = g.gang_id JOIN pumps pu ON pu.id = g.pump_id
+		 ORDER BY gg.code`,
+		[areaId, day, day]
+	);
+	/** @type {Map<string, DigestGang[]>} */
+	const byPump = new Map();
+	for (const row of rows) {
+		const also = rows
+			.filter((other) => other.gang_id === row.gang_id && other.pump_id !== row.pump_id)
+			.map((other) => other.pump_code);
+		const list = byPump.get(row.pump_id) ?? [];
+		list.push({ code: row.code, name: row.name, people: row.people, held: row.held, also });
+		byPump.set(row.pump_id, list);
+	}
+	return byPump;
 }
 
 // The Area's pump days this month, up to and including `day`: a pump counts on the days it was
@@ -149,6 +210,43 @@ export async function digestPumpDays(db, day, areaId) {
 		[day, areaId, `${day.slice(0, 7)}-01`]
 	);
 	return rows[0];
+}
+
+// 2026-11-18: "show in the daily tracker that approvals count pending from this plant manager as
+// pump as away from the pump attendance". Every plant manager of the Area's plants with the shift
+// starts at their plants still waiting for a location approval when the email goes out (any day,
+// oldest day shown), and one row per plant with waiting starts and no plant manager (name null).
+/**
+ * @param {Queryable} db
+ * @param {string} areaId
+ * @returns {Promise<DigestApprover[]>}
+ */
+export async function digestApprovals(db, areaId) {
+	const { rows } = await db.query(
+		`WITH waiting AS (
+		   SELECT pu.plant_id, s.session_date FROM attendance_sessions s
+		   JOIN pumps pu ON pu.id = s.pump_id JOIN plants pl ON pl.id = pu.plant_id
+		   WHERE pl.area_id = $1 AND s.location_status = 'pending' AND s.session_type = 'morning')
+		 SELECT pm.name, lower(pm.email) AS email,
+		        string_agg(DISTINCT pl.name, ', ') AS plants,
+		        (SELECT count(*)::int FROM waiting w JOIN plant_manager_assignments x ON x.plant_id = w.plant_id
+		          WHERE x.manager_id = pm.id) AS waiting,
+		        (SELECT min(w.session_date)::text FROM waiting w JOIN plant_manager_assignments x
+		          ON x.plant_id = w.plant_id WHERE x.manager_id = pm.id) AS oldest
+		 FROM plant_manager_assignments pa JOIN plants pl ON pl.id = pa.plant_id AND pl.area_id = $1
+		 JOIN plant_managers pm ON pm.id = pa.manager_id AND pm.disabled_at IS NULL
+		 GROUP BY pm.id
+		 UNION ALL
+		 SELECT NULL, NULL, pl.name, count(*)::int, min(w.session_date)::text
+		 FROM waiting w JOIN plants pl ON pl.id = w.plant_id
+		 WHERE NOT EXISTS (SELECT 1 FROM plant_manager_assignments pa
+		   JOIN plant_managers pm ON pm.id = pa.manager_id AND pm.disabled_at IS NULL
+		   WHERE pa.plant_id = w.plant_id)
+		 GROUP BY pl.name
+		 ORDER BY 4 DESC, 1 NULLS LAST, 3`,
+		[areaId]
+	);
+	return rows;
 }
 
 // CC without the To addresses and without repeats.
@@ -215,7 +313,8 @@ export async function sendAttendanceDigests(db, log, testModeOn, now, send) {
 	]);
 	if (first.length && day < first[0].value) return;
 	const { rows: areas } = await db.query(
-		`SELECT DISTINCT a.id, a.name FROM pumps pu
+		`SELECT DISTINCT a.id, a.name, a.location_check_enabled AS location_check,
+		        a.gangs_enabled AS gangs FROM pumps pu
 		 JOIN plants pl ON pl.id = pu.plant_id JOIN areas a ON a.id = pl.area_id
 		 WHERE a.digest_enabled AND ${WORKING_ON_DAY} AND ${EXISTED_BY_DAY}
 		   AND NOT EXISTS (SELECT 1 FROM attendance_digest_log l
@@ -230,6 +329,10 @@ export async function sendAttendanceDigests(db, log, testModeOn, now, send) {
 		if (!(await claim(db, `area:${area.id}`, day))) continue;
 		const pumps = await digestPumps(db, day, area.id);
 		if (!pumps.length) continue;
+		if (area.gangs) {
+			const gangs = await digestGangs(db, day, area.id);
+			for (const pump of pumps) pump.gangs = gangs.get(pump.id) ?? [];
+		}
 		const { rows: monitors } = await db.query(
 			`SELECT lower(pm.email) AS email FROM monitor_areas ma
 			 JOIN plant_managers pm ON pm.id = ma.manager_id
@@ -278,7 +381,17 @@ export async function sendAttendanceDigests(db, log, testModeOn, now, send) {
 			mailbox(plantManagers)
 		);
 		const mtd = await digestPumpDays(db, day, area.id);
-		const message = { to, cc, area: area.name, day, ...groupPumps(pumps), mtd };
+		const approvals = await digestApprovals(db, area.id);
+		const message = {
+			to,
+			cc,
+			area: area.name,
+			day,
+			...groupPumps(pumps),
+			mtd,
+			locationCheck: area.location_check,
+			approvals
+		};
 		if (await testModeOn(db)) {
 			log(
 				'info',

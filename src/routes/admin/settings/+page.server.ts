@@ -11,7 +11,12 @@ import {
 	getDigestCc,
 	getDigestFirstDay,
 	isApprovalEmailOn,
+	isSameDayFraudOn,
+	SAME_DAY_FRAUD_KEY,
 	APPROVAL_EMAIL_KEY,
+	LOCATION_HOLD_KEY,
+	LOCATION_HOLD_MAX,
+	getLocationHoldMinutes,
 	parseEmailList,
 	getTestMode,
 	validateAttendanceSettings,
@@ -19,26 +24,39 @@ import {
 } from '$lib/server/settings';
 
 export const load: PageServerLoad = async () => {
-	const [settings, testMode, approvalEmailOn, digestCc, digestFirstDay, digestAreas, auditLog] =
-		await Promise.all([
-			getAttendanceSettingsWithSource(),
-			getTestMode(),
-			isApprovalEmailOn(),
-			getDigestCc(),
-			getDigestFirstDay(),
-			// Per Area: who the 9 am email copies besides the global CC list (To is admins and
-			// monitors): its own CC (area_digest_cc, set here), and from its plants the business heads,
-			// business managers and plant managers (worker/attendanceDigest.js, same rules).
-			query<{
-				id: string;
-				name: string;
-				digest_enabled: boolean;
-				cc: string[];
-				heads: { name: string; email: string }[];
-				managers: { name: string; email: string }[];
-				plant_managers: { name: string; email: string }[];
-			}>(
-				`SELECT a.id, a.name, a.digest_enabled,
+	const [
+		settings,
+		testMode,
+		approvalEmailOn,
+		locationHoldMinutes,
+		digestCc,
+		digestFirstDay,
+		digestAreas,
+		auditLog,
+		sameDayFraudOn
+	] = await Promise.all([
+		getAttendanceSettingsWithSource(),
+		getTestMode(),
+		isApprovalEmailOn(),
+		getLocationHoldMinutes(),
+		getDigestCc(),
+		getDigestFirstDay(),
+		// Per Area: who the 9 am email copies besides the global CC list (To is admins and
+		// monitors): its own CC (area_digest_cc, set here), and from its plants the business heads,
+		// business managers and plant managers (worker/attendanceDigest.js, same rules).
+		query<{
+			id: string;
+			name: string;
+			digest_enabled: boolean;
+			location_check: boolean;
+			gangs: boolean;
+			cc: string[];
+			heads: { name: string; email: string }[];
+			managers: { name: string; email: string }[];
+			plant_managers: { name: string; email: string }[];
+		}>(
+			`SELECT a.id, a.name, a.digest_enabled, a.location_check_enabled AS location_check,
+				        a.gangs_enabled AS gangs,
 				        COALESCE((SELECT json_agg(c.email ORDER BY c.email) FROM area_digest_cc c
 				                   WHERE c.area_id = a.id), '[]') AS cc,
 				        COALESCE((SELECT json_agg(m ORDER BY m.name) FROM (
@@ -57,23 +75,27 @@ export const load: PageServerLoad = async () => {
 				                   JOIN plant_managers pm ON pm.id = pa.manager_id
 				                   WHERE pl.area_id = a.id AND pm.disabled_at IS NULL) m), '[]') AS plant_managers
 				 FROM areas a ORDER BY a.name`
-			),
-			query<any>(
-				`SELECT l.id, l.action, l.target_type, l.target_id, l.details, l.created_at, ad.email AS admin_email
+		),
+		query<any>(
+			`SELECT l.id, l.action, l.target_type, l.target_id, l.details, l.created_at, ad.email AS admin_email
 			 FROM admin_audit_log l LEFT JOIN admins ad ON ad.id = l.admin_id
 			 ORDER BY l.created_at DESC LIMIT 25`
-			)
-		]);
+		),
+		isSameDayFraudOn()
+	]);
 	return {
 		settings,
 		defaults: ATTENDANCE_SETTING_DEFAULTS,
 		limits: ATTENDANCE_SETTING_LIMITS,
 		testMode,
 		approvalEmailOn,
+		locationHoldMinutes,
+		locationHoldMax: LOCATION_HOLD_MAX,
 		digestCc,
 		digestFirstDay,
 		digestAreas,
-		auditLog
+		auditLog,
+		sameDayFraudOn
 	};
 };
 
@@ -127,12 +149,141 @@ export const actions: Actions = {
 		logger.warn({ adminId, settings: next }, 'attendance settings changed');
 		return { success: true, message: 'Settings saved. They apply to the next submission.' };
 	},
+	// Which Areas check the shift start location (areas.location_check_enabled, migration 024 set
+	// Mumbai). 2026-11-18: "Make sure that user's local[ion check] is also enabled in this process".
+	// A ticked Area holds a start sent away from the pump for its plant manager's approval.
+	locationAreas: async ({ request, locals }) => {
+		const ticked = (await request.formData()).getAll('area').map(String);
+		const adminId = locals.user!.id;
+		const client = await pool.connect();
+		let names: string[];
+		try {
+			await client.query('BEGIN');
+			const { rows: before } = await client.query(
+				'SELECT name FROM areas WHERE location_check_enabled ORDER BY name'
+			);
+			const { rows } = await client.query(
+				`UPDATE areas SET location_check_enabled = (id::text = ANY($1::text[]))
+				 RETURNING name, location_check_enabled`,
+				[ticked]
+			);
+			names = rows
+				.filter((r) => r.location_check_enabled)
+				.map((r) => r.name)
+				.sort();
+			await client.query(
+				`INSERT INTO admin_audit_log (admin_id, action, target_type, details)
+				 VALUES ($1, 'update_location_areas', 'areas', $2)`,
+				[adminId, JSON.stringify({ before: before.map((r) => r.name), after: names })]
+			);
+			await client.query('COMMIT');
+		} catch (saveError) {
+			await client.query('ROLLBACK').catch(() => {});
+			logger.error({ adminId, error: String(saveError) }, 'location check areas save failed');
+			return fail(500, {
+				formKind: 'location-areas',
+				message: 'Could not save. Nothing was changed.'
+			});
+		} finally {
+			client.release();
+		}
+		return {
+			formKind: 'location-areas',
+			success: true,
+			message: names.length
+				? `Saved. The location check is on for ${names.join(', ')}.`
+				: 'Saved. No area checks the shift start location now.'
+		};
+	},
+	// Which Areas run pump gangs (areas.gangs_enabled, migration 056, worker/gangs.js). An Area left
+	// unticked runs exactly as before; a ticked one recognises gangs from faces, allows "2 gangs
+	// today" and holds a shift end sent away from the pump when its location check is on too.
+	gangAreas: async ({ request, locals }) => {
+		const ticked = (await request.formData()).getAll('area').map(String);
+		const adminId = locals.user!.id;
+		const client = await pool.connect();
+		let names: string[];
+		try {
+			await client.query('BEGIN');
+			const { rows: before } = await client.query(
+				'SELECT name FROM areas WHERE gangs_enabled ORDER BY name'
+			);
+			const { rows } = await client.query(
+				`UPDATE areas SET gangs_enabled = (id::text = ANY($1::text[]))
+				 RETURNING name, gangs_enabled`,
+				[ticked]
+			);
+			names = rows
+				.filter((r) => r.gangs_enabled)
+				.map((r) => r.name)
+				.sort();
+			await client.query(
+				`INSERT INTO admin_audit_log (admin_id, action, target_type, details)
+				 VALUES ($1, 'update_gang_areas', 'areas', $2)`,
+				[adminId, JSON.stringify({ before: before.map((r) => r.name), after: names })]
+			);
+			await client.query('COMMIT');
+		} catch (saveError) {
+			await client.query('ROLLBACK').catch(() => {});
+			logger.error({ adminId, error: String(saveError) }, 'gang areas save failed');
+			return fail(500, { formKind: 'gang-areas', message: 'Could not save. Nothing was changed.' });
+		} finally {
+			client.release();
+		}
+		return {
+			formKind: 'gang-areas',
+			success: true,
+			message: names.length
+				? `Saved. Gangs are on for ${names.join(', ')}.`
+				: 'Saved. No area runs gangs now.'
+		};
+	},
+	// The same-day cross-pump fraud check (worker/index.js): off by default since 2026-11-21.
+	sameDayFraud: async ({ request, locals }) => {
+		const on = (await request.formData()).get('on') === 'true';
+		const adminId = locals.user!.id;
+		const client = await pool.connect();
+		try {
+			await client.query('BEGIN');
+			await client.query(
+				`INSERT INTO app_settings (key, value, updated_by_admin_id, updated_at)
+				 VALUES ($1, $2, $3, now())
+				 ON CONFLICT (key) DO UPDATE
+				 SET value = EXCLUDED.value, updated_by_admin_id = EXCLUDED.updated_by_admin_id,
+				     updated_at = now()`,
+				[SAME_DAY_FRAUD_KEY, on ? 'on' : 'off', adminId]
+			);
+			await client.query(
+				`INSERT INTO admin_audit_log (admin_id, action, target_type, details)
+				 VALUES ($1, 'set_same_day_fraud', 'app_settings', $2)`,
+				[adminId, JSON.stringify({ on })]
+			);
+			await client.query('COMMIT');
+		} catch (saveError) {
+			await client.query('ROLLBACK').catch(() => {});
+			logger.error({ adminId, error: String(saveError) }, 'same-day fraud switch failed');
+			return fail(500, {
+				formKind: 'same-day-fraud',
+				message: 'Could not change it. Nothing was changed.'
+			});
+		} finally {
+			client.release();
+		}
+		logger.warn({ adminId, on }, 'same-day fraud check switched');
+		return {
+			formKind: 'same-day-fraud',
+			success: true,
+			message: on
+				? 'On. A face counted at another pump of the same Area that day is flagged and not counted.'
+				: 'Off. A worker seen at two pumps of the same Area on one day is counted, once that day.'
+		};
+	},
 	// Which Areas get the 9 am attendance email (areas.digest_enabled). None ticked sends nothing.
 	digestAreas: async ({ request, locals }) => {
 		const ticked = (await request.formData()).getAll('area').map(String);
 		const adminId = locals.user!.id;
 		const client = await pool.connect();
-		let names: string[] = [];
+		let names: string[];
 		try {
 			await client.query('BEGIN');
 			const { rows: before } = await client.query(
@@ -229,6 +380,53 @@ export const actions: Actions = {
 			return fail(400, { formKind: 'area-cc', areaId, message: 'That area does not exist.' });
 		return saveAreaCc(locals.user!.id, areaId, area, [email], 'remove');
 	},
+	// How long a held shift start waits for the pump GPS before its plant managers are asked
+	// (worker/locationHold.js). 0 asks at once.
+	locationHold: async ({ request, locals }) => {
+		const raw = String((await request.formData()).get('minutes') ?? '').trim();
+		const minutes = Number(raw);
+		if (!/^\d+$/.test(raw) || minutes > LOCATION_HOLD_MAX) {
+			return fail(400, {
+				formKind: 'location-hold',
+				message: `Type whole minutes from 0 to ${LOCATION_HOLD_MAX}.`
+			});
+		}
+		const adminId = locals.user!.id;
+		const client = await pool.connect();
+		try {
+			await client.query('BEGIN');
+			await client.query(
+				`INSERT INTO app_settings (key, value, updated_by_admin_id, updated_at)
+				 VALUES ($1, $2, $3, now())
+				 ON CONFLICT (key) DO UPDATE
+				 SET value = EXCLUDED.value, updated_by_admin_id = EXCLUDED.updated_by_admin_id,
+				     updated_at = now()`,
+				[LOCATION_HOLD_KEY, String(minutes), adminId]
+			);
+			await client.query(
+				`INSERT INTO admin_audit_log (admin_id, action, target_type, details)
+				 VALUES ($1, 'set_location_hold', 'app_settings', $2)`,
+				[adminId, JSON.stringify({ minutes })]
+			);
+			await client.query('COMMIT');
+		} catch (saveError) {
+			await client.query('ROLLBACK').catch(() => {});
+			logger.error({ adminId, error: String(saveError) }, 'location hold save failed');
+			return fail(500, {
+				formKind: 'location-hold',
+				message: 'Could not save. Nothing was changed.'
+			});
+		} finally {
+			client.release();
+		}
+		return {
+			formKind: 'location-hold',
+			success: true,
+			message: minutes
+				? `Saved. A held shift start waits ${minutes} minutes for the pump GPS before plant managers are asked.`
+				: 'Saved. Plant managers are asked as soon as a shift start is held.'
+		};
+	},
 	// Whether plant managers get an email for a shift waiting for their location approval.
 	approvalEmail: async ({ request, locals }) => {
 		const on = (await request.formData()).get('on') === 'true';
@@ -308,7 +506,7 @@ export const actions: Actions = {
 	},
 	reset: async ({ locals }) => {
 		await pool.query(`DELETE FROM app_settings WHERE key = ANY($1::text[])`, [
-			[...Object.keys(ATTENDANCE_SETTING_DEFAULTS), TEST_MODE_KEY]
+			[...Object.keys(ATTENDANCE_SETTING_DEFAULTS), TEST_MODE_KEY, SAME_DAY_FRAUD_KEY]
 		]);
 		await pool.query(
 			`INSERT INTO admin_audit_log (admin_id, action, target_type, details)
@@ -317,7 +515,8 @@ export const actions: Actions = {
 		);
 		return {
 			success: true,
-			message: 'Settings reset to the production defaults. Test mode is off.'
+			message:
+				'Settings reset to the production defaults. Test mode and the same-day fraud check are off.'
 		};
 	}
 };

@@ -4,6 +4,7 @@ import { query } from '$lib/server/db';
 import { nowIST } from '$lib/server/time';
 import { isDateKey } from '$lib/date';
 import { personDayStatuses } from '$lib/server/personCalendar';
+import { gangGrid } from '$lib/server/gangs';
 
 // The session log shows one row per shift (pump + date) with its start and end photos side by
 // side, paged by shift to keep the page small (worker faces load on click).
@@ -86,6 +87,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		)
 	]);
 
+	// By gang (pump gangs): the shown pumps of this manager. Null when their Areas have gangs off.
+	const gangView = await gangGrid(
+		`EXISTS (SELECT 1 FROM manager_plants mp WHERE mp.plant_id = pu.plant_id AND mp.manager_id = $1) AND pu.id = ANY($2)`,
+		[managerId, shownPumpIds],
+		from,
+		to
+	);
+
 	const rosterPumpIds = shownPumpIds;
 	const [roster, rosterCount] = await Promise.all([
 		query<any>(
@@ -117,6 +126,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		shownPumps,
 		plants,
 		daily,
+		gangView,
 		shifts: groupShifts(sessions),
 		sessionPagination: {
 			page: sessionPage,

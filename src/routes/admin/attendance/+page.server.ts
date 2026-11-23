@@ -1,6 +1,8 @@
 import type { PageServerLoad } from './$types';
 import { query } from '$lib/server/db';
 import { isDateKey } from '$lib/date';
+import { gangGrid } from '$lib/server/gangs';
+import { nowIST } from '$lib/server/time';
 
 const SORTABLE_COLUMNS: Record<string, string> = {
 	session_date: 'dpa.session_date',
@@ -187,7 +189,32 @@ export const load: PageServerLoad = async ({ url }) => {
 	const plants = await query<any>(`SELECT id, name FROM plants ORDER BY name`);
 	const pumps = await query<any>(`SELECT id, pump_code FROM pumps ORDER BY pump_code`);
 
+	// By gang (pump gangs, migration 056): the same Area / vendor / plant / pump filters, over the
+	// chosen days (else the last 30). Null when no Area in the filter has gangs on.
+	const gangParams: string[] = [];
+	const gangConds: string[] = [];
+	for (const [col, value] of [
+		['a.id', areaId],
+		['v.id', vendorId],
+		['pl.id', plantId],
+		['pu.id', pumpId]
+	] as const)
+		if (value) {
+			gangParams.push(value);
+			gangConds.push(`${col} = $${gangParams.length}`);
+		}
+	const gangTo = to || nowIST().format('YYYY-MM-DD');
+	const gangFrom = from || nowIST().subtract(29, 'day').format('YYYY-MM-DD');
+	const gangView = await gangGrid(
+		gangConds.length ? gangConds.join(' AND ') : 'TRUE',
+		gangParams,
+		gangFrom,
+		gangTo
+	);
+
 	return {
+		gangView,
+		gangRange: { from: gangFrom, to: gangTo },
 		rows,
 		grouped,
 		isSingleDay,

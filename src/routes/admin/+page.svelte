@@ -67,7 +67,11 @@
 	</header>
 
 	{#if data.overdueRegularisations.length}
-		<section class="overdue" aria-labelledby="overdue-heading" data-testid="overdue-regularisations">
+		<section
+			class="overdue"
+			aria-labelledby="overdue-heading"
+			data-testid="overdue-regularisations"
+		>
 			<div class="overdue__head">
 				<h2 id="overdue-heading">
 					Missed days waiting over 2 days <span class="overdue__count"
@@ -77,7 +81,8 @@
 				<a href={resolve('/admin/regularisations')}>All missed days</a>
 			</div>
 			<p class="overdue__hint">
-				The business manager has not decided these. Approve or reject them here.
+				Their approver (business manager, else plant manager) has not decided these. Approve or
+				reject them here.
 			</p>
 			<ul class="overdue__list">
 				{#each data.overdueRegularisations as r (r.id)}

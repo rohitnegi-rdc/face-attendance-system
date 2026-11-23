@@ -61,8 +61,6 @@
 		resolve('/plant-manager') + (day === data.today ? '' : `?day=${day}`);
 	const fixLink = (pumpId: string) =>
 		resolve('/plant-manager/attendance/correct') + `?pump=${pumpId}&day=${data.day}`;
-	const regulariseLink = (pumpId: string) =>
-		resolve('/plant-manager/regularisations') + `?pump=${pumpId}&day=${data.day}#ask`;
 	const keep =
 		() =>
 		async ({ update }: { update: (o?: { reset?: boolean }) => Promise<void> }) =>
@@ -141,13 +139,6 @@
 									<button class="undo" type="submit">Undo</button>
 								</form>
 							{/if}
-							{#if !isToday && pump.problems.includes('No photo')}
-								<a
-									class="regularise"
-									href={regulariseLink(pump.pumpId)}
-									data-testid="checklist-regularise">Ask to count this day</a
-								>
-							{/if}
 							{#if form?.pumpId === pump.pumpId && form?.error}
 								<p class="row-error" role="alert">{form.error}</p>
 							{/if}
@@ -160,12 +151,6 @@
 </div>
 
 <style>
-	.regularise {
-		flex-basis: 100%;
-		padding: 0 var(--space-3) var(--space-3);
-		font-size: var(--text-sm);
-		font-weight: 600;
-	}
 	.head {
 		display: flex;
 		flex-wrap: wrap;

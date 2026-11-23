@@ -32,7 +32,7 @@
 	</p>
 	<p class="muted small">
 		Asked by {asker} on {r.requestedAt}{role === 'admin'
-			? ` · Approver: ${r.approverName ?? 'Admins (plant has no business manager)'}`
+			? ` · Approver: ${r.approverName ? `${r.approverName} (${r.approverRole})` : 'Admins (plant has no business manager or plant manager)'}`
 			: ''}
 	</p>
 </div>

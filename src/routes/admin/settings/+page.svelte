@@ -34,6 +34,19 @@
 		);
 		return [...starts, ...contains].slice(0, 4);
 	});
+	// Location check: ticked areas first, like the attendance email areas.
+	const locationOrder = $derived(
+		[...data.digestAreas].sort((a, b) => Number(b.location_check) - Number(a.location_check))
+	);
+	const locationAreas = $derived(
+		data.digestAreas.filter((area) => area.location_check).map((area) => area.name)
+	);
+	const gangOrder = $derived(
+		[...data.digestAreas].sort((a, b) => Number(b.gangs) - Number(a.gangs))
+	);
+	const gangAreas = $derived(
+		data.digestAreas.filter((area) => area.gangs).map((area) => area.name)
+	);
 	const enabledAreas = $derived(
 		data.digestAreas.filter((area) => area.digest_enabled).map((area) => area.name)
 	);
@@ -45,8 +58,12 @@
 		set_fraud_check: 'Switched fraud check',
 		set_test_mode: 'Switched test mode',
 		set_approval_email: 'Switched location approval emails',
+		set_location_hold: 'Changed the location GPS wait',
 		update_digest_cc: 'Changed attendance email copies',
 		update_digest_areas: 'Changed attendance email areas',
+		update_location_areas: 'Changed location check areas',
+		update_gang_areas: 'Changed pump gang areas',
+		set_same_day_fraud: 'Switched the same-day fraud check',
 		update_area_cc: 'Changed an area CC',
 		business_head_assign: 'Gave a plant to a business head',
 		business_head_unassign: 'Took a plant from a business head',
@@ -78,7 +95,7 @@
 		</div>
 	</header>
 
-	{#if form?.message && form?.formKind !== 'digest'}
+	{#if form?.message && !form?.formKind}
 		<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
 	{/if}
 
@@ -148,9 +165,10 @@
 			Every morning at 9 am, one email per ticked area with the attendance of the day before: full
 			shift, start only and end only for every Active and Idle pump (set at Pump status), a pump
 			with no one counted in red, and each missed day request with its reason and where it stands.
-			It goes to the admins, the area's monitors and the business managers of its plants, with a
-			copy to everyone on the global CC, the area's own CC and the business heads of its plants, and
-			no one else.
+			It goes to the admins and the area's monitors, with a copy to everyone on the global CC, the
+			area's own CC, and the business heads, business managers and plant managers of its plants, and
+			no one else. It also counts, per plant manager, the shift starts sent away from the pump that
+			still wait for their approval.
 		</p>
 		{#if data.digestFirstDay}
 			<p class="supporting-text" data-testid="digest-first">
@@ -323,12 +341,67 @@
 		aria-labelledby="approval-email-heading"
 		data-testid="approval-email-section"
 	>
-		<h2 id="approval-email-heading">Location approval email</h2>
+		<h2 id="approval-email-heading">Location check and approval email</h2>
 		<p class="supporting-text">
-			When a shift start photo is sent too far from the pump, the shift waits for the plant
-			manager's approval on their Approvals page. This switch only decides whether they also get an
-			email for it. The approval works either way.
+			In a ticked area, a shift start photo sent more than 100 m from the pump (or when the pump GPS
+			gives no position) is held. First the system watches the pump GPS for the minutes set below:
+			if the pump shows up at the photo spot, the start is approved by itself. If not, the plant's
+			plant managers and the area's monitors are asked on their Approvals page and by an email with
+			Approve and Reject buttons. A phone that shared no location is asked at once. The approval
+			works with or without the email.
 		</p>
+		{#if form?.formKind === 'location-areas' && form?.message}
+			<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+		{/if}
+		<form
+			method="POST"
+			action="?/locationAreas"
+			class="digest-form"
+			data-testid="location-areas"
+			use:enhance
+		>
+			<fieldset class="area-picks">
+				<legend>Check the shift start location in these areas</legend>
+				<div class="area-list">
+					{#each locationOrder as area (area.id)}
+						<label class="area-pick"
+							><input type="checkbox" name="area" value={area.id} checked={area.location_check} />
+							{area.name}</label
+						>
+					{/each}
+				</div>
+			</fieldset>
+			<p class="supporting-text" data-testid="location-areas-now">
+				{#if locationAreas.length}Location check is on for: <strong
+						>{locationAreas.join(', ')}</strong
+					>.{:else}<strong>No area checks the shift start location.</strong>{/if}
+			</p>
+			<button type="submit" class="button button--primary">Save areas</button>
+		</form>
+		{#if form?.formKind === 'location-hold' && form?.message}
+			<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+		{/if}
+		<form
+			method="POST"
+			action="?/locationHold"
+			class="hold-form"
+			data-testid="location-hold"
+			use:enhance
+		>
+			<label class="field"
+				><span>Watch the pump GPS for (minutes) before asking</span><input
+					name="minutes"
+					type="number"
+					inputmode="numeric"
+					min="0"
+					max={data.locationHoldMax}
+					step="1"
+					required
+					value={data.locationHoldMinutes}
+				/></label
+			>
+			<button type="submit" class="button button--secondary">Save wait</button>
+		</form>
 		{#if form?.formKind === 'approval-email' && form?.message}
 			<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
 		{/if}
@@ -339,6 +412,66 @@
 			<input type="hidden" name="on" value={data.approvalEmailOn ? 'false' : 'true'} />
 			<button type="submit" class="button button--secondary">
 				{data.approvalEmailOn ? 'Turn approval emails off' : 'Turn approval emails on'}
+			</button>
+		</form>
+	</section>
+
+	<section
+		class="surface surface--padded section"
+		aria-labelledby="gangs-heading"
+		data-testid="gangs-section"
+	>
+		<h2 id="gangs-heading">Pump gangs</h2>
+		<p class="supporting-text">
+			In a ticked area, gangs are recognised from faces: a shift goes to the gang most of its faces
+			belong to, and a new gang is made from its first shift photo. A worker seen at another pump of
+			the area is linked by face (a close call is asked as "Same person?"). Plant managers can mark
+			"2 gangs today" on the pump status page. Only the shift start is checked for location; the
+			shift end is never checked. An area left unticked works exactly as before.
+		</p>
+		{#if form?.formKind === 'gang-areas' && form?.message}
+			<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+		{/if}
+		<form
+			method="POST"
+			action="?/gangAreas"
+			class="digest-form"
+			data-testid="gang-areas"
+			use:enhance
+		>
+			<fieldset class="area-picks">
+				<legend>Run pump gangs in these areas</legend>
+				<div class="area-list">
+					{#each gangOrder as area (area.id)}
+						<label class="area-pick"
+							><input type="checkbox" name="area" value={area.id} checked={area.gangs} />
+							{area.name}</label
+						>
+					{/each}
+				</div>
+			</fieldset>
+			<p class="supporting-text" data-testid="gang-areas-now">
+				{#if gangAreas.length}Gangs are on for: <strong>{gangAreas.join(', ')}</strong
+					>.{:else}<strong>No area runs gangs.</strong>{/if}
+			</p>
+			<button type="submit" class="button button--primary">Save areas</button>
+		</form>
+
+		<h3 class="cc-title fraud-title">Same-day fraud check</h3>
+		<p class="supporting-text">
+			When on, a face already counted at another pump of the same area that day is flagged as fraud
+			and not counted. When off, that worker is counted once for the day.
+		</p>
+		{#if form?.formKind === 'same-day-fraud' && form?.message}
+			<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+		{/if}
+		<p class="supporting-text" data-testid="same-day-fraud-state">
+			The same-day fraud check is <strong>{data.sameDayFraudOn ? 'on' : 'off'}</strong>.
+		</p>
+		<form method="POST" action="?/sameDayFraud" class="settings-actions" use:enhance>
+			<input type="hidden" name="on" value={data.sameDayFraudOn ? 'false' : 'true'} />
+			<button type="submit" class="button button--secondary" data-testid="same-day-fraud-toggle">
+				{data.sameDayFraudOn ? 'Turn the fraud check off' : 'Turn the fraud check on'}
 			</button>
 		</form>
 	</section>
@@ -564,5 +697,18 @@
 	code {
 		font-size: var(--text-sm);
 		word-break: break-word;
+	}
+	.hold-form {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: end;
+		gap: var(--space-3);
+		margin: var(--space-4) 0;
+	}
+	.hold-form .field {
+		max-width: 22rem;
+	}
+	.fraud-title {
+		margin-top: var(--space-6);
 	}
 </style>

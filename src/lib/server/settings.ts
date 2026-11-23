@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { pool } from './db';
+import { holdMinutes } from '../../../worker/locationHold.js';
 
 // Attendance timing rules, editable by admin at /admin/settings.
 // Precedence: app_settings row > env var > default. worker/index.js reads the pairing window the
@@ -100,6 +101,26 @@ export async function isApprovalEmailOn(db: Pool | PoolClient = pool): Promise<b
 		[APPROVAL_EMAIL_KEY]
 	);
 	return rows[0]?.value === 'on';
+}
+
+// How long a shift start held by the location check waits for the pump GPS before its plant
+// managers are asked (worker/locationHold.js, migration 054). Set at /admin/settings; 0 asks at once.
+export {
+	HOLD_MINUTES_KEY as LOCATION_HOLD_KEY,
+	DEFAULT_HOLD_MINUTES as LOCATION_HOLD_DEFAULT,
+	MAX_HOLD_MINUTES as LOCATION_HOLD_MAX
+} from '../../../worker/locationHold.js';
+
+export async function getLocationHoldMinutes(db: Pool | PoolClient = pool): Promise<number> {
+	return holdMinutes(db);
+}
+
+// Gangs (migration 056, worker/gangs.js): the same-day cross-pump fraud check is an admin switch,
+// off unless the row says 'on' (2026-11-21: gangs move between the pumps of an Area).
+export { SAME_DAY_FRAUD_KEY } from '../../../worker/gangs.js';
+import { sameDayFraudOn } from '../../../worker/gangs.js';
+export async function isSameDayFraudOn(db: Pool | PoolClient = pool): Promise<boolean> {
+	return sameDayFraudOn(db);
 }
 
 export type TestModeState = { on: boolean; since: Date | null; by: string | null };

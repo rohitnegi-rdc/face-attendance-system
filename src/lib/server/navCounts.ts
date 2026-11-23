@@ -104,7 +104,7 @@ export async function loadNavCounts(
 			? queryOne<{ n: number }>(
 					`SELECT count(*)::int AS n
 					 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
-					 WHERE s.location_status = 'pending' AND ${pumpScope(role, 'pu')}
+					 WHERE s.location_status = 'pending' AND s.location_asked_at IS NOT NULL AND ${pumpScope(role, 'pu')}
 					   AND s.submitted_at > ${seenSince(role, 'fraud')}`,
 					params
 				)

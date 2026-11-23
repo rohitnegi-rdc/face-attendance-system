@@ -354,6 +354,32 @@ flowchart LR
     Scope -.-> Note1
 ```
 
+Since 2026-11-21 the check above runs only while the admin switch **Same-day fraud check** is on (`app_settings` `same_day_fraud_check`, off by default, `sameDayFraudOn` in `worker/gangs.js`). Crews (gangs) move between the pumps of an Area during a day, so with the switch off a face already seen at another pump that day is matched normally and linked to the same area worker (`area_workers`); the gang headcount counts each worker once a day (`gangDaySql`). The scope rule is unchanged: when the switch is on, it is Area-wide and symmetric for every vendor.
+
+### 6a. Pump gangs (phase 1, migration 056)
+
+Only the shift start is checked for location (the existing start check). A shift end is never checked or held, wherever it is sent from (user decision 2026-11-23).
+
+```mermaid
+flowchart TD
+    Photo["Shift photo at pump P\n(Area with gangs on)"]
+    Match["Matching as before\n(SERIALIZABLE transaction)"]
+    Workers["Area workers in the photo\n(COALESCE(area_worker_id, person_id))"]
+    Pick{"A gang holds more than half\nof the known workers?\n(members = faces of its last 5 shifts)"}
+    Gang["Tag the session with that gang"]
+    New["New gang from this photo\n(source_session_id, first_pump_id)"]
+    Slot{"End photo: which running shift?"}
+    Faces["The faces decide: the open start of\nthe same gang, whatever was tapped"]
+    Count["Counts: pump sheet as before;\ngang headcount = each worker once a day"]
+
+    Photo --> Match --> Workers --> Pick
+    Pick -- yes --> Gang
+    Pick -- no --> New
+    Gang --> Slot
+    New --> Slot
+    Slot --> Faces --> Count
+```
+
 ## 7. Merge Candidate Review Flow (Same-Pump Only)
 
 ```mermaid

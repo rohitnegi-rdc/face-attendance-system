@@ -23,6 +23,7 @@ import { dayInfo } from './regularisationDays';
 import {
 	REASON_LABELS,
 	WORKER_LABEL_SQL,
+	DECIDERS_OF_REQUEST_SQL,
 	buildRegularisationMessages,
 	dayLabel,
 	loadRegularisationFacts,
@@ -48,7 +49,11 @@ const voiceDir = () => path.resolve(process.env.UPLOAD_DIR || './uploads', 'regu
 
 export type Requester = { role: 'pump' | 'plant-manager' | 'admin'; id: string };
 export type Viewer = Requester;
-export type Decider = { role: 'business_manager' | 'admin'; id: string };
+// 'manager': a plant-manager login deciding for a plant it decides for (missed_day_deciders,
+// migration 055: the business manager, else the plant managers). Recorded as business_manager or
+// plant_manager.
+export type Decider = { role: 'manager' | 'admin'; id: string };
+type RecordedDecider = { role: 'business_manager' | 'plant_manager' | 'admin'; id: string };
 
 // Pumps a requester may ask for: the pump itself; a plant manager's own plants and monitored Areas
 // (not plants it only approves for as business manager: the one who asks does not also approve);
@@ -278,14 +283,20 @@ async function audit(
 	);
 }
 
-// Asks for a missed day. An admin's request is approved at once (they would approve it anyway),
-// and audited; anyone else's waits for the business manager (or the admins) and emails them.
+// Asks for a missed day: the pump, or an admin. An admin's request is approved at once (they would
+// approve it anyway), and audited; the pump's waits for the business manager, else the plant
+// managers, else the admins (missed_day_deciders), and emails them. Plant managers do not apply.
 export async function createRequest(
 	actor: Requester,
 	input: RequestInput,
 	linkBase: string
 ): Promise<Result<{ id: string; status: 'pending' | 'approved' }>> {
 	const { pumpId, day } = input;
+	// 2026-11-18: "Don't give option for plant managers to send this approval please remove it":
+	// the operator applies on the pump screen; a plant manager only decides (or sees).
+	if (actor.role === 'plant-manager') {
+		return fail(403, 'The operator applies for a missed day on the pump screen');
+	}
 	if (!UUID.test(pumpId) || !isDateKey(day)) return fail(400, 'Choose a pump and a day');
 	if (day >= todayIST()) return fail(400, 'Only a past day can be regularised');
 	if (!(REASONS as readonly string[]).includes(input.reason)) {
@@ -342,7 +353,7 @@ export async function createRequest(
 			voicePath = path.join(voiceDir(), `${id}.${voiceExt}`);
 			await fs.writeFile(voicePath, input.voice.bytes);
 		}
-		const role = actor.role === 'plant-manager' ? 'plant_manager' : actor.role;
+		const role = actor.role;
 		await client.query(
 			`INSERT INTO regularisations (id, pump_id, day, reason, note, voice_path, voice_type,
 			   requested_by_role, requested_by_id, requested_by_name, link_base)
@@ -397,13 +408,18 @@ async function deciderName(decider: Decider) {
 		return row?.email ?? null;
 	}
 	const row = await queryOne<{ name: string }>(
-		`SELECT name FROM plant_managers WHERE id = $1 AND is_business_manager AND disabled_at IS NULL`,
+		`SELECT name FROM plant_managers WHERE id = $1 AND disabled_at IS NULL`,
 		[decider.id]
 	);
 	return row?.name ?? null;
 }
 
-async function approveInside(client: PoolClient, id: string, decider: Decider, name: string) {
+async function approveInside(
+	client: PoolClient,
+	id: string,
+	decider: RecordedDecider,
+	name: string
+) {
 	const { rows } = await client.query(
 		`UPDATE regularisations SET status = 'approved', decided_by_role = $2, decided_by_id = $3,
 		   decided_by_name = $4, decided_at = now()
@@ -482,19 +498,29 @@ export async function decide(decider: Decider, id: string, input: DecisionInput)
 	}
 	const name = await deciderName(decider);
 	if (!name) return fail(403, 'You cannot decide this request');
+	const recorded = (via: string | null): RecordedDecider => ({
+		role:
+			decider.role === 'admin'
+				? 'admin'
+				: via === 'plant manager'
+					? 'plant_manager'
+					: 'business_manager',
+		id: decider.id
+	});
 	const client = await pool.connect();
 	try {
 		await client.query('BEGIN');
 		const { rows } = await client.query(
 			`SELECT r.status, r.decided_by_name, r.decided_at, r.pump_id,
 			        to_char(r.day, 'YYYY-MM-DD') AS day,
-			        EXISTS (SELECT 1 FROM business_manager_plants b JOIN pumps pu ON pu.plant_id = b.plant_id
-			                WHERE pu.id = r.pump_id AND b.manager_id = $2::uuid) AS owns
-			 FROM regularisations r WHERE r.id = $1 FOR UPDATE`,
+			        (SELECT d.via FROM missed_day_deciders d JOIN pumps pu ON pu.plant_id = d.plant_id
+			          WHERE pu.id = r.pump_id AND d.manager_id = $2::uuid
+			            AND d.manager_id IS DISTINCT FROM r.requested_by_id) AS via
+			 FROM regularisations r WHERE r.id = $1 FOR UPDATE OF r`,
 			[id, decider.id]
 		);
 		const row = rows[0];
-		if (!row || (decider.role === 'business_manager' && !row.owns)) {
+		if (!row || (decider.role === 'manager' && !row.via)) {
 			await client.query('ROLLBACK');
 			return fail(404, 'Request not found');
 		}
@@ -514,7 +540,7 @@ export async function decide(decider: Decider, id: string, input: DecisionInput)
 				              WHERE pump_id = $1 AND session_date = $2))`,
 				[row.pump_id, row.day, id]
 			);
-			if (since.rowCount || (await approveInside(client, id, decider, name)) === 0) {
+			if (since.rowCount || (await approveInside(client, id, recorded(row.via), name)) === 0) {
 				await client.query('ROLLBACK');
 				return fail(409, 'Attendance for this day has arrived since; nothing to approve');
 			}
@@ -525,7 +551,7 @@ export async function decide(decider: Decider, id: string, input: DecisionInput)
 				`UPDATE regularisations SET status = 'rejected', decided_by_role = $2, decided_by_id = $3,
 				   decided_by_name = $4, decided_at = now(), decision_reason = $5
 				 WHERE id = $1`,
-				[id, decider.role, decider.id, name, reason]
+				[id, recorded(row.via).role, decider.id, name, reason]
 			);
 		}
 		if (decider.role === 'admin') {
@@ -637,7 +663,9 @@ export type RequestRow = {
 	workers: string[];
 	canDecide: boolean;
 	canCancel: boolean;
+	// Who decides it: the business manager, else the plant managers; null: the admins.
 	approverName: string | null;
+	approverRole: 'business manager' | 'plant manager' | null;
 	// Whole days since it was asked for; over ESCALATE_HOURS it shows on the admin Overview.
 	waitingDays: number;
 };
@@ -673,8 +701,9 @@ type RequestDbRow = {
 	decided_by_name: string | null;
 	decided_at: Date | null;
 	decision_reason: string | null;
-	bm_id: string | null;
-	bm_name: string | null;
+	decider_ids: string[];
+	decider_names: string | null;
+	decider_via: string | null;
 	workers: string[];
 	waiting_days: number;
 };
@@ -690,7 +719,10 @@ export async function listRequests(viewer: Viewer, filter: ListFilter = {}): Pro
 		params.push(filter.pumpId);
 		where.push(`r.pump_id = $${params.length}`);
 	}
-	if (filter.decideOnly && viewer.role === 'plant-manager') where.push('bmp.manager_id = $1::uuid');
+	if (filter.decideOnly && viewer.role === 'plant-manager') {
+		where.push(`$1::uuid IN (SELECT d.manager_id FROM missed_day_deciders d
+		  WHERE d.plant_id = pl.id AND d.manager_id IS DISTINCT FROM r.requested_by_id)`);
+	}
 	if (filter.overdueOnly) {
 		where.push(
 			`r.status = 'pending' AND r.requested_at <= now() - ${ESCALATE_HOURS} * interval '1 hour'`
@@ -702,7 +734,7 @@ export async function listRequests(viewer: Viewer, filter: ListFilter = {}): Pro
 		        to_char(r.day, 'YYYY-MM-DD') AS day, r.reason, r.note,
 		        r.voice_path IS NOT NULL AS has_voice, r.status, r.requested_by_role, r.requested_by_id,
 		        r.requested_by_name, r.requested_at, r.decided_by_name, r.decided_at, r.decision_reason,
-		        bmp.manager_id AS bm_id, bm.name AS bm_name,
+		        ${DECIDERS_OF_REQUEST_SQL},
 		        floor(extract(epoch FROM now() - r.requested_at) / 86400)::int AS waiting_days,
 		        ARRAY(SELECT ${WORKER_LABEL_SQL}
 		              FROM regularisation_workers rw JOIN persons p ON p.id = rw.person_id
@@ -710,8 +742,6 @@ export async function listRequests(viewer: Viewer, filter: ListFilter = {}): Pro
 		 FROM regularisations r
 		 JOIN pumps pu ON pu.id = r.pump_id JOIN plants pl ON pl.id = pu.plant_id
 		 JOIN areas a ON a.id = pl.area_id
-		 LEFT JOIN business_manager_plants bmp ON bmp.plant_id = pl.id
-		 LEFT JOIN plant_managers bm ON bm.id = bmp.manager_id
 		 WHERE ${where.join(' AND ')}
 		 ORDER BY (r.status = 'pending') DESC, r.requested_at ${filter.overdueOnly ? 'ASC' : 'DESC'}
 		 LIMIT $${params.length}`,
@@ -737,10 +767,12 @@ export async function listRequests(viewer: Viewer, filter: ListFilter = {}): Pro
 		workers: r.workers,
 		canDecide:
 			r.status === 'pending' &&
-			(viewer.role === 'admin' || (viewer.role === 'plant-manager' && r.bm_id === viewer.id)),
+			(viewer.role === 'admin' ||
+				(viewer.role === 'plant-manager' && r.decider_ids.includes(viewer.id))),
 		canCancel:
 			r.status === 'pending' && (viewer.role === 'admin' || r.requested_by_id === viewer.id),
-		approverName: r.bm_name ?? null,
+		approverName: r.decider_names ?? null,
+		approverRole: (r.decider_via as RequestRow['approverRole']) ?? null,
 		waitingDays: Number(r.waiting_days)
 	}));
 }
@@ -787,8 +819,9 @@ export type RegularisationFacts = {
 	plant_name: string;
 	area_name: string;
 	plant_manager_name: string | null;
-	business_manager_id: string | null;
-	business_manager_name: string | null;
+	decider_ids: string[];
+	decider_names: string | null;
+	decider_via: string | null;
 	worker_count: number;
 	month_count: number;
 	last_photo_day: string | null;
@@ -801,12 +834,12 @@ export async function readDecisionLink(token: string) {
 	const facts: RegularisationFacts | null = await loadRegularisationFacts(pool, parsed.id);
 	if (!facts) return null;
 	const decider: Decider = {
-		role: parsed.role === 'b' ? 'business_manager' : 'admin',
+		role: parsed.role === 'b' ? 'manager' : 'admin',
 		id: parsed.actorId
 	};
 	const name = await deciderName(decider);
 	const allowed =
-		Boolean(name) && (decider.role === 'admin' || facts.business_manager_id === decider.id);
+		Boolean(name) && (decider.role === 'admin' || facts.decider_ids.includes(decider.id));
 	const workers = await query<{ label: string }>(
 		`SELECT ${WORKER_LABEL_SQL} AS label
 		 FROM regularisation_workers rw JOIN persons p ON p.id = rw.person_id
@@ -899,8 +932,9 @@ export async function pendingForDecider(role: 'admin' | 'plant-manager', id: str
 				)
 			: await queryOne<{ n: number }>(
 					`SELECT count(*)::int AS n FROM regularisations r JOIN pumps pu ON pu.id = r.pump_id
-					 JOIN business_manager_plants b ON b.plant_id = pu.plant_id
-					 WHERE r.status = 'pending' AND b.manager_id = $1`,
+					 JOIN missed_day_deciders d ON d.plant_id = pu.plant_id
+					 WHERE r.status = 'pending' AND d.manager_id = $1
+					   AND d.manager_id IS DISTINCT FROM r.requested_by_id`,
 					[id]
 				);
 	return row?.n ?? 0;

@@ -31,7 +31,10 @@
 	const chartHeight = totalAreaHeight + barAreaHeight + labelAreaHeight;
 
 	const maxTotal = $derived(
-		Math.max(...orderedData.map((d: any) => d.present + d.morningOnly + d.eveningOnly + d.absent), 1)
+		Math.max(
+			...orderedData.map((d: any) => d.present + d.morningOnly + d.eveningOnly + d.absent),
+			1
+		)
 	);
 
 	function segments(d: {

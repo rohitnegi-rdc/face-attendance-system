@@ -6,15 +6,15 @@ import path from 'node:path';
 import { pool } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
 import { logger } from '$lib/server/log';
-import { getAttendanceSettings, isTestModeOn } from '$lib/server/settings';
+import { getAttendanceSettings, getLocationHoldMinutes, isTestModeOn } from '$lib/server/settings';
 import { expireStaleStarts, shiftEndOpensMessage } from '$lib/server/shiftSessions';
 import {
 	checkShiftStartLocation,
 	locationIssueText,
-	sendLocationApprovalEmail,
 	type LocationCheck
 } from '$lib/server/locationCheck';
-import { resolve } from '$app/paths';
+import { base } from '$app/paths';
+import { gangsForDay } from '../../../../../worker/gangs.js';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
 const BACKUP_DIR = path.join(UPLOAD_DIR, 'reference');
@@ -53,6 +53,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 	};
 	const lat = coordinate('lat');
 	const lng = coordinate('lng');
+	// On a pump running two or more gangs today (worker/gangs.js): which running shift this photo
+	// ends (its start's id), or 'new' for a gang starting. Only a hint: the worker's faces decide.
+	const shiftChoice = String(form.get('shift') ?? '').trim();
 	if (!file) return json({ error: 'photo is required' }, { status: 400 });
 	if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
 		return json({ error: 'Photo must be smaller than 18 MB.' }, { status: 413 });
@@ -108,19 +111,29 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		// day); with an open shift it is the shift end, once the evening gap has passed.
 		// FOR UPDATE: the worker's hourly expiry sweep does not take the pump lock above, so
 		// without it a start could be expired (and counted start-only) while this photo pairs it.
-		const openStartResult = await client.query(
-			`SELECT *, session_date::text AS session_date_text,
-			        EXTRACT(EPOCH FROM (now() - submitted_at)) / 60 AS elapsed_minutes
-			 FROM attendance_sessions
-			 WHERE pump_id = $1 AND session_type = 'morning' AND pairing_status = 'open'
-			 ORDER BY submitted_at DESC LIMIT 1
-			 FOR UPDATE`,
-			[pumpId]
-		);
+		// Gangs (migration 056): a pump running two or more gangs today keeps one shift per gang, in
+		// slots 1..gangs. Every other pump uses slot 1 only, exactly as before.
+		const gangs = await gangsForDay(client, pumpId, todayIST());
+		const multiGang = gangs > 1;
+		const wantsNew = multiGang && shiftChoice === 'new';
+		const tappedStart = multiGang && /^[0-9a-f-]{36}$/i.test(shiftChoice) ? shiftChoice : null;
+		const openStartResult = wantsNew
+			? { rows: [] }
+			: await client.query(
+					`SELECT *, session_date::text AS session_date_text,
+					        EXTRACT(EPOCH FROM (now() - submitted_at)) / 60 AS elapsed_minutes
+					 FROM attendance_sessions
+					 WHERE pump_id = $1 AND session_type = 'morning' AND pairing_status = 'open'
+					   AND ($2::uuid IS NULL OR id = $2::uuid)
+					 ORDER BY submitted_at DESC LIMIT 1
+					 FOR UPDATE`,
+					[pumpId, tappedStart]
+				);
 		const openStart = openStartResult.rows[0];
 		let sessionType: 'morning' | 'evening';
 		let sessionDate: string;
 		let pairedMorningId: string | null = null;
+		let gangSlot = 1;
 
 		if (openStart) {
 			const waiting: Record<string, string> = {
@@ -141,6 +154,26 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			sessionType = 'evening';
 			sessionDate = openStart.session_date_text;
 			pairedMorningId = openStart.id;
+			gangSlot = Number(openStart.gang_slot ?? 1);
+		} else if (multiGang) {
+			// A gang starting: the first free slot today. The worker turns it into a running gang's
+			// end if its faces say so (correctTap).
+			const today = todayIST();
+			const { rows: used } = await client.query(
+				`SELECT gang_slot FROM attendance_sessions
+				 WHERE pump_id = $1 AND session_date = $2 AND session_type = 'morning'`,
+				[pumpId, today]
+			);
+			const taken = new Set(used.map((r) => Number(r.gang_slot)));
+			const free = Array.from({ length: gangs }, (_, i) => i + 1).find((n) => !taken.has(n));
+			if (!free) {
+				throw new SubmissionError(
+					`All ${gangs} gangs already have a shift today. The next shift can start tomorrow.`
+				);
+			}
+			sessionType = 'morning';
+			sessionDate = today;
+			gangSlot = free;
 		} else {
 			const today = todayIST();
 			// One shift per pump per date; a start for today that is closed or paired would
@@ -162,8 +195,18 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		}
 
 		// Shift starts in areas with the location check: compare the phone with the pump's GPS.
+		// A shift end is never checked (user decision 2026-11-23): once at the start is enough, and
+		// the pump marks the end from wherever the crew is, gangs that moved included.
 		const location: LocationCheck | null =
 			sessionType === 'morning' ? await checkShiftStartLocation(client, pumpId, lat, lng) : null;
+		// A held start waits for the pump GPS before its plant managers are asked
+		// (worker/locationHold.js); a phone that shared no location cannot clear itself, so at once.
+		const askAfterMinutes =
+			location?.status !== 'pending'
+				? null
+				: location.issue === 'no_phone_location'
+					? 0
+					: await getLocationHoldMinutes(client);
 
 		await fs.mkdir(UPLOAD_DIR, { recursive: true });
 		photoPath = path.join(UPLOAD_DIR, `${randomUUID()}.jpg`);
@@ -182,9 +225,9 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			    photo_url, photo_hash, gps_lat, gps_lng, paired_session_id,
 			    location_status, location_issue, location_distance_m,
 			    pump_gps_lat, pump_gps_lng, pump_gps_at, operator_photo_url, operator_photo_hash,
-			    test_mode)
+			    test_mode, location_ask_at, location_link_base, gang_slot)
 			 VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-			         $16, $17, $18)
+			         $16, $17, $18, now() + make_interval(mins => $19::int), $20, $21)
 			 RETURNING id`,
 			[
 				pumpId,
@@ -204,7 +247,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 				location?.pumpAt ?? null,
 				operatorPath,
 				operatorHash,
-				await isTestModeOn(client)
+				await isTestModeOn(client),
+				askAfterMinutes,
+				askAfterMinutes === null ? null : url.origin + base,
+				gangSlot
 			]
 		);
 		const session = sessionResult.rows[0];
@@ -240,13 +286,6 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 			},
 			'attendance session queued'
 		);
-		if (location?.status === 'pending') {
-			void sendLocationApprovalEmail(
-				session.id,
-				// resolve() is relative on the server ("../../plant-manager/..."); anchor it to this URL.
-				new URL(resolve('/plant-manager/approvals/[id]', { id: session.id }), url).href
-			);
-		}
 		return json(
 			{
 				session_id: session.id,

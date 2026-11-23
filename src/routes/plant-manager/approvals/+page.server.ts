@@ -3,12 +3,15 @@ import { query } from '$lib/server/db';
 import { locationIssueText } from '$lib/server/locationCheck';
 import { listOpenFraud } from '$lib/server/navCounts';
 
-// Shift starts whose location could not be verified, for this manager's plants: everything still
-// waiting, plus decisions from the last 30 days.
+// Shift starts (and, with pump gangs, shift ends) whose location could not be verified, for this manager's plants: those waiting for a
+// decision (asked by email), those still in the GPS wait (worker/locationHold.js may clear them on
+// its own), plus decisions from the last 30 days.
 export const load: PageServerLoad = async ({ locals }) => {
 	const rows = await query<any>(
 		`SELECT s.id, s.session_date::text AS session_date, s.location_status, s.location_issue,
 		        s.location_distance_m, s.pump_gps_at, s.location_note,
+		        s.location_asked_at IS NOT NULL AS asked, s.location_auto_cleared_at IS NOT NULL AS auto_cleared,
+		        to_char(s.location_ask_at AT TIME ZONE 'Asia/Kolkata', 'FMHH12:MI am') AS ask_at,
 		        to_char(s.submitted_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS sent_at,
 		        to_char(s.location_decided_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS decided_at,
 		        pu.pump_code, pl.name AS plant_name, pm.name AS decided_by
@@ -29,7 +32,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		reason: locationIssueText(row.location_issue, row.location_distance_m, row.pump_gps_at)
 	}));
 	return {
-		pending: items.filter((item) => item.location_status === 'pending'),
+		pending: items.filter((item) => item.location_status === 'pending' && item.asked),
+		checking: items.filter((item) => item.location_status === 'pending' && !item.asked),
 		decided: items.filter((item) => item.location_status !== 'pending'),
 		fraud
 	};

@@ -57,6 +57,11 @@ const GPS_FEED_SQL = `CREATE SCHEMA IF NOT EXISTS dump;
 		latitude VARCHAR(30),
 		longitude VARCHAR(30),
 		raw_payload JSONB)`;
+// The suite's baseline: the same-day cross-pump fraud check on (an admin switch, off by default
+// since pump gangs, 2026-11-21), so the fraud scenarios written before it keep their meaning.
+// tests/regression/gangs.spec.ts turns it off and on itself; clearSettings() keeps this row.
+const SUITE_SETTINGS_SQL = `INSERT INTO app_settings (key, value) VALUES ('same_day_fraud_check', 'on')
+	ON CONFLICT (key) DO UPDATE SET value = 'on'`;
 
 const lanes = Array.from({ length: LANES }, (_, i) => {
 	const dbPort = String(BASE_PORT + i * 10);
@@ -227,7 +232,7 @@ function schemaHash() {
 	for (const file of fs.readdirSync(migrations).sort()) {
 		hash.update(file).update(fs.readFileSync(path.join(migrations, file)));
 	}
-	hash.update(GPS_FEED_SQL);
+	hash.update(GPS_FEED_SQL).update(SUITE_SETTINGS_SQL);
 	return hash.digest('hex').slice(0, 16);
 }
 
@@ -238,6 +243,7 @@ async function createGpsFeedTable(lane) {
 	try {
 		await client.connect();
 		await client.query(GPS_FEED_SQL);
+		await client.query(SUITE_SETTINGS_SQL);
 		return { code: 0, tail: '' };
 	} catch (error) {
 		return { code: 1, tail: String(error) };
@@ -364,6 +370,8 @@ function serviceEnv(lane) {
 		// service over http (production takes https push services only).
 		END_REMINDER_POLL_SECONDS: '1',
 		REGULARISATION_POLL_SECONDS: '1',
+		// Held shift starts (LOC-07, LOC-18): the GPS watch and the ask every second.
+		LOCATION_HOLD_POLL_SECONDS: '1',
 		REGULARISATION_PUSH_HOUR: '0',
 		PUSH_TEST_ENDPOINTS: 'true',
 		TZ: 'UTC' // proves IST handling does not rely on the machine time zone

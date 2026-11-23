@@ -107,7 +107,8 @@ export async function openPumpScreen(page: Page) {
 	await expect(page.getByTestId('pump-guide')).toHaveCount(0);
 }
 
-type StubFace = string | { identity: string; similarity: number };
+// crop: a picture file the stub AI sends back as this face's crop (tests/regression/fixtures).
+type StubFace = string | { identity: string; similarity?: number; crop?: string };
 
 // The faces registered for each fake photo, so submit() can build a matching operator photo.
 const photoFaces = new WeakMap<Buffer, StubFace[]>();
@@ -116,10 +117,14 @@ const photoFaces = new WeakMap<Buffer, StubFace[]>();
 // faces: identity names, or { identity, similarity } for a deliberately imperfect match.
 export async function photo(
 	faces: StubFace[] = [],
-	options: { delayMs?: number; fail?: boolean; failTimes?: number } = {}
+	options: { delayMs?: number; fail?: boolean; failTimes?: number; image?: string } = {}
 ) {
 	const id = randomUUID().replace(/-/g, '');
-	const normalized = faces.map((face) => (typeof face === 'string' ? { identity: face } : face));
+	const normalized = faces.map((face) => {
+		if (typeof face === 'string') return { identity: face };
+		const { crop, ...rest } = face;
+		return crop ? { ...rest, crop: fs.readFileSync(fixture(crop)).toString('base64') } : rest;
+	});
 	await fetch(`${STUB_URL}/__register`, {
 		method: 'POST',
 		body: JSON.stringify({ photo_id: id, faces: normalized, delay_ms: options.delayMs ?? 0 })
@@ -130,14 +135,28 @@ export async function photo(
 			body: JSON.stringify({ photo_id: id, times: options.failTimes })
 		});
 	}
-	const buffer = Buffer.concat([
-		Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
-		Buffer.from(` STUBPHOTO:${id} `),
-		randomBytes(32),
-		Buffer.from([0xff, 0xd9])
-	]);
+	// image: a real picture (tests/regression/fixtures) so the screens show it; the marker goes in
+	// a JPEG comment segment, which keeps the file a valid image with its own hash.
+	const marker = Buffer.from(` STUBPHOTO:${id} `);
+	const buffer = options.image
+		? Buffer.concat([
+				Buffer.from([0xff, 0xd8, 0xff, 0xfe]),
+				Buffer.from([(marker.length + 2) >> 8, (marker.length + 2) & 0xff]),
+				marker,
+				fs.readFileSync(fixture(options.image)).subarray(2)
+			])
+		: Buffer.concat([
+				Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+				marker,
+				randomBytes(32),
+				Buffer.from([0xff, 0xd9])
+			]);
 	photoFaces.set(buffer, faces);
 	return buffer;
+}
+
+function fixture(name: string) {
+	return path.join(process.cwd(), 'tests', 'regression', 'fixtures', name);
 }
 
 // The operator photo sent with a group photo when a test does not pick one: the group's first
@@ -264,8 +283,20 @@ export async function setSettings(
 	});
 }
 
+// Back to the suite's baseline: every setting cleared except the same-day fraud check, which
+// scripts/run-regression.mjs turns on for the whole suite (fraudCheck() below changes it).
 export async function clearSettings() {
-	await db.query('DELETE FROM app_settings');
+	await db.query(`DELETE FROM app_settings WHERE key <> 'same_day_fraud_check'`);
+	await fraudCheck(true);
+}
+
+// The admin's same-day cross-pump fraud check switch (worker/gangs.js SAME_DAY_FRAUD_KEY).
+export async function fraudCheck(on: boolean) {
+	await db.query(
+		`INSERT INTO app_settings (key, value) VALUES ('same_day_fraud_check', $1)
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+		[on ? 'on' : 'off']
+	);
 }
 
 export async function count(sql: string, params: unknown[] = []) {

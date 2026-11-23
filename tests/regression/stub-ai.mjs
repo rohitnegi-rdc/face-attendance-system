@@ -120,7 +120,7 @@ const server = http.createServer(async (request, response) => {
 				faces: registered.faces.map((face, index) => ({
 					bbox: [index * 10, 0, index * 10 + 50, 50],
 					embedding: embedding(face.identity, face.similarity ?? 1),
-					crop_base64: '',
+					crop_base64: face.crop ?? '',
 					liveness_status: 'unverified',
 					liveness_quality: 'insufficient'
 				})),

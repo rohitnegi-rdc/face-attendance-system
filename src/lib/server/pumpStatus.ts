@@ -68,6 +68,9 @@ export async function loadPumpStatus(viewer: Viewer, url: URL) {
 		today_since: string | null;
 		today_by: string | null;
 		today_site: string | null;
+		today_gangs: number;
+		tomorrow_gangs: number;
+		gangs_area: boolean;
 		tomorrow_status: PumpWorkStatus;
 		tomorrow_site: string | null;
 		active_days: number;
@@ -79,6 +82,9 @@ export async function loadPumpStatus(viewer: Viewer, url: URL) {
 		 SELECT pu.id, pu.pump_code, pl.name AS plant_name, a.name AS area_name,
 		        COALESCE(t.status, 'inactive') AS today_status, to_char(t.day, 'YYYY-MM-DD') AS today_since,
 		        t.set_by_name AS today_by, t.site_name AS today_site,
+		        COALESCE((SELECT g.gangs FROM pump_day_status g WHERE g.pump_id = pu.id AND g.day = $5), 1)::int AS today_gangs,
+		        COALESCE((SELECT g.gangs FROM pump_day_status g WHERE g.pump_id = pu.id AND g.day = $6), 1)::int AS tomorrow_gangs,
+		        a.gangs_enabled AS gangs_area,
 		        COALESCE(tm.status, 'inactive') AS tomorrow_status, tm.site_name AS tomorrow_site,
 		        count(d.day) FILTER (WHERE st.status = 'active')::int AS active_days,
 		        count(d.day) FILTER (WHERE st.status = 'idle')::int AS idle_days,
@@ -96,7 +102,7 @@ export async function loadPumpStatus(viewer: Viewer, url: URL) {
 		   ON d.day IS NOT NULL
 		 WHERE ${PUMP_ALLOWED}
 		   AND ($7 = '' OR pu.pump_code ILIKE $8 OR pl.name ILIKE $8 OR a.name ILIKE $8)
-		 GROUP BY pu.id, pl.name, a.name, t.status, t.day, t.set_by_name, t.site_name, tm.status,
+		 GROUP BY pu.id, pl.name, a.name, a.gangs_enabled, t.status, t.day, t.set_by_name, t.site_name, tm.status,
 		          tm.site_name
 		 ORDER BY a.name, pl.name, pu.pump_code`,
 		[viewer.role, viewer.id, range.from, countTo, today, tomorrow, q, like]
@@ -141,6 +147,9 @@ export async function setPumpDayStatus({ request, locals }: RequestEvent) {
 	const day = String(form.get('day') || '');
 	const statusField = form.get('status');
 	const siteField = form.get('site');
+	// The "2 gangs" tick is only on the form for an Area with gangs on (gangs_set marks it there,
+	// since an unticked checkbox sends nothing).
+	const gangsAsked = form.get('gangs_set') === null ? undefined : form.get('gangs') === '2' ? 2 : 1;
 	const site = siteField === null ? undefined : String(siteField).trim().replace(/\s+/g, ' ');
 	const today = todayIST();
 	if (day !== today && day !== addDaysStr(today, 1))
@@ -149,19 +158,29 @@ export async function setPumpDayStatus({ request, locals }: RequestEvent) {
 		return fail(400, { message: 'Choose Active, Idle or Inactive.' });
 	if (site !== undefined && site.length > 80)
 		return fail(400, { message: 'Keep the site name to 80 characters.' });
-	const pump = await queryOne<{ pump_code: string }>(
-		`SELECT pu.pump_code FROM pumps pu WHERE pu.id = $3 AND ${PUMP_ALLOWED}`,
+	const pump = await queryOne<{ pump_code: string; gangs_enabled: boolean }>(
+		`SELECT pu.pump_code, a.gangs_enabled FROM pumps pu
+		 JOIN plants pl ON pl.id = pu.plant_id JOIN areas a ON a.id = pl.area_id
+		 WHERE pu.id = $3 AND ${PUMP_ALLOWED}`,
 		[viewer.role, viewer.id, pumpId]
 	);
 	if (!pump) return fail(404, { message: 'Pump not found.' });
+	if (gangsAsked !== undefined && !pump.gangs_enabled)
+		return fail(400, { message: 'Gangs are not on for the area of this pump.' });
 	const manager =
 		viewer.role === 'admin'
 			? null
 			: await queryOne<{ name: string }>('SELECT name FROM plant_managers WHERE id = $1', [
 					viewer.id
 				]);
-	const before = await queryOne<{ status: PumpWorkStatus; site_name: string | null }>(
-		`SELECT status, site_name FROM pump_day_status WHERE pump_id = $1 AND day <= $2
+	const before = await queryOne<{
+		status: PumpWorkStatus;
+		site_name: string | null;
+		gangs: number;
+		same_day: boolean;
+	}>(
+		`SELECT status, site_name, gangs, day = $2::date AS same_day
+		 FROM pump_day_status WHERE pump_id = $1 AND day <= $2
 		 ORDER BY day DESC LIMIT 1`,
 		[pumpId, day]
 	);
@@ -169,11 +188,13 @@ export async function setPumpDayStatus({ request, locals }: RequestEvent) {
 		? statusField
 		: (before?.status ?? 'inactive');
 	const siteName = site === undefined ? (before?.site_name ?? null) : site || null;
+	// The number of gangs belongs to that one day; a row carried from an earlier day starts at 1.
+	const gangs = gangsAsked ?? (before?.same_day ? before.gangs : 1);
 	try {
 		await pool.query(
-			`INSERT INTO pump_day_status (pump_id, day, status, site_name, set_by_role, set_by_id, set_by_name)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
-			 ON CONFLICT (pump_id, day) DO UPDATE SET status = EXCLUDED.status,
+			`INSERT INTO pump_day_status (pump_id, day, status, site_name, set_by_role, set_by_id, set_by_name, gangs)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			 ON CONFLICT (pump_id, day) DO UPDATE SET status = EXCLUDED.status, gangs = EXCLUDED.gangs,
 			   site_name = EXCLUDED.site_name, set_by_role = EXCLUDED.set_by_role,
 			   set_by_id = EXCLUDED.set_by_id, set_by_name = EXCLUDED.set_by_name, set_at = now()`,
 			[
@@ -183,7 +204,8 @@ export async function setPumpDayStatus({ request, locals }: RequestEvent) {
 				siteName,
 				viewer.role === 'admin' ? 'admin' : 'plant_manager',
 				viewer.id,
-				manager?.name ?? viewer.email
+				manager?.name ?? viewer.email,
+				gangs
 			]
 		);
 		// A new site carries into tomorrow's row when tomorrow had the same site as today; a
@@ -205,6 +227,8 @@ export async function setPumpDayStatus({ request, locals }: RequestEvent) {
 		day,
 		status,
 		site: siteName,
+		gangs,
+		gangsChanged: gangsAsked !== undefined && gangsAsked !== (before?.same_day ? before.gangs : 1),
 		siteChanged: siteName !== (before?.site_name ?? null)
 	};
 }

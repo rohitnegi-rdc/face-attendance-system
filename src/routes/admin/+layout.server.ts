@@ -1,6 +1,7 @@
 import type { LayoutServerLoad } from './$types';
 import { resolve } from '$app/paths';
 import { getTestMode } from '$lib/server/settings';
+import { queryOne } from '$lib/server/db';
 import { loadNavCounts, sectionForPath } from '$lib/server/navCounts';
 
 // Every admin page warns while test mode is on (fraud check off, alert emails not sent).
@@ -9,6 +10,7 @@ export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
 	depends('app:nav-counts');
 	return {
 		testMode: await getTestMode(),
+		gangsOn: Boolean(await queryOne('SELECT 1 FROM areas WHERE gangs_enabled LIMIT 1')),
 		navCounts: await loadNavCounts(
 			'admin',
 			locals.user!.id,

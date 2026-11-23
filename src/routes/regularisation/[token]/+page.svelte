@@ -99,8 +99,8 @@
 			</p>
 		{:else if data.state === 'not_yours'}
 			<p class="alert alert--error" role="status" data-testid="reg-link-not-yours">
-				This link is no longer yours to decide: the plant has another business manager now. An admin
-				can decide it in the app.
+				This link is no longer yours to decide: someone else approves this plant's missed days now.
+				An admin can decide it in the app.
 			</p>
 		{:else if r.status !== 'pending'}
 			<p class="alert" role="status" data-testid="reg-link-settled">

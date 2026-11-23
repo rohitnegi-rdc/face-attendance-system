@@ -10,7 +10,7 @@ export const REMINDER_EVERY_MINUTES = 15;
 export const MAX_REMINDERS = 4;
 
 // Same precedence as src/lib/server/settings.ts: admin setting > env > default (540 = 9 hours).
-async function eveningGapMinutes(db) {
+export async function eveningGapMinutes(db) {
 	const { rows } = await db.query(
 		`SELECT value FROM app_settings WHERE key = 'evening_min_gap_minutes'`
 	);

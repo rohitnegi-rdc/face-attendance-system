@@ -105,12 +105,18 @@ export async function askFor(
 	return phone.post('/api/pump/regularisation', { multipart: form });
 }
 
-// Opens the month holding `day`: the calendar starts on the current month or the latest missed day.
+// Opens the month holding `day`: the calendar starts on the current month or on the latest missed
+// day, which can be a month before or after `day`, so step towards it either way. Each step waits
+// for the calendar to show (after a reload it renders a moment after the button) and then to change.
 export async function showMonth(page: Page, day: string) {
 	const cell = page.locator(`[data-testid="reg-cal-day"][data-day="${day}"]`);
-	for (let i = 0; i < 3 && (await cell.count()) === 0; i++) {
-		await page.getByTestId('reg-cal-prev').click();
-		await page.waitForTimeout(150);
+	const firstDay = page.locator('[data-testid="reg-cal-day"]').first();
+	for (let i = 0; i < 4; i++) {
+		await expect(firstDay).toBeVisible();
+		if ((await cell.count()) > 0) break;
+		const first = (await firstDay.getAttribute('data-day')) ?? '';
+		await page.getByTestId(first < day ? 'reg-cal-next' : 'reg-cal-prev').click();
+		await expect(firstDay).not.toHaveAttribute('data-day', first);
 	}
 	await expect(cell).toBeVisible();
 	return cell;

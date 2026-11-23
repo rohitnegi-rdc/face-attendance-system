@@ -27,6 +27,7 @@
 	import ScrollText from '@lucide/svelte/icons/scroll-text';
 	import CalendarPlus from '@lucide/svelte/icons/calendar-plus';
 	import BriefcaseBusiness from '@lucide/svelte/icons/briefcase-business';
+	import UsersIcon from '@lucide/svelte/icons/users';
 	import { toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 	import RdcLogo from '$lib/components/RdcLogo.svelte';
 
@@ -44,6 +45,7 @@
 		isMonitor = false,
 		monitorOnly = false,
 		businessManagerOnly = false,
+		gangsOn = false,
 		navCounts,
 		children
 	} = $props<{
@@ -55,6 +57,8 @@
 		monitorOnly?: boolean;
 		// A business manager with no plants of its own: Regularisations, Attendance, Pumps, People.
 		businessManagerOnly?: boolean;
+		// Some Area the viewer sees runs pump gangs (/admin/settings): the Gangs page is listed.
+		gangsOn?: boolean;
 		navCounts?: NavCounts;
 		children: import('svelte').Snippet;
 	}>();
@@ -131,6 +135,7 @@
 		{ href: resolve('/admin/pump-status'), label: 'Pump status', icon: Power },
 		{ href: resolve('/admin/pump-links'), label: 'Pump links', icon: Link2 },
 		{ href: resolve('/admin/pump-gps'), label: 'Pump GPS', icon: MapPinned },
+		{ href: resolve('/admin/gangs'), label: 'Gangs', icon: UsersIcon },
 		{ href: resolve('/admin/insights'), label: 'Insights', icon: ChartNoAxesCombined },
 		{
 			href: resolve('/admin/attendance'),
@@ -208,6 +213,7 @@
 		{ href: resolve('/plant-manager/photo-backups'), label: 'Kept photos', icon: ImageOff },
 		{ href: resolve('/plant-manager/pumps'), label: 'Pumps', icon: Fuel },
 		{ href: resolve('/plant-manager/pump-status'), label: 'Pump status', icon: Power },
+		{ href: resolve('/plant-manager/gangs'), label: 'Gangs', icon: UsersIcon },
 		{ href: resolve('/plant-manager/people'), label: 'People', icon: UsersRound }
 	];
 
@@ -220,9 +226,11 @@
 		resolve('/plant-manager/regularisations'),
 		resolve('/plant-manager/attendance'),
 		resolve('/plant-manager/pumps'),
-		resolve('/plant-manager/people')
+		resolve('/plant-manager/people'),
+		resolve('/plant-manager/gangs')
 	];
-	let items = $derived(
+	const gangsHref: string[] = [resolve('/admin/gangs'), resolve('/plant-manager/gangs')];
+	const roleItems = $derived(
 		role === 'admin'
 			? adminItems
 			: role === 'vendor'
@@ -232,6 +240,9 @@
 					: monitorOnly
 						? plantManagerItems.filter((item) => !monitorHidden.includes(item.href))
 						: plantManagerItems
+	);
+	let items = $derived(
+		gangsOn ? roleItems : roleItems.filter((item: NavItem) => !gangsHref.includes(item.href))
 	);
 
 	function isActive(item: { href: string; exact?: boolean }) {

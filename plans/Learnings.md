@@ -232,3 +232,31 @@ The telematics feed names trackers its own way (PUMPMU6's tracker reports as MUL
 - Plant managers were left out on purpose earlier; the user has now named them, for their plants' Area. I first put plant managers and business managers in To; the user wanted them in CC (To is admins and monitors only). Ask To or CC when adding a recipient role instead of guessing.
 - The mail log only said "NOT sent" with no addresses, so nobody could check recipients without real mail. Every digest log line (sent, mail off, test mode) now lists To and CC.
 
+## 2026-11-18: plant managers got no location approval email
+
+- Symptom: plant managers never received the approval email for a shift start away from the pump.
+- Causes, three at once: the email went To the admins (logins with no mailbox) with plant managers only in CC; the email switch `location_approval_email` is off by default; and only Mumbai had the location check, set by a migration, with no admin page to change it.
+- Fix: To is now the plant managers of the pump's plant plus the monitors of its Area (the people who decide it), the location check is ticked per Area at /admin/settings, and the 9 am tracker shows starts waiting per plant manager.
+- Lesson: when an email "is not arriving", check every gate in order (feature switch, per-area switch, recipient query, mailbox filter, mail on) before changing the recipients.
+
+## 2026-11-18: location approval asked too early, and the email asked the manager to sign in
+
+- Symptom: a plant manager was asked to approve a shift start the moment the photo arrived, often only because the pump GPS lagged behind a crew that had just moved, and the email only linked to the app.
+- Fix: a held start waits (`location_hold_minutes`, default 30) while the worker watches the pump GPS; a reading within 100 m of the photo spot approves it by itself with a note. Only then does each plant manager and Area monitor get a short email with Approve and Reject buttons, each a signed link to `/location/<token>` that confirms on the page (mail scanners open links, so opening decides nothing). A phone with no location is asked at once: the pump GPS cannot clear it.
+- Lesson: an approval asked of a person should first rule out what the system can check itself, and the email should let them act without signing in.
+- Escaping: building the email's step text from the pump code put raw HTML into the email; the unit test with a code like `KL<1>` caught it. Escape every value in HTML email, including inside fixed sentences.
+
+## 2026-11-18: missed days for a plant with no business manager went to the admins
+
+- Symptom: Kerala has no business managers, so every Kerala missed day request went to the admins, and people read the business head as the approver.
+- Fix: one view `missed_day_deciders` (migration 055) answers who decides for every caller (app decide, list, link page, nav badge, worker emails, 9 am email): business manager, else the plant's plant managers, else admins. Business heads never decide. Plant managers no longer apply; the requester of an old request is never its decider.
+- Lesson: "who approves" was written out in five places (SQL joins in the app, the worker and the digest). A rule that several places ask must live in one place, or a change of rule leaves some callers on the old one.
+
+## 2026-11-23: gangs rotate between pumps, so the same face at two pumps the same day is normal
+
+- Symptom: the same-day cross-pump fraud check flagged real crews that finished at one pump and moved to the next, and a pump-only headcount counted those workers twice for the day.
+- Fix: pump gangs (migration 056), identified from faces only, never from names an operator types. The same-day fraud check became an admin switch, off by default; a worker counts once a day in the gang numbers (`gangDaySql`, one rule for reports, pages and the 9 am email). An end sent away from the pump was first held for the plant manager too; the user removed that the same week (2026-11-23): one location check at the start is enough, a second approval per shift is too much for the team to manage.
+- Lesson: a fraud rule encodes an assumption about how people work ("one crew stays at one pump"). When the assumption is wrong, switching the rule off is not enough: the counts built on the same assumption (pump headcount) must get a matching rule, reconciled side by side (Gangs sheet Difference row) so nobody sees two conflicting numbers.
+- Test pitfall: a "Same person?" question waits for the pump to approve the photo, because a Retry throws the new workers away. A test that skips the approval sees no question.
+- Rework lesson: I extended the start location check to the end because a moved gang's end looked like a location problem. The guess was wrong because every check adds a person who must decide, and the team measures cost in decisions per day, not in fraud caught. Before adding a second approval step, ask who will press the button every day.
+- Rework lesson (2026-11-23, gang picker): I showed each gang as text with small 40 px face circles that vanished when no crops existed, and tests used fake photo bytes, so the screenshot showed text only and nobody noticed. Pump operators cannot read well: any pump screen choice must carry a large compulsory picture (start group photo + faces + big number). Tests that screenshot pump choices must send real fixture images (`photo(faces, { image })`, `crop` per face, tests/regression/fixtures) so a missing picture shows up.

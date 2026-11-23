@@ -34,9 +34,8 @@
 			<table class="data-table">
 				<thead
 					><tr
-						><th>Pump</th><th>Status today</th><th>Plant</th><th>Area</th><th>Latest submission</th><th>Session</th><th
-							>Photo</th
-						><th>30-day attendance</th><th>Password</th></tr
+						><th>Pump</th><th>Status today</th><th>Plant</th><th>Area</th><th>Latest submission</th
+						><th>Session</th><th>Photo</th><th>30-day attendance</th><th>Password</th></tr
 					></thead
 				><tbody
 					>{#each data.pumps as pump (pump.id)}<tr
@@ -53,11 +52,9 @@
 									tone={pump.work_status === 'active' ? 'success' : 'pending'}
 									label={PUMP_WORK_STATUS_LABELS[pump.work_status as 'active' | 'idle']}
 								/></td
-							><td>{pump.plant_name}</td><td
-								>{pump.area_name}</td
-							><td>{pump.submitted_at ? formatDate(pump.submitted_at) : 'No submissions'}</td><td
-								>{pump.session_type ? shiftTypeLabel(pump.session_type) : '—'}</td
-							><td
+							><td>{pump.plant_name}</td><td>{pump.area_name}</td><td
+								>{pump.submitted_at ? formatDate(pump.submitted_at) : 'No submissions'}</td
+							><td>{pump.session_type ? shiftTypeLabel(pump.session_type) : '—'}</td><td
 								><StatusBadge
 									tone={pump.status === 'completed'
 										? 'success'

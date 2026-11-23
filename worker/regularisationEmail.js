@@ -3,7 +3,8 @@
 // Each approver gets their own email whose Approve and Reject buttons carry a signed link
 // (/regularisation/<token>): it opens a page that shows the request again and decides only when its
 // button is pressed, because mail scanners open links by themselves.
-// The plant's business manager approves; a plant with none goes to every admin.
+// The plant's business manager approves; a plant with none, its plant managers; a plant with
+// neither goes to every admin (view missed_day_deciders, migration 055).
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /** @typedef {{ query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> }} Queryable */
@@ -78,11 +79,27 @@ export const attachWaitingSql = (plants, waiting) => `
 	)
 	DELETE FROM ${waiting} w USING matched m
 	WHERE w.plant_code = m.plant_code AND m.n = 1 AND m.plant_id IN (SELECT plant_id FROM moved)`;
-export const ATTACH_WAITING_SQL = attachWaitingSql('business_manager_plants', 'business_manager_waiting');
+export const ATTACH_WAITING_SQL = attachWaitingSql(
+	'business_manager_plants',
+	'business_manager_waiting'
+);
 
 // A worker on a request (rw, p): the name, and on a half-counted day which half is asked for.
 export const WORKER_LABEL_SQL = `COALESCE(NULLIF(p.name, ''), 'Worker ' || p.display_seq)
 	|| CASE rw.adds WHEN 'end' THEN ' (end requested)' WHEN 'start' THEN ' (start requested)' ELSE '' END`;
+
+// Who decides a request of plant pl (r the request), from the view missed_day_deciders (migration
+// 055): the business manager, else the plant managers; never the one who asked. decider_ids empty:
+// the admins decide. Shared with src/lib/server/regularisation.ts.
+export const DECIDERS_OF_REQUEST_SQL = `
+	ARRAY(SELECT d.manager_id FROM missed_day_deciders d
+	      WHERE d.plant_id = pl.id AND d.manager_id IS DISTINCT FROM r.requested_by_id
+	      ORDER BY d.manager_id) AS decider_ids,
+	(SELECT string_agg(m.name, ', ' ORDER BY m.name) FROM missed_day_deciders d
+	   JOIN plant_managers m ON m.id = d.manager_id
+	  WHERE d.plant_id = pl.id AND d.manager_id IS DISTINCT FROM r.requested_by_id) AS decider_names,
+	(SELECT min(d.via) FROM missed_day_deciders d
+	  WHERE d.plant_id = pl.id AND d.manager_id IS DISTINCT FROM r.requested_by_id) AS decider_via`;
 
 // Everything the email and the decision page show about one request.
 /** @param {Queryable} db @param {string} id @returns {Promise<any>} */
@@ -93,8 +110,10 @@ export async function loadRegularisationFacts(db, id) {
 		        r.requested_at, r.status, r.link_base, r.decided_by_name, r.decided_by_role,
 		        r.decided_at, r.decision_reason,
 		        pu.pump_code, pl.id AS plant_id, pl.name AS plant_name, a.name AS area_name,
-		        COALESCE(pm.name, NULLIF(pl.manager_name, '')) AS plant_manager_name,
-		        bm.id AS business_manager_id, bm.name AS business_manager_name,
+		        COALESCE((SELECT string_agg(m.name, ', ' ORDER BY m.name) FROM plant_manager_assignments pa
+		                   JOIN plant_managers m ON m.id = pa.manager_id AND m.disabled_at IS NULL
+		                   WHERE pa.plant_id = pl.id), NULLIF(pl.manager_name, '')) AS plant_manager_name,
+		        ${DECIDERS_OF_REQUEST_SQL},
 		        (SELECT string_agg(${WORKER_LABEL_SQL}, ', ' ORDER BY p.display_seq)
 		           FROM regularisation_workers rw JOIN persons p ON p.id = rw.person_id
 		          WHERE rw.regularisation_id = r.id) AS workers,
@@ -111,10 +130,6 @@ export async function loadRegularisationFacts(db, id) {
 		 FROM regularisations r
 		 JOIN pumps pu ON pu.id = r.pump_id JOIN plants pl ON pl.id = pu.plant_id
 		 JOIN areas a ON a.id = pl.area_id
-		 LEFT JOIN plant_manager_assignments pma ON pma.plant_id = pl.id
-		 LEFT JOIN plant_managers pm ON pm.id = pma.manager_id
-		 LEFT JOIN business_manager_plants bmp ON bmp.plant_id = pl.id
-		 LEFT JOIN plant_managers bm ON bm.id = bmp.manager_id AND bm.disabled_at IS NULL
 		 WHERE r.id = $1`,
 		[id]
 	);
@@ -126,17 +141,19 @@ export async function loadRegularisationFacts(db, id) {
 const hasMailbox = (email) =>
 	Boolean(email) && !String(email).trim().toLowerCase().endsWith('.rdc');
 
-// Who gets the email: the plant's business manager, or every admin when the plant has none
-// (`toAdmins` forces the admins: the 48-hour escalation).
+// Who gets the email: the plant's business manager, else its plant managers (decider_ids), or every
+// admin when the plant has neither (`toAdmins` forces the admins: the 48-hour escalation).
+// Role 'b' in the link: a plant-manager login deciding for its plant (as business or plant manager).
 /**
  * @param {Queryable} db @param {any} facts @param {boolean} [toAdmins]
  * @returns {Promise<{ id: string, name: string, email: string, role: 'a' | 'b' }[]>}
  */
 export async function regularisationApprovers(db, facts, toAdmins = false) {
-	if (!toAdmins && facts.business_manager_id) {
-		const { rows } = await db.query('SELECT id, name, email FROM plant_managers WHERE id = $1', [
-			facts.business_manager_id
-		]);
+	if (!toAdmins && facts.decider_ids?.length) {
+		const { rows } = await db.query(
+			'SELECT id, name, email FROM plant_managers WHERE id = ANY($1::uuid[]) ORDER BY name',
+			[facts.decider_ids]
+		);
 		return rows.filter((r) => hasMailbox(r.email)).map((r) => ({ ...r, role: 'b' }));
 	}
 	const { rows } = await db.query('SELECT id, email, email AS name FROM admins ORDER BY email');

@@ -1,14 +1,13 @@
 // Shift start location check: the operator's phone position against the pump's latest GPS
 // reading (copied from the optimizer database every 5 minutes by worker/gpsFeed.js into
 // pump_locations).
-// Within range the shift starts normally; otherwise it starts on hold and the plant manager is
-// emailed to approve or reject it (when the admin has the email switched on at /admin/settings).
-// Only areas with location_check_enabled are checked.
-import { escapeHtml, hasMailbox, mailEnabled, mailer, mailFrom } from '$lib/server/mail';
+// Within range the shift starts normally; otherwise it starts on hold. The worker
+// (worker/locationHold.js) then waits location_hold_minutes for the pump GPS to show the pump at
+// the photo spot, clearing it on its own, and otherwise asks the plant managers of the pump's plant
+// and the monitors of its Area to approve or reject it (email with Approve and Reject buttons, when
+// the admin has the email switched on at /admin/settings). Only areas with location_check_enabled
+// (ticked per Area on the same page) are checked.
 import type { PoolClient } from 'pg';
-import { query } from '$lib/server/db';
-import { logger } from '$lib/server/log';
-import { isApprovalEmailOn, isTestModeOn } from '$lib/server/settings';
 
 export const LOCATION_RADIUS_M = 100;
 // Pumps report about every 10 minutes and the worker copies every 5; 30 minutes allows a missed
@@ -18,7 +17,7 @@ export const PUMP_GPS_MAX_AGE_MINUTES = 30;
 // SQL value: 'pending' or 'rejected' when the pump's shift start on that date waits for the plant
 // manager's location approval or was rejected, else NULL. Reports show such a day, marked, and
 // leave it out of their counts until it is approved ('rejected' sorts after 'pending', so max()
-// reports a rejection first).
+// reports a rejection first). Only starts are checked: a shift end never is.
 export const heldShiftStatus = (pumpColumn: string, dateColumn: string) =>
 	`(SELECT max(held.location_status) FROM attendance_sessions held
 	  WHERE held.pump_id = ${pumpColumn} AND held.session_date = ${dateColumn}
@@ -122,103 +121,4 @@ export async function checkShiftStartLocation(
 	if (ageMinutes > PUMP_GPS_MAX_AGE_MINUTES) return hold('stale_pump_gps', distanceM);
 	if (distanceM! > LOCATION_RADIUS_M) return hold('too_far', distanceM);
 	return { status: 'ok', issue: null, distanceM, ...pump };
-}
-
-// Best effort: the session row is the source of truth and the manager also sees it on the
-// Approvals page, so a mail failure is logged, never thrown.
-export async function sendLocationApprovalEmail(sessionId: string, approvalUrl: string) {
-	try {
-		const client = mailer();
-		const [info] = await query<{
-			pump_code: string;
-			plant_name: string;
-			issue: string;
-			distance_m: number | null;
-			pump_gps_at: Date | null;
-			sent_at: string;
-		}>(
-			`SELECT pu.pump_code, pl.name AS plant_name, s.location_issue AS issue,
-			        s.location_distance_m AS distance_m, s.pump_gps_at,
-			        to_char(s.submitted_at AT TIME ZONE 'Asia/Kolkata', 'DD-MM-YYYY, HH12:MI am') AS sent_at
-			 FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
-			 JOIN plants pl ON pl.id = pu.plant_id WHERE s.id = $1`,
-			[sessionId]
-		);
-		const managers = await query<{ email: string }>(
-			`SELECT pm.email FROM attendance_sessions s JOIN pumps pu ON pu.id = s.pump_id
-			 JOIN plant_manager_assignments pma ON pma.plant_id = pu.plant_id
-			 JOIN plant_managers pm ON pm.id = pma.manager_id WHERE s.id = $1`,
-			[sessionId]
-		);
-		// To every admin, like the 9 am attendance email; the plant's managers are copied.
-		const admins = await query<{ email: string }>('SELECT email FROM admins');
-		const to = admins.map((a) => a.email).filter(hasMailbox);
-		const cc = [
-			...new Set(
-				[...managers.map((m) => m.email), process.env.FRAUD_ALERT_CC_EMAIL ?? '']
-					.filter(Boolean)
-					.filter(hasMailbox)
-			)
-		];
-		if (!info) return;
-		// Test mode (admin switch): the plant manager still sees the approval in the app, no email.
-		if (await isTestModeOn()) {
-			logger.info({ sessionId, to, cc }, 'location approval email NOT sent (test mode)');
-			return;
-		}
-		// Switched off at /admin/settings: the manager approves on the Approvals page, no email.
-		if (!(await isApprovalEmailOn())) {
-			logger.info({ sessionId, to, cc }, 'location approval email NOT sent (switched off)');
-			return;
-		}
-		if (!mailEnabled()) {
-			logger.info(
-				{
-					sessionId,
-					to,
-					cc,
-					subject:
-						info.issue === 'too_far'
-							? `Approve attendance: ${info.pump_code} operator was ${info.distance_m} m from the pump`
-							: `Approve attendance: ${info.pump_code} location could not be verified`,
-					reason: locationIssueText(info.issue, info.distance_m, info.pump_gps_at),
-					approvalUrl
-				},
-				'location approval email NOT sent (mail off)'
-			);
-			return;
-		}
-		if (!client || !(to.length || cc.length)) {
-			logger.warn(
-				{ sessionId, smtp: Boolean(client), to: to.length, cc: cc.length },
-				'location approval email skipped (no SMTP or nobody to send to)'
-			);
-			return;
-		}
-		const reason = locationIssueText(info.issue, info.distance_m, info.pump_gps_at);
-		const subject =
-			info.issue === 'too_far'
-				? `Approve attendance: ${info.pump_code} operator was ${info.distance_m} m from the pump`
-				: `Approve attendance: ${info.pump_code} location could not be verified`;
-		const html = `
-			<p>A shift start at pump <strong>${escapeHtml(info.pump_code)}</strong> (${escapeHtml(info.plant_name)}) needs the plant manager's approval.</p>
-			<p><strong>Problem:</strong> ${escapeHtml(reason)}</p>
-			<p><strong>Photo sent:</strong> ${escapeHtml(info.sent_at)}</p>
-			<p>Plant manager: please call the operator to verify, then approve or reject. The attendance is not counted in reports until it is approved.</p>
-			<p><a href="${approvalUrl}" style="display:inline-block;padding:10px 18px;background:#0b6e69;color:#fff;border-radius:6px;text-decoration:none">Open approval</a></p>`;
-		await client.sendMail({
-			from: mailFrom(),
-			to,
-			cc,
-			subject,
-			text: `${subject}\n\n${reason}\nPhoto sent: ${info.sent_at}\n\nApprove or reject: ${approvalUrl}`,
-			html
-		});
-		logger.info({ sessionId, to, cc }, 'location approval email sent');
-	} catch (err: any) {
-		logger.error(
-			{ sessionId, error: String(err?.message || err) },
-			'location approval email failed'
-		);
-	}
 }

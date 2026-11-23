@@ -4,14 +4,19 @@
 	import Download from '@lucide/svelte/icons/download';
 	import Search from '@lucide/svelte/icons/search';
 	import FacePeek from '$lib/components/FacePeek.svelte';
+	import GangHeadcountGrid from '$lib/components/GangHeadcountGrid.svelte';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import { dateKey, formatDate, todayStr } from '$lib/date';
+	import { calendarDays, dateKey, formatDate, todayStr } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 
 	let { data } = $props();
 	let expandedPumps = $state(new Set<string>());
 	let dateMode = $state<'range' | 'day'>('range');
+	// By pump (the records below) or By gang (gang x day headcount); By gang only where an Area in
+	// the filter has gangs on.
+	let resultView = $state<'pump' | 'gang'>('pump');
+	const gangDays = $derived(calendarDays(data.gangRange.from, data.gangRange.to));
 	$effect(() => {
 		dateMode = data.isSingleDay ? 'day' : 'range';
 	});
@@ -194,8 +199,7 @@
 				>{#if !data.filters.session}<option
 						value="start_only"
 						selected={data.filters.status === 'start_only'}>Start only</option
-					><option value="end_only" selected={data.filters.status === 'end_only'}
-						>End only</option
+					><option value="end_only" selected={data.filters.status === 'end_only'}>End only</option
 					>{/if}<option value="absent" selected={data.filters.status === 'absent'}
 					>{data.filters.session ? 'Absent' : 'Not a full shift'}</option
 				></select
@@ -246,7 +250,39 @@
 
 	<div class="section"><MetricStrip {metrics} /></div>
 
-	{#if data.isSingleDay}
+	{#if data.gangView}
+		<div class="section result-view">
+			<div class="view-toggle" role="group" aria-label="Show attendance">
+				<button
+					type="button"
+					aria-pressed={resultView === 'pump'}
+					onclick={() => (resultView = 'pump')}>By pump</button
+				>
+				<button
+					type="button"
+					aria-pressed={resultView === 'gang'}
+					data-testid="by-gang"
+					onclick={() => (resultView = 'gang')}>By gang</button
+				>
+			</div>
+		</div>
+	{/if}
+
+	{#if resultView === 'gang' && data.gangView}
+		<section class="section" aria-labelledby="gang-view-title">
+			<div class="section-header">
+				<div>
+					<h2 id="gang-view-title">By gang</h2>
+					<p class="supporting-text">
+						Workers of each gang counted per day, {formatDate(data.gangRange.from)} to {formatDate(
+							data.gangRange.to
+						)}, wherever the gang worked. Only Areas with gangs switched on.
+					</p>
+				</div>
+			</div>
+			<GangHeadcountGrid view={data.gangView} days={gangDays} base="admin" />
+		</section>
+	{:else if data.isSingleDay}
 		<section class="section grouped-view">
 			<div class="section-header">
 				<div>
@@ -268,8 +304,7 @@
 										><tr
 											><th><span class="sr-only">Expand</span></th><th>Pump</th>{#if fullDay}<th
 													>Full shift</th
-												><th>Start only</th><th>End only</th>{:else}<th>Present</th><th
-													>Absent</th
+												><th>Start only</th><th>End only</th>{:else}<th>Present</th><th>Absent</th
 												>{/if}<th>Total</th><th>Action</th></tr
 										></thead
 									>
@@ -308,15 +343,21 @@
 												<tr class="detail-row"
 													><td colspan={fullDay ? 7 : 6}
 														><div class="person-records">
-															{#each pumpRows(pump.pump_id) as row}{@const label = personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}<div
-																	class="person-record"
-																	><FacePeek
+															{#each pumpRows(pump.pump_id) as row}{@const label =
+																	personDisplayLabel(
+																		row.pump_code,
+																		row.display_seq,
+																		row.is_operator,
+																		row.name
+																	)}
+																<div class="person-record">
+																	<FacePeek
 																		url={resolve('/api/persons/[id]/face', { id: row.person_id })}
 																		{label}
 																	/><a href={resolve(`/admin/persons/${row.person_id}`)}
 																		><span>{label}</span><StatusBadge {...rowStatus(row)} /></a
-																	></div
-																>{/each}
+																	>
+																</div>{/each}
 														</div></td
 													></tr
 												>
@@ -355,15 +396,24 @@
 									><span class="worker-tag"
 										><FacePeek
 											url={resolve('/api/persons/[id]/face', { id: row.person_id })}
-											label={personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}
+											label={personDisplayLabel(
+												row.pump_code,
+												row.display_seq,
+												row.is_operator,
+												row.name
+											)}
 										/><a href={resolve(`/admin/persons/${row.person_id}`)}
-											>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</a
+											>{personDisplayLabel(
+												row.pump_code,
+												row.display_seq,
+												row.is_operator,
+												row.name
+											)}</a
 										></span
 									></td
 								><td><StatusBadge {...rowStatus(row)} /></td><td
 									><a href={resolve(`/admin/pumps/${row.pump_id}`)}>{row.pump_code}</a></td
-								><td
-									><a href={resolve(`/admin/vendors/${row.vendor_id}`)}>{row.vendor_name}</a></td
+								><td><a href={resolve(`/admin/vendors/${row.vendor_id}`)}>{row.vendor_name}</a></td
 								><td>{row.plant_name}</td><td
 									><a href={resolve(`/admin/areas/${row.area_id}`)}>{row.area_name}</a></td
 								><td
@@ -385,9 +435,19 @@
 							<span class="worker-tag"
 								><FacePeek
 									url={resolve('/api/persons/[id]/face', { id: row.person_id })}
-									label={personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}
+									label={personDisplayLabel(
+										row.pump_code,
+										row.display_seq,
+										row.is_operator,
+										row.name
+									)}
 								/><a href={resolve(`/admin/persons/${row.person_id}`)}
-									>{personDisplayLabel(row.pump_code, row.display_seq, row.is_operator, row.name)}</a
+									>{personDisplayLabel(
+										row.pump_code,
+										row.display_seq,
+										row.is_operator,
+										row.name
+									)}</a
 								></span
 							><StatusBadge {...rowStatus(row)} />
 						</div>

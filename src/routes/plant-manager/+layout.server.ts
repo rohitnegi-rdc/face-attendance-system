@@ -30,7 +30,7 @@ export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
 		!manager?.manages_plants;
 	if (businessManagerOnly) {
 		const path = url.pathname.replace(/\/$/, '');
-		const shown = ['regularisations', 'attendance', 'pumps', 'people'].map((p) =>
+		const shown = ['regularisations', 'attendance', 'pumps', 'people', 'gangs'].map((p) =>
 			resolve(`/plant-manager/${p}` as '/plant-manager/attendance')
 		);
 		if (!shown.some((p) => path === p || path.startsWith(p + '/')))
@@ -51,6 +51,13 @@ export const load: LayoutServerLoad = async ({ locals, url, depends }) => {
 		isMonitor,
 		monitorOnly,
 		businessManagerOnly,
+		gangsOn: Boolean(
+			await queryOne(
+				`SELECT 1 FROM manager_plants mp JOIN plants pl ON pl.id = mp.plant_id
+				 JOIN areas a ON a.id = pl.area_id WHERE mp.manager_id = $1 AND a.gangs_enabled LIMIT 1`,
+				[locals.user!.id]
+			)
+		),
 		navCounts: await loadNavCounts(
 			'plant-manager',
 			locals.user!.id,

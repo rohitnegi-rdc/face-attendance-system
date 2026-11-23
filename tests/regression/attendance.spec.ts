@@ -222,7 +222,8 @@ test('SET-03 invalid settings are refused and nothing changes', async () => {
 	expect((await setSettings(admin, 600, 9)).type).toBe('failure');
 	expect((await setSettings(admin, 0, 16)).type).toBe('failure');
 	expect((await setSettings(admin, 540, 99)).type).toBe('failure');
-	const { rows } = await db.query('SELECT 1 FROM app_settings');
+	// The suite's own baseline (same-day fraud check on, scripts/run-regression.mjs) is not a change.
+	const { rows } = await db.query(`SELECT 1 FROM app_settings WHERE key <> 'same_day_fraud_check'`);
 	expect(rows).toHaveLength(0);
 });
 

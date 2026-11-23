@@ -24,6 +24,8 @@
 		status?: string;
 		site?: string | null;
 		siteChanged?: boolean;
+		gangs?: number;
+		gangsChanged?: boolean;
 	} | null;
 	let { data, form }: { data: Awaited<ReturnType<typeof loadPumpStatus>>; form: SaveResult } =
 		$props();
@@ -90,11 +92,13 @@
 	const saved = $derived(
 		!form?.success || !form.day
 			? ''
-			: form.siteChanged
-				? form.site
-					? `${form.pumpCode} is at ${form.site} from ${day(form.day)}.`
-					: `${form.pumpCode} has no site from ${day(form.day)}.`
-				: `${form.pumpCode} is ${PUMP_WORK_STATUS_LABELS[form.status as PumpWorkStatus]} from ${day(form.day)}.`
+			: form.gangsChanged
+				? `${form.pumpCode} has ${form.gangs === 2 ? '2 gangs' : '1 gang'} on ${day(form.day)}.`
+				: form.siteChanged
+					? form.site
+						? `${form.pumpCode} is at ${form.site} from ${day(form.day)}.`
+						: `${form.pumpCode} has no site from ${day(form.day)}.`
+					: `${form.pumpCode} is ${PUMP_WORK_STATUS_LABELS[form.status as PumpWorkStatus]} from ${day(form.day)}.`
 	);
 </script>
 
@@ -209,7 +213,7 @@
 								<strong>{pump.pump_code}</strong>
 								<small>{pump.plant_name} · {pump.area_name}</small>
 							</td>
-							{#each [['today', data.today, pump.today_status, pump.today_site], ['tomorrow', data.tomorrow, pump.tomorrow_status, pump.tomorrow_site]] as [key, value, current, site] (key)}
+							{#each [['today', data.today, pump.today_status, pump.today_site, pump.today_gangs], ['tomorrow', data.tomorrow, pump.tomorrow_status, pump.tomorrow_site, pump.tomorrow_gangs]] as const as [key, value, current, site, gangs] (key)}
 								<td class="pick" data-label={key === 'today' ? 'Today' : 'Tomorrow'}>
 									<form
 										method="POST"
@@ -243,6 +247,20 @@
 											data-testid="site-{key}"
 											onchange={(e) => e.currentTarget.form?.requestSubmit()}
 										/>
+										{#if pump.gangs_area && current !== 'inactive'}
+											<input type="hidden" name="gangs_set" value="1" />
+											<label class="pick-gangs" class:pick-gangs--on={gangs > 1}
+												><input
+													type="checkbox"
+													name="gangs"
+													value="2"
+													checked={gangs > 1}
+													data-testid="gangs-{key}"
+													onchange={(e) => e.currentTarget.form?.requestSubmit()}
+												/>
+												2 gangs {key}</label
+											>
+										{/if}
 									</form>
 									{#if key === 'today'}<small class="since"
 											>{pump.today_since
@@ -514,6 +532,18 @@
 		min-height: 2.25rem;
 		padding: 0 var(--space-2);
 		font-size: var(--text-sm);
+	}
+	.pick-gangs {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
+		min-height: 2.25rem;
+		font-size: var(--text-sm);
+		color: var(--ink-muted);
+	}
+	.pick-gangs--on {
+		color: var(--ink-strong);
+		font-weight: 600;
 	}
 	.pick-status {
 		width: 9rem;

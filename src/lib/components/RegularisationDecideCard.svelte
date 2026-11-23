@@ -55,8 +55,8 @@
 		<p class="waiting" data-testid="reg-waiting">
 			Waiting {r.waitingDays}
 			{r.waitingDays === 1 ? 'day' : 'days'}: {r.approverName
-				? `${r.approverName} (business manager) has not decided.`
-				: 'this plant has no business manager.'} Any admin can decide it here.
+				? `${r.approverName} (${r.approverRole}) has not decided.`
+				: 'this plant has no business manager or plant manager.'} Any admin can decide it here.
 		</p>
 	{/if}
 	<RegularisationEvidence {r} {role} />

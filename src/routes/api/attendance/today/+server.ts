@@ -4,6 +4,7 @@ import { pool, queryOne } from '$lib/server/db';
 import { todayIST } from '$lib/server/time';
 import { getAttendanceSettings } from '$lib/server/settings';
 import { expireStaleStarts } from '$lib/server/shiftSessions';
+import { gangsForDay } from '../../../../../worker/gangs.js';
 
 // Pump screen state. API state names keep the database words (morning = shift start,
 // evening = shift end) so older clients keep working:
@@ -84,7 +85,43 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 	const endOpen =
 		state === 'evening' && new Date(openMorning.next_allowed_at).getTime() <= Date.now();
-	const canSubmit = state === 'morning' || endOpen;
+	let canSubmit = state === 'morning' || endOpen;
+
+	// "2 gangs today" (an Area with gangs on, the plant manager's tick): the screen shows each
+	// running shift as a card with its start group photo and up to 6 faces (operators choose by
+	// picture, not by reading) and a "New gang starting" choice. The tap is a hint;
+	// the worker re-pairs by faces. A one-gang day returns nothing extra.
+	const gangs = await gangsForDay(pool, pumpId, today);
+	let gangShifts: unknown[] = [];
+	let canStartGang = false;
+	if (gangs > 1) {
+		const { rows: open } = await pool.query(
+			`SELECT s.id, s.gang_slot, s.submitted_at, g.code AS gang_code,
+			        s.submitted_at + ($2 || ' minutes')::interval AS next_allowed_at,
+			        s.submitted_at + ($2 || ' minutes')::interval <= now() AS end_open,
+			        COALESCE((SELECT array_agg(f.id ORDER BY f.is_operator, f.id) FROM (
+			          SELECT afe.id, afe.is_operator FROM attendance_face_evidence afe
+			          WHERE afe.session_id = s.id AND afe.face_crop_url IS NOT NULL
+			          ORDER BY afe.is_operator LIMIT 6) f), '{}') AS faces,
+			        -- The operator is one of the faces shown, so counted too (user, 2026-11-23).
+			        (SELECT count(*)::int FROM attendance_face_evidence afe
+			         WHERE afe.session_id = s.id) AS people
+			 FROM attendance_sessions s LEFT JOIN gangs g ON g.id = s.gang_id
+			 WHERE s.pump_id = $1 AND s.session_type = 'morning' AND s.status = 'completed'
+			   AND s.pairing_status = 'open'
+			 ORDER BY s.submitted_at`,
+			[pumpId, settings.evening_min_gap_minutes]
+		);
+		const { rows: used } = await pool.query(
+			`SELECT count(DISTINCT gang_slot)::int AS n FROM attendance_sessions
+			 WHERE pump_id = $1 AND session_date = $2 AND session_type = 'morning' AND status <> 'failed'`,
+			[pumpId, today]
+		);
+		gangShifts = open;
+		canStartGang = used[0].n < gangs;
+		if (state === 'morning' || state === 'evening' || state === 'locked')
+			canSubmit = canStartGang || open.some((shift) => shift.end_open);
+	}
 
 	return json({
 		state,
@@ -104,6 +141,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 			state === 'locked' ? (shiftToday.pairing_status === 'paired' ? 'full' : 'start_only') : null,
 		shift_closed_by: state === 'locked' ? (shiftToday.closed_by ?? null) : null,
 		today,
+		gangs,
+		gang_shifts: gangShifts,
+		can_start_gang: canStartGang,
 		...context
 	});
 };

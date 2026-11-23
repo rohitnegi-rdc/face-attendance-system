@@ -31,7 +31,8 @@
 		onmonth,
 		dayHref,
 		monthHref,
-		action
+		action,
+		canApply = true
 	}: {
 		calendar: CalendarMonth;
 		selected: string | null;
@@ -42,25 +43,29 @@
 		dayHref?: (day: string) => string;
 		monthHref?: (month: string) => string;
 		action?: Snippet<[CalendarDay]>;
+		// False for a viewer who cannot apply (a plant manager): no "Apply" on the days.
+		canApply?: boolean;
 	} = $props();
 
 	const word = (text: Words) => (hindi ? text.hi : text.en);
 	const applyWord = $derived(hindi ? 'अर्ज़ी' : 'Apply');
-	const LEGEND = ['full', 'partial', 'missed', 'waiting', 'regularised', 'rejected', 'none'] as const;
+	const LEGEND = [
+		'full',
+		'partial',
+		'missed',
+		'waiting',
+		'regularised',
+		'rejected',
+		'none'
+	] as const;
 
-	const leading = $derived(
-		(new Date(`${calendar.days[0].day}T00:00:00Z`).getUTCDay() + 6) % 7
-	);
+	const leading = $derived((new Date(`${calendar.days[0].day}T00:00:00Z`).getUTCDay() + 6) % 7);
 	const chosen = $derived(calendar.days.find((d) => d.day === selected) ?? null);
 	const previous = $derived(addMonths(calendar.month, -1));
 	const next = $derived(addMonths(calendar.month, 1));
 
 	const detail = (d: CalendarDay): Words =>
-		d.state === 'none'
-			? d.note
-				? NOTE_DETAIL[d.note]
-				: STATE_TEXT.none
-			: DAY_DETAIL[d.state];
+		d.state === 'none' ? (d.note ? NOTE_DETAIL[d.note] : STATE_TEXT.none) : DAY_DETAIL[d.state];
 
 	// Names come labelled in English from the server; the pump reading Hindi sees them in Hindi.
 	const person = (name: string) =>
@@ -84,7 +89,7 @@
 		<X size={18} strokeWidth={3} aria-hidden="true" />
 	{:else if d.state === 'waiting'}
 		<Hourglass size={15} strokeWidth={2.5} aria-hidden="true" />
-	{:else if d.state === 'partial' || d.state === 'missed'}
+	{:else if canApply && (d.state === 'partial' || d.state === 'missed')}
 		<span class="apply" aria-hidden="true">{applyWord}</span>
 	{/if}
 {/snippet}
@@ -107,12 +112,20 @@
 	{#if !enabled}
 		<span class="nav nav--off" aria-hidden="true"><Icon size={22} /></span>
 	{:else if monthHref}
-		<a class="nav" href={monthHref(target)} aria-label={label} data-testid={testid} data-sveltekit-noscroll
-			><Icon size={22} /></a
+		<a
+			class="nav"
+			href={monthHref(target)}
+			aria-label={label}
+			data-testid={testid}
+			data-sveltekit-noscroll><Icon size={22} /></a
 		>
 	{:else}
-		<button class="nav" type="button" aria-label={label} data-testid={testid} onclick={() => onmonth?.(target)}
-			><Icon size={22} /></button
+		<button
+			class="nav"
+			type="button"
+			aria-label={label}
+			data-testid={testid}
+			onclick={() => onmonth?.(target)}><Icon size={22} /></button
 		>
 	{/if}
 {/snippet}

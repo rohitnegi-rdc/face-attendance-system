@@ -6,7 +6,12 @@
 	let { data, children } = $props();
 </script>
 
-<AppShell role="admin" userEmail={data.user?.email} navCounts={data.navCounts}>
+<AppShell
+	role="admin"
+	userEmail={data.user?.email}
+	navCounts={data.navCounts}
+	gangsOn={data.gangsOn}
+>
 	{#if data.testMode.on}
 		<p class="alert alert--error test-mode-banner" role="status" data-testid="test-mode-banner">
 			<strong>Test mode is on</strong>{#if data.testMode.since}

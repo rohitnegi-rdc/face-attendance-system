@@ -172,3 +172,55 @@ export async function sendRegularisationEmail(message, log, { regularisationId, 
 		);
 	}
 }
+
+// Shift start location approval emails (worker/locationHold.js), one per plant manager or monitor,
+// with the shift photo shown in the email. Logged instead of sent while test mode is on, while the
+// admin has approval emails switched off (/admin/settings), or while mail is off.
+export async function sendLocationApprovalEmail(message, log, { sessionId, testMode, emailOn }) {
+	const fields = {
+		sessionId,
+		to: message.to,
+		role: message.deciderRole,
+		subject: message.subject,
+		approveUrl: message.approveUrl,
+		rejectUrl: message.rejectUrl
+	};
+	if (testMode) return log('info', fields, 'location approval email NOT sent (test mode)');
+	if (!emailOn) return log('info', fields, 'location approval email NOT sent (switched off)');
+	if (process.env.MAIL_ENABLED !== 'true') {
+		return log('info', fields, 'location approval email NOT sent (mail off)');
+	}
+	const client = getTransporter();
+	if (!client) return log('warn', fields, 'location approval email skipped: SMTP not configured');
+	let photo = null;
+	if (message.photoPath) {
+		const { readFile } = await import('node:fs/promises');
+		photo = await readFile(message.photoPath).catch(() => null);
+	}
+	try {
+		await client.sendMail({
+			from: mailFrom(),
+			to: message.to,
+			subject: message.subject,
+			// Without the photo the email still reads right: the image tag is only a picture.
+			html: photo
+				? message.html
+				: message.html.replace(/<p[^>]*><img src="cid:shift-photo"[^>]*><\/p>/, ''),
+			text: message.text,
+			attachments: photo
+				? [{ filename: 'shift-start.jpg', content: photo, cid: 'shift-photo' }]
+				: []
+		});
+		log(
+			'info',
+			{ sessionId, to: message.to, subject: message.subject },
+			'location approval email sent'
+		);
+	} catch (err) {
+		log(
+			'error',
+			{ sessionId, to: message.to, error: err.message },
+			'location approval email failed to send'
+		);
+	}
+}

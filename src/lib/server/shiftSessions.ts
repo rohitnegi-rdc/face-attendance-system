@@ -86,15 +86,22 @@ export function shiftEndOpensMessage(remainingMinutes: number) {
 	return `Shift end opens in ${formatWait(remainingMinutes)}.`;
 }
 
-// Pump's End session button: closes its open start without an end photo.
-export async function pumpEndShift(client: PoolClient, pumpId: string, gapMinutes: number) {
+// Pump's End session (API): closes its open start without an end photo. On a 2-gang day
+// (pump gangs) `shiftId` names which open start; without it the newest one, as before.
+export async function pumpEndShift(
+	client: PoolClient,
+	pumpId: string,
+	gapMinutes: number,
+	shiftId: string | null = null
+) {
 	const { rows } = await client.query(
 		`SELECT id, status, EXTRACT(EPOCH FROM (now() - submitted_at)) / 60 AS elapsed_minutes
 		 FROM attendance_sessions
 		 WHERE pump_id = $1 AND session_type = 'morning' AND pairing_status = 'open'
+		   AND ($2::uuid IS NULL OR id = $2::uuid)
 		 ORDER BY submitted_at DESC LIMIT 1
 		 FOR UPDATE`,
-		[pumpId]
+		[pumpId, shiftId]
 	);
 	const start = rows[0];
 	if (!start) throw new ShiftError('There is no open shift to end.');

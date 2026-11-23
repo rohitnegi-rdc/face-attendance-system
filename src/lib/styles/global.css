@@ -213,6 +213,36 @@ img {
 	margin: 0;
 }
 
+/* Two or three views of one list (By pump / By gang): a segmented switch, aria-pressed marks the
+   shown one. */
+.view-toggle,
+.section-header > .view-toggle {
+	display: inline-flex;
+	flex: none;
+	padding: 0.1875rem;
+	background: var(--surface-muted);
+	border: 1px solid var(--brand-mist);
+	border-radius: var(--radius-md);
+}
+.view-toggle button {
+	min-height: 2.25rem;
+	padding: var(--space-1) var(--space-3);
+	color: var(--ink-muted);
+	background: transparent;
+	border: 0;
+	border-radius: calc(var(--radius-md) - 2px);
+	font: inherit;
+	font-size: var(--text-sm);
+	font-weight: 600;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.view-toggle button[aria-pressed='true'] {
+	color: var(--ink-strong);
+	background: var(--brand-white);
+	box-shadow: 0 1px 2px rgb(22 38 37 / 12%);
+}
+
 .surface {
 	background: var(--surface-raised);
 	border: 1px solid var(--brand-mist);

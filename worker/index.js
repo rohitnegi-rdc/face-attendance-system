@@ -8,14 +8,25 @@ import path from 'node:path';
 import {
 	sendAttendanceDigestEmail,
 	sendFraudAlertEmail,
-	sendRegularisationEmail
+	sendRegularisationEmail,
+	sendLocationApprovalEmail
 } from './mailer.js';
 import { sendRegularisationReminders } from './regularisationEmail.js';
+import { sweepLocationHolds } from './locationHold.js';
 import { sendRegularisationPushes } from './regularisationPush.js';
 import { checkRecapture } from './recaptureCheck.js';
 import { pollPumpGps } from './gpsFeed.js';
-import { sendEndReminders } from './endReminders.js';
+import { eveningGapMinutes, sendEndReminders } from './endReminders.js';
 import { sendAttendanceDigests } from './attendanceDigest.js';
+import {
+	correctTap,
+	ensureAreaWorker,
+	gangsForDay,
+	gangsOnForPump,
+	linkNewPerson,
+	sameDayFraudOn,
+	tagGang
+} from './gangs.js';
 import {
 	assignFaces,
 	findCrossPumpMatch,
@@ -381,9 +392,10 @@ async function processJob(job) {
 	const requestId = job.request_id;
 	try {
 		// Phase 1 — fast read-only lookups, no transaction, no lock held.
-		const { rows: sessRows } = await pool.query('SELECT * FROM attendance_sessions WHERE id = $1', [
-			job.session_id
-		]);
+		const { rows: sessRows } = await pool.query(
+			'SELECT *, session_date::text AS session_date_text FROM attendance_sessions WHERE id = $1',
+			[job.session_id]
+		);
 		const session = sessRows[0];
 		if (!session) throw new Error('session not found');
 
@@ -570,10 +582,18 @@ async function processJob(job) {
 			return;
 		}
 
-		const skipFraudCheck = await testModeOn(pool);
-		if (skipFraudCheck) {
+		// The same-day cross-pump check runs only while an admin has its switch on (off by default
+		// since 2026-11-21: gangs move between pumps within an Area) and test mode is off.
+		const testMode = await testModeOn(pool);
+		const skipFraudCheck = testMode || !(await sameDayFraudOn(pool));
+		if (testMode) {
 			log('warn', { requestId, sessionId: session.id }, 'cross-pump fraud check off (test mode)');
 		}
+		// Gangs (worker/gangs.js): only in an Area an admin switched on; otherwise nothing below runs.
+		const gangsOn = await gangsOnForPump(pool, session.pump_id);
+		const multiGang =
+			gangsOn && (await gangsForDay(pool, session.pump_id, session.session_date_text)) > 1;
+		const gapMinutes = multiGang ? await eveningGapMinutes(pool) : 0;
 
 		let matchedPersons, newPersons, fraudFlags;
 		for (let attempt = 0; ; attempt++) {
@@ -584,6 +604,8 @@ async function processJob(job) {
 				matchedPersons = [];
 				newPersons = [];
 				fraudFlags = [];
+				/** @type {Map<string, string>} */
+				const newFaceVectors = new Map();
 				/** @type {{ face: any, vec: string, candidates: { person_id: string, similarity: number }[] }[]} */
 				const localFaces = [];
 
@@ -653,6 +675,25 @@ async function processJob(job) {
 					localFaces.map((local) => local.candidates),
 					FACE_MATCH_THRESHOLD
 				);
+				// Two or more gangs at this pump today: the faces decide which running shift this photo
+				// belongs to, whatever the operator tapped. Done before any attendance is written.
+				if (multiGang) {
+					const matchedIds = assigned
+						.filter(Boolean)
+						.map((/** @type {any} */ m) => String(m.person_id));
+					const fixed = await correctTap(client, session, matchedIds, gapMinutes);
+					if (fixed.moved) {
+						log(
+							'info',
+							{ requestId, sessionId: session.id, moved: fixed.moved },
+							'gang shift corrected by faces'
+						);
+						session.session_type = fixed.session_type;
+						session.session_date = fixed.session_date;
+						session.gang_slot = fixed.gang_slot;
+						session.paired_session_id = fixed.paired_session_id;
+					}
+				}
 				for (const [index, { face, vec }] of localFaces.entries()) {
 					const localMatch = assigned[index];
 					let personId;
@@ -676,6 +717,7 @@ async function processJob(job) {
 							[session.pump_id, Boolean(face.is_operator)]
 						);
 						personId = created[0].id;
+						newFaceVectors.set(personId, vec);
 						isAnchor = true;
 						newPersons.push({ person_id: personId });
 						log('info', { requestId, sessionId: session.id, personId }, 'auto-created new person');
@@ -732,6 +774,26 @@ async function processJob(job) {
 				 DO UPDATE SET ${matchedCol} = true, ${confidenceCol} = $4, updated_at = now()`,
 						[personId, session.pump_id, session.session_date, localMatch?.similarity ?? null]
 					);
+				}
+
+				// Gangs: link this photo's workers across the Area's pumps, then tag the gang.
+				if (gangsOn) {
+					for (const created of newPersons) {
+						const vector = newFaceVectors.get(created.person_id);
+						if (vector) {
+							await linkNewPerson(client, {
+								personId: created.person_id,
+								vector,
+								areaId,
+								pumpId: session.pump_id,
+								threshold: FACE_MATCH_THRESHOLD
+							});
+						}
+					}
+					for (const matched of matchedPersons) {
+						await ensureAreaWorker(client, matched.person_id, areaId);
+					}
+					await tagGang(client, session, areaId);
 				}
 
 				await client.query(
@@ -891,6 +953,17 @@ async function loop() {
 	setInterval(
 		regularisationSweep,
 		Number(process.env.REGULARISATION_POLL_SECONDS || 300) * 1000
+	).unref();
+
+	// Shift starts held by the location check (worker/locationHold.js): cleared on their own when the
+	// pump GPS shows the pump at the photo spot, else the plant managers are asked once the wait is
+	// over. Checked every minute.
+	setInterval(
+		() =>
+			sweepLocationHolds(pool, log, testModeOn, sendLocationApprovalEmail).catch((err) =>
+				log('error', { error: String(err?.message || err) }, 'location hold sweep failed')
+			),
+		Number(process.env.LOCATION_HOLD_POLL_SECONDS || 60) * 1000
 	).unref();
 
 	// Pump GPS positions for the shift start location check (worker/gpsFeed.js).

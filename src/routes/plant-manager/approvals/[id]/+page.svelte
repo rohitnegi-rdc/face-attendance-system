@@ -28,7 +28,10 @@
 		<div class="page-header__copy">
 			<p class="eyebrow">Location approval</p>
 			<h1>{s.pump_code} · {s.plant_name}</h1>
-			<p>Shift {formatDate(s.session_date)} · photo sent {s.sent_at}</p>
+			<p>
+				Shift start
+				{formatDate(s.session_date)} · photo sent {s.sent_at}
+			</p>
 		</div>
 	</header>
 

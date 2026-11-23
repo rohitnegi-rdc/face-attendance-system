@@ -9,6 +9,7 @@
 	isMonitor={data.isMonitor}
 	monitorOnly={data.monitorOnly}
 	businessManagerOnly={data.businessManagerOnly}
+	gangsOn={data.gangsOn}
 	navCounts={data.navCounts}
 >
 	{@render children()}

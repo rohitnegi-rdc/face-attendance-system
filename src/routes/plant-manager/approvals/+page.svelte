@@ -39,6 +39,7 @@
 							<span class="approval-icon"><MapPin size={18} /></span>
 							<span class="approval-copy">
 								<strong>{item.pump_code} · {item.plant_name}</strong>
+
 								<span>{item.reason}</span>
 								<small>Shift {formatDate(item.session_date)} · photo sent {item.sent_at}</small>
 							</span>
@@ -51,6 +52,32 @@
 			<p class="empty">Nothing is waiting. Every shift start was within 100 m of its pump.</p>
 		{/if}
 	</section>
+
+	{#if data.checking.length}
+		<section class="panel" data-testid="pm-location-checking">
+			<h2>Checking pump GPS ({data.checking.length})</h2>
+			<p class="muted">
+				The photo was taken away from the pump. If the pump's GPS shows it at that spot, these clear
+				by themselves. If not, you get an email to approve or reject at the time shown. You can
+				decide now too.
+			</p>
+			<ul class="approval-list approval-list--quiet scroll-box">
+				{#each data.checking as item (item.id)}
+					<li>
+						<a href={resolve('/plant-manager/approvals/[id]', { id: item.id })}>
+							<span class="approval-copy">
+								<strong>{item.pump_code} · {item.plant_name}</strong>
+
+								<span>{item.reason}</span>
+								<small>Photo sent {item.sent_at} · you are asked at {item.ask_at}</small>
+							</span>
+							<span class="button button--secondary">Open</span>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
 
 	{#if data.decided.length}
 		<section class="panel">
@@ -77,9 +104,15 @@
 										class:status-badge--critical={item.location_status === 'rejected'}
 										>{item.location_status === 'approved' ? 'Approved' : 'Rejected'}</span
 									>
-									<small class="muted">{item.decided_by ?? ''} · {item.decided_at}</small>
+									<small class="muted"
+										>{item.auto_cleared ? 'By the pump GPS' : (item.decided_by ?? '')} · {item.decided_at}</small
+									>
 								</td>
-								<td>{item.location_note ?? ''}</td>
+								<td
+									>{item.auto_cleared ? '' : (item.location_note ?? '')}{#if item.auto_cleared}<span
+											class="muted">{item.location_note}</span
+										>{/if}</td
+								>
 							</tr>
 						{/each}
 					</tbody>
@@ -118,6 +151,10 @@
 		background: #fff8e6;
 		border: 1px solid #f0d48a;
 		border-radius: var(--radius-md);
+	}
+	.approval-list--quiet a {
+		background: var(--brand-white);
+		border-color: var(--brand-mist);
 	}
 	.approval-icon {
 		display: grid;
