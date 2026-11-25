@@ -20,7 +20,14 @@
 	import { shiftTypeLabel } from '$lib/shiftLabels';
 	import { showErrorToast } from '$lib/toast.svelte';
 
-	let { data, form, backHref }: { data: any; form: any; backHref: string } = $props();
+	// The back link goes where the page was opened from (plant manager: Pumps today, the pump's day
+	// or Attendance), named after it.
+	let {
+		data,
+		form,
+		backHref,
+		backLabel = 'Attendance'
+	}: { data: any; form: any; backHref: string; backLabel?: string } = $props();
 
 	const STATUS: Record<string, string> = {
 		completed: 'Counted',
@@ -132,7 +139,7 @@
 <div class="page fix-page">
 	<header class="page-header">
 		<div class="page-header__copy">
-			<a class="back-link" href={backHref}><ArrowLeft size={17} /> Attendance</a>
+			<a class="back-link" href={backHref}><ArrowLeft size={17} /> {backLabel}</a>
 			<h1>Fix attendance</h1>
 			<p>
 				<strong>{data.pump.pump_code}</strong> · {formatDate(data.day)} · {data.pump.plant_name} ·

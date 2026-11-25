@@ -50,13 +50,14 @@ export const load: PageServerLoad = async () => {
 			digest_enabled: boolean;
 			location_check: boolean;
 			gangs: boolean;
+			english: boolean;
 			cc: string[];
 			heads: { name: string; email: string }[];
 			managers: { name: string; email: string }[];
 			plant_managers: { name: string; email: string }[];
 		}>(
 			`SELECT a.id, a.name, a.digest_enabled, a.location_check_enabled AS location_check,
-				        a.gangs_enabled AS gangs,
+				        a.gangs_enabled AS gangs, a.pump_english AS english,
 				        COALESCE((SELECT json_agg(c.email ORDER BY c.email) FROM area_digest_cc c
 				                   WHERE c.area_id = a.id), '[]') AS cc,
 				        COALESCE((SELECT json_agg(m ORDER BY m.name) FROM (
@@ -236,6 +237,51 @@ export const actions: Actions = {
 			message: names.length
 				? `Saved. Gangs are on for ${names.join(', ')}.`
 				: 'Saved. No area runs gangs now.'
+		};
+	},
+	// Which Areas' pump screens open in English (areas.pump_english, migration 057); the rest open
+	// in Hindi. A phone where someone tapped EN or हिंदी keeps that choice (pumpLang.svelte.ts).
+	pumpLanguageAreas: async ({ request, locals }) => {
+		const ticked = (await request.formData()).getAll('area').map(String);
+		const adminId = locals.user!.id;
+		const client = await pool.connect();
+		let names: string[];
+		try {
+			await client.query('BEGIN');
+			const { rows: before } = await client.query(
+				'SELECT name FROM areas WHERE pump_english ORDER BY name'
+			);
+			const { rows } = await client.query(
+				`UPDATE areas SET pump_english = (id::text = ANY($1::text[]))
+				 RETURNING name, pump_english`,
+				[ticked]
+			);
+			names = rows
+				.filter((r) => r.pump_english)
+				.map((r) => r.name)
+				.sort();
+			await client.query(
+				`INSERT INTO admin_audit_log (admin_id, action, target_type, details)
+				 VALUES ($1, 'update_pump_language_areas', 'areas', $2)`,
+				[adminId, JSON.stringify({ before: before.map((r) => r.name), after: names })]
+			);
+			await client.query('COMMIT');
+		} catch (saveError) {
+			await client.query('ROLLBACK').catch(() => {});
+			logger.error({ adminId, error: String(saveError) }, 'pump language areas save failed');
+			return fail(500, {
+				formKind: 'pump-language',
+				message: 'Could not save. Nothing was changed.'
+			});
+		} finally {
+			client.release();
+		}
+		return {
+			formKind: 'pump-language',
+			success: true,
+			message: names.length
+				? `Saved. Pump screens open in English for ${names.join(', ')}.`
+				: 'Saved. Every pump screen opens in Hindi now.'
 		};
 	},
 	// The same-day cross-pump fraud check (worker/index.js): off by default since 2026-11-21.

@@ -12,6 +12,8 @@ export type PumpCheck = {
 	vendorName: string;
 	// Pump status that day (pump_day_status): only Active and Idle pumps are on the checklist.
 	workStatus: 'active' | 'idle';
+	// The site typed under the status that morning (pump_day_status.site_name), or null.
+	siteName: string | null;
 	startAt: string | null;
 	endAt: string | null;
 	present: number;
@@ -35,6 +37,7 @@ export function pumpProblems(
 		present: number;
 		total: number;
 		regularisation?: 'pending' | 'approved' | null;
+		workStatus?: 'active' | 'idle';
 	},
 	late: boolean
 ) {
@@ -44,6 +47,9 @@ export function pumpProblems(
 	// An approved missed day is counted without photos; a waiting one is the business manager's to
 	// decide, not a problem for the plant manager.
 	if (!row.startAt && !row.endAt && row.regularisation) return problems;
+	// An Idle pump has no work that day, so no photo is expected (user decision 2026-11-25). Photos
+	// it did send are checked like any other pump's.
+	if (!row.startAt && !row.endAt && row.workStatus === 'idle') return problems;
 	if (!row.startAt && !row.endAt) problems.push('No photo');
 	else if (!row.startAt) problems.push('No start photo');
 	else if (!row.endAt && late) problems.push('No end photo');
@@ -71,11 +77,11 @@ export async function dayChecklist(managerId: string, day: string, late: boolean
 		          WHERE s.pump_id = pu.id AND s.session_date = $2 AND ${countsAsFraud('ff')}) AS fraud,
 		        (SELECT r.status FROM regularisations r WHERE r.pump_id = pu.id AND r.day = $2
 		          AND r.status IN ('pending', 'approved') LIMIT 1) AS reg_status,
-		        st.status AS work_status, pdc.checked_at, pdc.note, coalesce(pm.name, adm.email) AS checked_by
+		        st.status AS work_status, st.site_name, pdc.checked_at, pdc.note, coalesce(pm.name, adm.email) AS checked_by
 		 FROM manager_plants mp JOIN pumps pu ON pu.plant_id = mp.plant_id
 		 JOIN plants pl ON pl.id = pu.plant_id JOIN areas a ON a.id = pl.area_id
 		 JOIN vendors v ON v.id = pu.vendor_id
-		 JOIN LATERAL (SELECT ds.status FROM pump_day_status ds
+		 JOIN LATERAL (SELECT ds.status, ds.site_name FROM pump_day_status ds
 		   WHERE ds.pump_id = pu.id AND ds.day <= $2 ORDER BY ds.day DESC LIMIT 1) st
 		   ON st.status IN ('active', 'idle')
 		 LEFT JOIN pump_day_checks pdc ON pdc.pump_id = pu.id AND pdc.session_date = $2
@@ -92,7 +98,8 @@ export async function dayChecklist(managerId: string, day: string, late: boolean
 			fraud: Number(row.fraud),
 			present: Number(row.present),
 			total: Number(row.total),
-			regularisation: (row.reg_status ?? null) as PumpCheck['regularisation']
+			regularisation: (row.reg_status ?? null) as PumpCheck['regularisation'],
+			workStatus: row.work_status as PumpCheck['workStatus']
 		};
 		return {
 			pumpId: row.id,
@@ -101,6 +108,7 @@ export async function dayChecklist(managerId: string, day: string, late: boolean
 			areaName: row.area_name,
 			vendorName: row.vendor_name,
 			workStatus: row.work_status,
+			siteName: row.site_name ?? null,
 			startAt: row.start_at ? new Date(row.start_at).toISOString() : null,
 			endAt: row.end_at ? new Date(row.end_at).toISOString() : null,
 			present: counts.present,

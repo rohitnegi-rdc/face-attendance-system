@@ -33,6 +33,11 @@ export function formatDateTime(value: string | Date): string {
 	return `${formatDate(value)}, ${formatTime(value)}`;
 }
 
+// "Thu, 22 Oct 2026, 11:16 am", India time: how people read a moment.
+export function formatHumanDateTime(value: string | Date): string {
+	return `${dayjs(value).tz(IST).format('ddd, D MMM YYYY')}, ${formatTime(value)}`;
+}
+
 // "11:16 am", India time.
 export function formatTime(value: string | Date): string {
 	return dayjs(value).tz(IST).format('h:mm a').replace(' ', NBSP);

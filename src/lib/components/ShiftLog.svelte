@@ -37,7 +37,7 @@
 	import AttendanceEvidenceButtons from '$lib/components/AttendanceEvidenceButtons.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import LocationBadge from '$lib/components/LocationBadge.svelte';
-	import { dateKey, formatDate, formatTime, formatWeekday } from '$lib/date';
+	import { dateKey, formatHumanDay, formatTime, formatWeekday } from '$lib/date';
 	import { mapUrl } from '$lib/maps';
 	import { shiftOutcomeLabel } from '$lib/shiftLabels';
 
@@ -52,6 +52,7 @@
 		fraudCaseHref,
 		allowFlag = false,
 		allowRename = false,
+		photosOnLatestDay = false,
 		actions
 	}: {
 		shifts: Shift[];
@@ -63,6 +64,9 @@
 		allowFlag?: boolean;
 		// A name box in the face popup (admin and plant manager).
 		allowRename?: boolean;
+		// The newest day on page 1 shows its group photos and faces on screen (plant manager,
+		// monitor, business manager and head; user 2026-11-25). Older days keep the light chips.
+		photosOnLatestDay?: boolean;
 		actions?: Snippet<[S]>;
 	} = $props();
 
@@ -123,10 +127,11 @@
 	}
 </script>
 
-{#each logDays as group (group.day)}
+{#each logDays as group, groupIndex (group.day)}
+	{@const photos = photosOnLatestDay && page === 1 && groupIndex === 0}
 	<section class="log-day" aria-labelledby="log-day-{group.day}">
 		<h3 class="log-day__title" id="log-day-{group.day}">
-			{formatDate(group.day)}
+			{formatHumanDay(group.day)}
 			<span>{group.shifts.length} {group.shifts.length === 1 ? 'shift' : 'shifts'}</span>
 		</h3>
 		<ol class="shift-list">
@@ -184,6 +189,7 @@
 									{allowFlag}
 									{allowRename}
 									{fraudCaseHref}
+									showPhotos={photos}
 								/>
 								{#if actions}<div class="half__actions">{@render actions(session)}</div>{/if}
 							{:else}

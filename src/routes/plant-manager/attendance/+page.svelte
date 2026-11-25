@@ -1,14 +1,13 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Download from '@lucide/svelte/icons/download';
-	import Search from '@lucide/svelte/icons/search';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import GangHeadcountGrid from '$lib/components/GangHeadcountGrid.svelte';
 	import ShiftLog from '$lib/components/ShiftLog.svelte';
 	import { calendarDays, dateKey, formatDate, todayStr } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
+	import { applyOnChange } from '$lib/liveSearch';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	// By pump (attendance %) or By gang (headcount, each worker once a day); By gang only shows
@@ -25,18 +24,12 @@
 	const pumpChoices = $derived(
 		plant ? data.pumps.filter((p: any) => p.plant_id === plant) : data.pumps
 	);
-	// The Plant and Pump boxes above the session log set the same filter at once, staying at the log.
-	function applyLogFilter() {
-		const params = new URLSearchParams({ from: data.filters.from, to: data.filters.to });
-		if (plant) params.set('plant', plant);
-		if (pump) params.set('pump', pump);
-		goto(`?${params}`, { noScroll: true, keepFocus: true }).then(() =>
-			document.getElementById('session-log-title')?.scrollIntoView({ block: 'start' })
-		);
-	}
+	// Only pumps Active or Idle in the range, or with attendance in it (gridPumps): an Inactive pump
+	// is not a row of zeros.
 	const entities = $derived(
-		data.shownPumps.map((pump: any) => ({ id: pump.id, label: pump.pump_code }))
+		data.gridPumps.map((pump: any) => ({ id: pump.id, label: pump.pump_code }))
 	);
+	const openShifts = $derived(new Set(data.openShifts));
 	// Keeps the date range, the pump and the other list's page when one list pages.
 	function pageUrl(param: 'session_page' | 'roster_page', page: number) {
 		const params = new URLSearchParams({ from: data.filters.from, to: data.filters.to });
@@ -114,7 +107,8 @@
 			</form>
 		</div>
 	</header>
-	<form class="filter-bar compact-filter" method="GET">
+	<!-- Applies as soon as a date or a dropdown is picked, like the rest of the app. -->
+	<form class="filter-bar compact-filter" method="GET" onchange={applyOnChange}>
 		<label class="field"
 			><span>From</span><input type="date" name="from" value={data.filters.from} /></label
 		><label class="field"
@@ -136,9 +130,6 @@
 					>{/each}</select
 			></label
 		>
-		<div class="filter-actions">
-			<button class="button button--primary" type="submit"><Search size={17} /> Apply</button>
-		</div>
 	</form>
 	<section class="section">
 		<div class="section-header">
@@ -170,11 +161,13 @@
 				view={data.gangView}
 				{days}
 				base="plant-manager"
-			/>{:else if data.daily.length}<AttendanceCalendarGrid
+			/>{:else if entities.length}<AttendanceCalendarGrid
 				{days}
 				{entities}
 				mode="percent"
-				cellValue={(entity, day) => lookup.get(`${entity}:${day}`) ?? null}
+				entityLabel="Pump"
+				cellValue={(entity, day) =>
+					openShifts.has(`${entity}:${day}`) ? 'open' : (lookup.get(`${entity}:${day}`) ?? null)}
 			/>{:else}<EmptyState
 				title="No attendance in this range"
 				description="Choose another date range."
@@ -225,33 +218,9 @@
 				<p class="supporting-text">
 					{data.sessionPagination.total}
 					{data.sessionPagination.total === 1 ? 'shift' : 'shifts'} in this range, newest first. Each
-					row is one shift, start photo and end photo side by side. Open a group photo or a worker to
-					see who was counted.
+					row is one shift, start photo and end photo side by side. The newest day shows its photos and
+					faces; tap one to see it big.
 				</p>
-			</div>
-			<div class="log-filter" data-testid="pm-log-filter">
-				{#if data.plants.length > 1}<label class="field"
-						><span>Plant</span><select
-							bind:value={plant}
-							onchange={() => {
-								pump = '';
-								applyLogFilter();
-							}}
-							data-testid="pm-log-plant"
-							><option value="">All plants</option>{#each data.plants as p (p.id)}<option
-									value={p.id}>{p.name}</option
-								>{/each}</select
-						></label
-					>{/if}<label class="field"
-					><span>Pump</span><select
-						bind:value={pump}
-						onchange={applyLogFilter}
-						data-testid="pm-log-pump"
-						><option value="">All pumps</option>{#each pumpChoices as p (p.id)}<option value={p.id}
-								>{p.pump_code}</option
-							>{/each}</select
-					></label
-				>
 			</div>
 		</div>
 		{#if data.shifts.length}
@@ -260,6 +229,7 @@
 				page={data.sessionPagination.page}
 				pageSize={data.sessionPagination.pageSize}
 				allowRename
+				photosOnLatestDay
 				fixHref={(shift, day) =>
 					resolve(`/plant-manager/attendance/correct?pump=${shift.pump_id}&day=${day}`)}
 				fraudCaseHref={(id) => resolve('/plant-manager/approvals/fraud/[id]', { id })}
@@ -285,17 +255,6 @@
 	.log-head {
 		flex-wrap: wrap;
 	}
-	.log-filter {
-		display: flex;
-		flex: 1 1 20rem;
-		max-width: 28rem;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-	.log-filter .field {
-		flex: 1 1 10rem;
-		min-width: 0;
-	}
 	.eyebrow {
 		margin: 0 0 var(--space-1);
 		color: var(--ink-muted);
@@ -309,15 +268,16 @@
 		font-size: var(--text-sm);
 	}
 	.compact-filter {
-		grid-template-columns: repeat(3, minmax(11rem, 16rem)) auto;
+		grid-template-columns: repeat(4, minmax(9rem, 14rem));
 		justify-content: start;
 	}
 	.calendar-frame :global(.grid-wrap) {
 		width: 100%;
 	}
+	/* Phone: From and To side by side, Plant and Pump below, instead of four stacked rows. */
 	@media (max-width: 38rem) {
 		.compact-filter {
-			grid-template-columns: 1fr;
+			grid-template-columns: 1fr 1fr;
 		}
 	}
 </style>

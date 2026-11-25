@@ -4,6 +4,6 @@
 	let { data, children } = $props();
 </script>
 
-<PumpShell userEmail={data.user?.email} guideDone={data.guideDone}>
+<PumpShell userEmail={data.user?.email} guideDone={data.guideDone} english={data.english}>
 	{@render children()}
 </PumpShell>

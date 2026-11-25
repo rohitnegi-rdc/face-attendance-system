@@ -35,7 +35,7 @@
 			<li>
 				<a
 					class="pump-row"
-					class:pump-row--none={pump.total === 0}
+					class:pump-row--none={pump.total === 0 && pump.workStatus === 'active'}
 					class:pump-row--fraud={pump.fraud > 0}
 					href={resolve('/admin/pumps/[id]', { id: pump.id })}
 					data-testid="pump-today-row"
@@ -116,7 +116,8 @@
 	.pump-row:hover {
 		background: var(--surface-subtle);
 	}
-	/* Light red: nobody counted at this pump today (same rule as the 9 am email's red row). */
+	/* Light red: an Active pump with nobody counted today (same rule as the 9 am email's red row).
+	   An Idle pump has no work that day, so it is never red for that (user decision 2026-11-25). */
 	.pump-row--none,
 	.pump-row--none:hover {
 		background: var(--alert-tint);

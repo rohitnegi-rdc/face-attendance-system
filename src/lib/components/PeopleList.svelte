@@ -2,11 +2,11 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import Pencil from '@lucide/svelte/icons/pencil';
-	import Search from '@lucide/svelte/icons/search';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import FacePeek from '$lib/components/FacePeek.svelte';
 	import { formatDate } from '$lib/date';
-	import { personDisplayLabel } from '$lib/personLabel';
+	import { personShortLabel } from '$lib/personLabel';
+	import { applyOnSelect } from '$lib/liveSearch';
 	// The People list of the vendor and the plant manager: one row per active worker, with an
 	// inline name correction (the page's ?/rename action, personNames.ts).
 	let { data, form, eyebrow, intro }: { data: any; form: any; eyebrow: string; intro: string } =
@@ -24,7 +24,7 @@
 			<p>{intro}</p>
 		</div>
 	</header>
-	<form class="filter-bar compact-filter" method="GET">
+	<form class="filter-bar compact-filter" method="GET" onchange={applyOnSelect}>
 		<label class="field"
 			><span>Pump</span><select name="pump"
 				><option value="">All pumps</option>{#each data.pumps as pump}<option
@@ -33,9 +33,6 @@
 					>{/each}</select
 			></label
 		>
-		<div class="filter-actions">
-			<button class="button button--primary" type="submit"><Search size={17} /> Apply</button>
-		</div>
 	</form>
 	<section class="section">
 		{#if data.persons.length}
@@ -48,12 +45,8 @@
 						></thead
 					><tbody
 						>{#each data.persons as person (person.id)}
-							{@const label = personDisplayLabel(
-								person.pump_code,
-								person.display_seq,
-								person.is_operator,
-								person.name
-							)}
+							<!-- The pump has its own column: the name and number only ("Jose (#5)"). -->
+							{@const label = personShortLabel(person.display_seq, person.is_operator, person.name)}
 							<tr
 								><td>
 									{#if editing === person.id}

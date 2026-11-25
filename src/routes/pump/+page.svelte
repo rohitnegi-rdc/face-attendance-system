@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { onDestroy, onMount, tick } from 'svelte';
 	import Camera from '@lucide/svelte/icons/camera';
+	import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
 	import Check from '@lucide/svelte/icons/check';
 	import Clock from '@lucide/svelte/icons/clock';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -25,7 +26,7 @@
 		todayStr
 	} from '$lib/date';
 	import { askForPosition } from '$lib/pumpLocation';
-	import { personDisplayLabel } from '$lib/personLabel';
+	import { personShortLabel } from '$lib/personLabel';
 	import { t, tLabel } from '$lib/pumpLang.svelte';
 	import { showErrorToast, toastConnectionLost, toastIfServerError } from '$lib/toast.svelte';
 
@@ -54,9 +55,7 @@
 	}
 
 	function workerLabel(person: WorkerResult) {
-		return tLabel(
-			personDisplayLabel(person.pump_code, person.display_seq, person.is_operator, person.name)
-		);
+		return tLabel(personShortLabel(person.display_seq, person.is_operator, person.name));
 	}
 	type WorkerPreview = WorkerResult & {
 		group: 'matched' | 'new' | 'held' | 'guest';
@@ -134,6 +133,13 @@
 	const chosenGang = $derived(
 		gangOptions.includes(gangChoice) ? gangChoice : gangOptions.length === 1 ? gangOptions[0] : ''
 	);
+	// Once the operator taps a gang, only that gang stays on screen (user, 2026-11-25: after
+	// choosing, the operator should see only their gang and not be distracted by the others).
+	// "Change gang" brings the full list back.
+	const gangLocked = $derived(gangChoice !== '' && chosenGang === gangChoice);
+	// On a 2-gang day the photo steps stay hidden until a gang is picked (user, 2026-11-25): the
+	// operator first finds their gang, then takes the operator and group photos.
+	const gangFirst = $derived(multiGang && status === 'idle' && !chosenGang);
 	// Shift details follow the picked gang card (user, 2026-11-23): a running gang shows its own
 	// start and "end"; "New gang" shows no start and "start". Nothing picked: the day's details.
 	const pickedGangShift = $derived(gangShifts.find((shift) => shift.id === chosenGang) ?? null);
@@ -370,6 +376,7 @@
 		currentSessionId = '';
 		retryingSession = false;
 		approvingReview = false;
+		gangChoice = '';
 		cameraCaptureError = '';
 		status = 'idle';
 		stopCameraCapture();
@@ -403,7 +410,9 @@
 				audio: false
 			});
 			cameraCaptureActive = true;
-			await refreshCameraSwitchAvailability();
+			// Only decides whether the switch-camera button shows: never wait on it, a browser whose
+			// device list never answers must still get its preview.
+			void refreshCameraSwitchAvailability().catch(() => {});
 			const [track] = cameraStream.getVideoTracks();
 			track?.addEventListener('ended', () => {
 				cameraStream = null;
@@ -874,75 +883,80 @@
 						<!-- Operators choose by picture, not by reading: each running shift shows the group
 						     photo taken at its start (big) and its workers' faces; the number on the photo is
 						     the gang. The text under it only helps. -->
-						<legend>{t('Find your gang in the photos')}</legend>
+						<legend>{gangLocked ? t('Your gang') : t('Find your gang in the photos')}</legend>
 						{#each gangShifts as shift, index (shift.id)}
-							{@const label = shift.gang_code
-								? t('Gang {code}', { code: shift.gang_code })
-								: t('Shift {n}', { n: index + 1 })}
-							<label
-								class="gang-card"
-								class:gang-card--chosen={chosenGang === shift.id}
-								class:gang-card--waiting={!shift.end_open}
-								data-testid="gang-shift"
-							>
-								<input
-									class="gang-radio"
-									type="radio"
-									name="gang"
-									value={shift.id}
-									checked={chosenGang === shift.id}
-									disabled={!shift.end_open}
-									onchange={() => (gangChoice = shift.id)}
-								/>
-								<span class="gang-photo">
-									{#if !brokenGangPhotos.includes(shift.id)}
-										<img
-											src={resolve(`/api/attendance/photo/${shift.id}`)}
-											alt={t('Start photo of {gang}', { gang: label })}
-											data-testid="gang-start-photo"
-											onerror={() => (brokenGangPhotos = [...brokenGangPhotos, shift.id])}
-										/>
-									{:else}
-										<span class="gang-photo-missing" aria-hidden="true"><Users size={40} /></span>
-									{/if}
-									<span class="gang-number" aria-hidden="true">{shift.gang_code ?? index + 1}</span>
-									{#if chosenGang === shift.id}
-										<span class="gang-tick" aria-hidden="true"
-											><Check size={22} strokeWidth={3} /></span
+							{#if !gangLocked || chosenGang === shift.id}
+								{@const label = shift.gang_code
+									? t('Gang {code}', { code: shift.gang_code })
+									: t('Shift {n}', { n: index + 1 })}
+								<label
+									class="gang-card"
+									class:gang-card--chosen={chosenGang === shift.id}
+									class:gang-card--waiting={!shift.end_open}
+									data-testid="gang-shift"
+								>
+									<input
+										class="gang-radio"
+										type="radio"
+										name="gang"
+										value={shift.id}
+										checked={chosenGang === shift.id}
+										disabled={!shift.end_open}
+										onchange={() => (gangChoice = shift.id)}
+									/>
+									<span class="gang-photo">
+										{#if !brokenGangPhotos.includes(shift.id)}
+											<img
+												src={resolve(`/api/attendance/photo/${shift.id}`)}
+												alt={t('Start photo of {gang}', { gang: label })}
+												data-testid="gang-start-photo"
+												onerror={() => (brokenGangPhotos = [...brokenGangPhotos, shift.id])}
+											/>
+										{:else}
+											<span class="gang-photo-missing" aria-hidden="true"><Users size={40} /></span>
+										{/if}
+										<span class="gang-number" aria-hidden="true"
+											>{shift.gang_code ?? index + 1}</span
 										>
-									{/if}
-									{#if !shift.end_open}
-										<span class="gang-wait-chip">
-											<Clock size={16} />
-											{formatTime(shift.next_allowed_at)}
+										{#if chosenGang === shift.id}
+											<span class="gang-tick" aria-hidden="true"
+												><Check size={22} strokeWidth={3} /></span
+											>
+										{/if}
+										{#if !shift.end_open}
+											<span class="gang-wait-chip">
+												<Clock size={16} />
+												{formatTime(shift.next_allowed_at)}
+											</span>
+										{/if}
+									</span>
+									{#if shift.faces.length}
+										<span class="gang-faces" aria-hidden="true">
+											{#each shift.faces as face (face)}
+												<img
+													src={resolve(`/api/attendance/face/${face}`)}
+													alt=""
+													loading="lazy"
+													data-testid="gang-face"
+												/>
+											{/each}
 										</span>
 									{/if}
-								</span>
-								{#if shift.faces.length}
-									<span class="gang-faces" aria-hidden="true">
-										{#each shift.faces as face (face)}
-											<img
-												src={resolve(`/api/attendance/face/${face}`)}
-												alt=""
-												loading="lazy"
-												data-testid="gang-face"
-											/>
-										{/each}
+									<span class="gang-text">
+										<strong>{label} · {t('{n} people', { n: shift.people })}</strong>
+										<small
+											>{t('Running since {time}', { time: formatIST(shift.submitted_at) })}</small
+										>
+										<small class:gang-open={shift.end_open}
+											>{shift.end_open
+												? t('End this shift')
+												: t('End after {time}', { time: formatIST(shift.next_allowed_at) })}</small
+										>
 									</span>
-								{/if}
-								<span class="gang-text">
-									<strong>{label} · {t('{n} people', { n: shift.people })}</strong>
-									<small>{t('Running since {time}', { time: formatIST(shift.submitted_at) })}</small
-									>
-									<small class:gang-open={shift.end_open}
-										>{shift.end_open
-											? t('End this shift')
-											: t('End after {time}', { time: formatIST(shift.next_allowed_at) })}</small
-									>
-								</span>
-							</label>
+								</label>
+							{/if}
 						{/each}
-						{#if today?.can_start_gang}
+						{#if today?.can_start_gang && (!gangLocked || chosenGang === 'new')}
 							<label
 								class="gang-card gang-card--new"
 								class:gang-card--chosen={chosenGang === 'new'}
@@ -968,96 +982,119 @@
 								{/if}
 							</label>
 						{/if}
-					</fieldset>
-				{/if}
-				<div class="section-heading">
-					<div>
-						<h2 id="photo-heading">{t('Pump Operator photo')}</h2>
-						<p>
-							{t('Only the Pump Operator, face clearly visible. Needed with every shift photo.')}
-						</p>
-					</div>
-				</div>
-
-				<div data-testid="operator-photo">
-					{#if operatorPreviewUrl}
-						<div class="photo-preview operator-preview">
-							<img src={operatorPreviewUrl} alt="Selected Pump Operator" />
-							{#if status === 'submitting' || status === 'processing'}
-								<div class="processing-overlay" aria-hidden="true">
-									<LoaderCircle class="spin" size={30} />
-								</div>
-							{/if}
-						</div>
-						{#if status === 'idle'}
-							<button class="button button--secondary" type="button" onclick={startOperatorCamera}>
-								<Camera size={18} />
-								{t('Retake Pump Operator photo')}
+						{#if gangLocked}
+							<button
+								class="button button--secondary gang-change"
+								type="button"
+								data-testid="gang-change"
+								onclick={() => (gangChoice = '')}
+							>
+								<ArrowLeftRight size={22} />
+								{t('Change gang')}
 							</button>
 						{/if}
-					{:else if cameraCaptureActive && captureTarget === 'operator'}
-						{@render cameraCapturePanel(
-							t('Only the Pump Operator, face clearly visible.'),
-							t('Hold the phone at face height in good light.')
-						)}
-					{:else}
-						<div class="capture-empty operator-empty">
-							<span class="capture-icon"><UserRound size={30} strokeWidth={1.6} /></span>
-							<div class="capture-choices">
-								<button class="button button--primary" type="button" onclick={startOperatorCamera}>
-									<Camera size={18} />
-									{t('Take Pump Operator photo')}
-								</button>
-							</div>
-							{#if cameraCaptureError}<p class="capture-error">{t(cameraCaptureError)}</p>{/if}
+					</fieldset>
+				{/if}
+				{#if !gangFirst}
+					<div class="section-heading">
+						<div>
+							<h2 id="photo-heading">{t('Pump Operator photo')}</h2>
+							<p>
+								{t('Only the Pump Operator, face clearly visible. Needed with every shift photo.')}
+							</p>
 						</div>
-					{/if}
-				</div>
+					</div>
 
-				{#if operatorPreviewUrl}
-					<div class="second-step" data-testid="group-photo">
-						<div class="section-heading">
-							<div>
-								<h2>{t('Pump Members photo')}</h2>
-								<p>
-									{t('Every Pump Member in the photo, every face clear and inside the frame.')}
-									{t('Stand where all Pump Members are in good light and facing the camera.')}
-								</p>
-							</div>
-						</div>
-						{#if previewUrl}
-							<div class="photo-preview">
-								<img src={previewUrl} alt="Selected group attendance preview" />
+					<div data-testid="operator-photo">
+						{#if operatorPreviewUrl}
+							<div class="photo-preview operator-preview">
+								<img src={operatorPreviewUrl} alt="Selected Pump Operator" />
 								{#if status === 'submitting' || status === 'processing'}
 									<div class="processing-overlay" aria-hidden="true">
 										<LoaderCircle class="spin" size={30} />
 									</div>
 								{/if}
 							</div>
-							<div class="photo-meta">
-								<span>{selectedFile?.name}</span>
-								<span
-									>{selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB` : ''}</span
+							{#if status === 'idle'}
+								<button
+									class="button button--secondary"
+									type="button"
+									onclick={startOperatorCamera}
 								>
-							</div>
-						{:else if cameraCaptureActive && captureTarget === 'group'}
+									<Camera size={18} />
+									{t('Retake Pump Operator photo')}
+								</button>
+							{/if}
+						{:else if cameraCaptureActive && captureTarget === 'operator'}
 							{@render cameraCapturePanel(
-								t('Keep all Pump Members inside the frame.'),
-								t('Every Pump Member must be visible before you take the photo.')
+								t('Only the Pump Operator, face clearly visible.'),
+								t('Hold the phone at face height in good light.')
 							)}
 						{:else}
-							<div class="capture-empty">
-								<span class="capture-icon"><Users size={34} strokeWidth={1.6} /></span>
+							<div class="capture-empty operator-empty">
+								<span class="capture-icon"><UserRound size={30} strokeWidth={1.6} /></span>
 								<div class="capture-choices">
-									<button class="button button--primary" type="button" onclick={startGroupCamera}>
+									<button
+										class="button button--primary"
+										type="button"
+										onclick={startOperatorCamera}
+									>
 										<Camera size={18} />
-										{t('Take Pump Members photo')}
+										{t('Take Pump Operator photo')}
 									</button>
 								</div>
 								{#if cameraCaptureError}<p class="capture-error">{t(cameraCaptureError)}</p>{/if}
 							</div>
 						{/if}
 					</div>
+
+					{#if operatorPreviewUrl}
+						<div class="second-step" data-testid="group-photo">
+							<div class="section-heading">
+								<div>
+									<h2>{t('Pump Members photo')}</h2>
+									<p>
+										{t('Every Pump Member in the photo, every face clear and inside the frame.')}
+										{t('Stand where all Pump Members are in good light and facing the camera.')}
+									</p>
+								</div>
+							</div>
+							{#if previewUrl}
+								<div class="photo-preview">
+									<img src={previewUrl} alt="Selected group attendance preview" />
+									{#if status === 'submitting' || status === 'processing'}
+										<div class="processing-overlay" aria-hidden="true">
+											<LoaderCircle class="spin" size={30} />
+										</div>
+									{/if}
+								</div>
+								<div class="photo-meta">
+									<span>{selectedFile?.name}</span>
+									<span
+										>{selectedFile
+											? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB`
+											: ''}</span
+									>
+								</div>
+							{:else if cameraCaptureActive && captureTarget === 'group'}
+								{@render cameraCapturePanel(
+									t('Keep all Pump Members inside the frame.'),
+									t('Every Pump Member must be visible before you take the photo.')
+								)}
+							{:else}
+								<div class="capture-empty">
+									<span class="capture-icon"><Users size={34} strokeWidth={1.6} /></span>
+									<div class="capture-choices">
+										<button class="button button--primary" type="button" onclick={startGroupCamera}>
+											<Camera size={18} />
+											{t('Take Pump Members photo')}
+										</button>
+									</div>
+									{#if cameraCaptureError}<p class="capture-error">{t(cameraCaptureError)}</p>{/if}
+								</div>
+							{/if}
+						</div>
+					{/if}
 				{/if}
 			</section>
 		{/if}
@@ -1626,6 +1663,12 @@
 		margin: 0 0 var(--space-5);
 		padding: 0;
 		border: 0;
+	}
+	.gang-change {
+		justify-self: stretch;
+		min-height: 3.25rem;
+		gap: var(--space-2);
+		font-size: var(--text-lg);
 	}
 	.gang-picker legend {
 		margin-bottom: var(--space-2);

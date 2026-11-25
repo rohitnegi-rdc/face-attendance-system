@@ -18,16 +18,18 @@ test('ADM-14 Area and Plant list only Active and Idle pumps, with their status',
 }) => {
 	const admin = await createAdmin();
 	const { areaId, plantId } = await createArea();
-	const [active, idle, wentInactive, noStatus, fromTomorrow] = await Promise.all(
-		Array.from({ length: 5 }, () => createPump(plantId))
+	const [active, idle, wentInactive, noStatus, fromTomorrow, empty] = await Promise.all(
+		Array.from({ length: 6 }, () => createPump(plantId))
 	);
+	await setStatus(empty.id, daysAgo(0), 'active', admin.id);
 	// Set days ago and held since: a status lasts until the next change.
 	await setStatus(active.id, daysAgo(5), 'active', admin.id);
 	await setStatus(idle.id, daysAgo(0), 'idle', admin.id);
 	await setStatus(wentInactive.id, daysAgo(5), 'active', admin.id);
 	await setStatus(wentInactive.id, daysAgo(1), 'inactive', admin.id);
 	await setStatus(fromTomorrow.id, daysAgo(-1), 'active', admin.id);
-	// The Active pump has one worker counted today; the Idle one has nobody (light red row).
+	// `active` has one worker counted today; `empty` (Active) has nobody: a light red row. The Idle
+	// pump has nobody either but no work, so it is not red (user decision 2026-11-25).
 	const { rows: person } = await db.query(
 		`INSERT INTO persons (pump_id, display_seq, name) VALUES ($1, 1, 'Crew 1') RETURNING id`,
 		[active.id]
@@ -44,7 +46,7 @@ test('ADM-14 Area and Plant list only Active and Idle pumps, with their status',
 	for (const path of [`/admin/areas/${areaId}`, `/admin/plants/${plantId}`]) {
 		await page.goto(path);
 		const rows = page.getByTestId('pump-today-row');
-		await expect(rows).toHaveCount(2);
+		await expect(rows).toHaveCount(3);
 		await expect(rows.filter({ hasText: active.code })).toHaveAttribute('data-status', 'active');
 		await expect(rows.filter({ hasText: active.code })).toContainText('Active');
 		await expect(rows.filter({ hasText: idle.code })).toHaveAttribute('data-status', 'idle');
@@ -53,7 +55,8 @@ test('ADM-14 Area and Plant list only Active and Idle pumps, with their status',
 		await expect(rows.filter({ hasText: idle.code })).toHaveAttribute('data-attendance', 'none');
 		const tint = (code: string) =>
 			rows.filter({ hasText: code }).evaluate((el) => getComputedStyle(el).backgroundColor);
-		expect(await tint(idle.code)).toBe('rgb(253, 236, 234)');
+		expect(await tint(empty.code)).toBe('rgb(253, 236, 234)');
+		expect(await tint(idle.code)).not.toBe('rgb(253, 236, 234)');
 		expect(await tint(active.code)).not.toBe('rgb(253, 236, 234)');
 		for (const hidden of [wentInactive, noStatus, fromTomorrow]) {
 			await expect(rows.filter({ hasText: hidden.code })).toHaveCount(0);

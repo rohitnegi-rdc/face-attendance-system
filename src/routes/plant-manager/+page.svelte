@@ -6,10 +6,11 @@
 	import { resolve } from '$app/paths';
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import Eye from '@lucide/svelte/icons/eye';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { PUMP_WORK_STATUS_LABELS } from '$lib/pumpWorkStatus';
-	import { formatDate, formatTime } from '$lib/date';
+	import { formatHumanDay, formatTime } from '$lib/date';
 	import type { PumpCheck } from '$lib/server/pumpChecks';
 
 	let { data, form } = $props();
@@ -54,13 +55,20 @@
 		if (pump.regularisation === 'approved')
 			return `Regularised, ${pump.total} ${pump.total === 1 ? 'worker' : 'workers'} counted`;
 		if (pump.startAt && !pump.endAt) return `Started ${formatTime(pump.startAt)}, shift still on`;
+		if (!pump.startAt && !pump.endAt && pump.workStatus === 'idle') return 'Idle, no work';
 		return `Full shift, all ${pump.total} ${pump.total === 1 ? 'worker' : 'workers'} counted`;
 	}
 
 	const dayLink = (day: string) =>
 		resolve('/plant-manager') + (day === data.today ? '' : `?day=${day}`);
+	// Fix attendance and the pump's day both come back here (?from=overview / their back link).
 	const fixLink = (pumpId: string) =>
-		resolve('/plant-manager/attendance/correct') + `?pump=${pumpId}&day=${data.day}`;
+		resolve('/plant-manager/attendance/correct') + `?pump=${pumpId}&day=${data.day}&from=overview`;
+	const viewLink = (pumpId: string) =>
+		resolve('/plant-manager/pumps/[id]', { id: pumpId }) +
+		(data.day === data.today ? '' : `?day=${data.day}`);
+	// Light red only for an Active pump with nobody counted: an Idle pump has no work that day.
+	const noneCounted = (pump: PumpCheck) => pump.total === 0 && pump.workStatus === 'active';
 	const keep =
 		() =>
 		async ({ update }: { update: (o?: { reset?: boolean }) => Promise<void> }) =>
@@ -77,7 +85,7 @@
 			<a href={dayLink(data.yesterday)} aria-current={!isToday ? 'page' : undefined}>Yesterday</a>
 		</nav>
 	</header>
-	<p class="date">{formatDate(data.day)}</p>
+	<p class="date">{formatHumanDay(data.day)}</p>
 
 	{#if !data.pumps.length}
 		<EmptyState
@@ -92,14 +100,15 @@
 				<h2>{group.title} <span>{group.pumps.length}</span></h2>
 				{#if group.key === 'todo'}
 					<p class="hint">
-						Tap a pump to fix its attendance. Press Done when you have dealt with it.
+						Tap a pump to fix its attendance, or View attendance to see its photos and workers.
+						Press Done when you have dealt with it.
 					</p>
 				{/if}
 				<ul>
 					{#each group.pumps as pump (pump.pumpId)}
 						<li
 							class="pump"
-							class:pump--none={pump.total === 0}
+							class:pump--none={noneCounted(pump)}
 							class:pump--fraud={pump.fraud > 0}
 							data-testid="checklist-pump"
 							data-status={pump.workStatus}
@@ -114,7 +123,11 @@
 											label={PUMP_WORK_STATUS_LABELS[pump.workStatus]}
 										/></span
 									>
-									<small>{pump.plantName}</small>
+									<small
+										>{pump.plantName}{#if pump.siteName}<span data-testid="checklist-site">
+												· Site: {pump.siteName}</span
+											>{/if}</small
+									>
 									<span class="pump__says" class:pump__says--fraud={pump.fraud > 0}
 										>{says(pump)}</span
 									>
@@ -124,21 +137,26 @@
 								</span>
 								<ChevronRight size={18} />
 							</a>
-							{#if group.key === 'todo'}
-								<form method="POST" action="?/check" use:enhance={keep}>
-									<input type="hidden" name="pump_id" value={pump.pumpId} />
-									<input type="hidden" name="day" value={data.day} />
-									<button class="done" type="submit" data-testid="checklist-check"
-										><Check size={16} /> Done</button
-									>
-								</form>
-							{:else if group.key === 'checked'}
-								<form method="POST" action="?/uncheck" use:enhance={keep}>
-									<input type="hidden" name="pump_id" value={pump.pumpId} />
-									<input type="hidden" name="day" value={data.day} />
-									<button class="undo" type="submit">Undo</button>
-								</form>
-							{/if}
+							<div class="pump__actions">
+								<a class="view" href={viewLink(pump.pumpId)} data-testid="checklist-view"
+									><Eye size={16} /> View attendance</a
+								>
+								{#if group.key === 'todo'}
+									<form method="POST" action="?/check" use:enhance={keep}>
+										<input type="hidden" name="pump_id" value={pump.pumpId} />
+										<input type="hidden" name="day" value={data.day} />
+										<button class="done" type="submit" data-testid="checklist-check"
+											><Check size={16} /> Done</button
+										>
+									</form>
+								{:else if group.key === 'checked'}
+									<form method="POST" action="?/uncheck" use:enhance={keep}>
+										<input type="hidden" name="pump_id" value={pump.pumpId} />
+										<input type="hidden" name="day" value={data.day} />
+										<button class="undo" type="submit">Undo</button>
+									</form>
+								{/if}
+							</div>
 							{#if form?.pumpId === pump.pumpId && form?.error}
 								<p class="row-error" role="alert">{form.error}</p>
 							{/if}
@@ -289,6 +307,35 @@
 		color: var(--brand-teal);
 		font-size: var(--text-xs);
 		font-weight: 600;
+	}
+	/* View attendance on every pump; Done or Undo at the right end of the same row. */
+	.pump__actions {
+		display: flex;
+		flex: 1 1 100%;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2);
+		margin-top: calc(-1 * var(--space-2));
+		padding: 0 0 var(--space-3) var(--space-3);
+	}
+	.pump__actions form {
+		margin-left: auto;
+	}
+	.view {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
+		min-height: 2.5rem;
+		padding: 0 var(--space-3);
+		color: var(--ink-strong);
+		font-weight: 600;
+		text-decoration: none;
+		background: var(--surface-raised);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+	}
+	.view:hover {
+		border-color: var(--brand-teal);
 	}
 	.done,
 	.undo {

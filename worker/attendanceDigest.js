@@ -116,6 +116,8 @@ export async function digestPumps(db, day, areaId) {
 		            AND (m.morning_matched OR m.evening_matched)) AS mtd_workers,
 		        (SELECT ds.site_name FROM pump_day_status ds WHERE ds.pump_id = pu.id AND ds.day <= $1
 		          ORDER BY ds.day DESC LIMIT 1) AS site_name,
+		        (SELECT ds.status FROM pump_day_status ds WHERE ds.pump_id = pu.id AND ds.day <= $1
+		          ORDER BY ds.day DESC LIMIT 1) AS work_status,
 		        (SELECT min(s.submitted_at) FROM attendance_sessions s WHERE s.pump_id = pu.id
 		          AND s.session_date = $1 AND s.session_type = 'morning' AND s.status <> 'failed') AS start_at,
 		        (SELECT max(s.submitted_at) FROM attendance_sessions s WHERE s.pump_id = pu.id

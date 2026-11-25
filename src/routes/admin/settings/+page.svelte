@@ -44,6 +44,12 @@
 	const gangOrder = $derived(
 		[...data.digestAreas].sort((a, b) => Number(b.gangs) - Number(a.gangs))
 	);
+	const englishOrder = $derived(
+		[...data.digestAreas].sort((a, b) => Number(b.english) - Number(a.english))
+	);
+	const englishAreas = $derived(
+		data.digestAreas.filter((area) => area.english).map((area) => area.name)
+	);
 	const gangAreas = $derived(
 		data.digestAreas.filter((area) => area.gangs).map((area) => area.name)
 	);
@@ -163,8 +169,8 @@
 		<h2 id="digest-heading">Daily attendance email</h2>
 		<p class="supporting-text">
 			Every morning at 9 am, one email per ticked area with the attendance of the day before: full
-			shift, start only and end only for every Active and Idle pump (set at Pump status), a pump
-			with no one counted in red, and each missed day request with its reason and where it stands.
+			shift, start only and end only for every Active and Idle pump (set at Pump status), an Active
+			pump with no one counted in red (an Idle pump has no work, so it is not), and each missed day request with its reason and where it stands.
 			It goes to the admins and the area's monitors, with a copy to everyone on the global CC, the
 			area's own CC, and the business heads, business managers and plant managers of its plants, and
 			no one else. It also counts, per plant manager, the shift starts sent away from the pump that
@@ -473,6 +479,45 @@
 			<button type="submit" class="button button--secondary" data-testid="same-day-fraud-toggle">
 				{data.sameDayFraudOn ? 'Turn the fraud check off' : 'Turn the fraud check on'}
 			</button>
+		</form>
+	</section>
+
+	<section
+		class="surface surface--padded section"
+		aria-labelledby="pump-language-heading"
+		data-testid="pump-language-section"
+	>
+		<h2 id="pump-language-heading">Pump screen language</h2>
+		<p class="supporting-text">
+			Pump screens open in Hindi. In a ticked area they open in English instead. The operator can
+			still switch with the EN / हिंदी button, and that phone keeps the choice.
+		</p>
+		{#if form?.formKind === 'pump-language' && form?.message}
+			<p class:alert--error={!form.success} class="alert" role="status">{form.message}</p>
+		{/if}
+		<form
+			method="POST"
+			action="?/pumpLanguageAreas"
+			class="digest-form"
+			data-testid="pump-language-areas"
+			use:enhance
+		>
+			<fieldset class="area-picks">
+				<legend>Open pump screens in English in these areas</legend>
+				<div class="area-list">
+					{#each englishOrder as area (area.id)}
+						<label class="area-pick"
+							><input type="checkbox" name="area" value={area.id} checked={area.english} />
+							{area.name}</label
+						>
+					{/each}
+				</div>
+			</fieldset>
+			<p class="supporting-text" data-testid="pump-language-now">
+				{#if englishAreas.length}English for: <strong>{englishAreas.join(', ')}</strong>. Every
+					other area opens in Hindi.{:else}<strong>Every pump screen opens in Hindi.</strong>{/if}
+			</p>
+			<button type="submit" class="button button--primary">Save areas</button>
 		</form>
 	</section>
 

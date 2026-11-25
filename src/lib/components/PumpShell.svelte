@@ -13,16 +13,22 @@
 	let {
 		userEmail = '',
 		guideDone = true,
+		english = false,
 		children
 	} = $props<{
 		userEmail?: string;
 		guideDone?: boolean;
+		english?: boolean;
 		children: import('svelte').Snippet;
 	}>();
 
 	// The guide opens by itself until the pump closes or finishes it once; after that only the
 	// Help button opens it. The page load decides; later changes are local.
 	const startedDone = untrack(() => guideDone);
+	// The Area's language is used from the first paint (server and browser agree); a choice saved
+	// on this phone is applied once the page runs in the browser.
+	const areaHindi = untrack(() => !english);
+	pumpLang.hindi = areaHindi;
 	let guideFinished = $state(startedDone);
 	let guideOpen = $state(!startedDone);
 	// A phone that has not answered about reminders sees the Enable notifications sheet first
@@ -33,7 +39,7 @@
 	const guideShown = $derived(decided && guideOpen && !remindersHold);
 
 	onMount(async () => {
-		loadPumpLang();
+		loadPumpLang(areaHindi);
 		await tick();
 		decided = true;
 	});

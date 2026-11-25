@@ -8,7 +8,7 @@
 	// horizontally-scrollable columns. `entities` is an array of { id, label, faceUrl? }, rendered
 	// as rows; worker rows pass faceUrl so the face shows beside the name. `cellValue(entityId, day)` returns either a status string
 	// ('present'|'morning_only'|'evening_only'|'absent') or a number 0-100 (attendance %)
-	// when `mode === 'percent'`, or a headcount when `mode === 'count'` (gangs). `heldCell` marks a
+	// when `mode === 'percent'` ('open' there: a shift still on, shown as "Shift on"), or a headcount when `mode === 'count'` (gangs). `heldCell` marks a
 	// day waiting for or refused a location approval (amber, left out of totals); `href` links a row.
 	let {
 		days = [],
@@ -38,6 +38,7 @@
 	function statusClass(v: string | number | null): string {
 		if (mode === 'count') return typeof v === 'number' ? 'pct-mid' : 'pct-none';
 		if (mode === 'percent') {
+			if (v === 'open') return 'pct-open';
 			const pct = typeof v === 'number' ? v : 0;
 			if (pct >= 90) return 'pct-high';
 			if (pct >= 70) return 'pct-mid';
@@ -58,6 +59,7 @@
 
 	function cellLabel(v: string | number | null): string {
 		if (mode === 'count') return typeof v === 'number' ? String(v) : '-';
+		if (mode === 'percent' && v === 'open') return 'Shift on';
 		if (mode === 'percent') return typeof v === 'number' ? `${v}%` : '-';
 		if (v === 'present') return 'P';
 		if (v === 'morning_only') return 'M';
@@ -68,6 +70,7 @@
 	function accessibleCellLabel(entity: string, day: string, v: string | number | null): string {
 		if (mode === 'count')
 			return `${entity}, ${formatDate(day)}: ${typeof v === 'number' ? `${v} people` : 'No shift'}`;
+		if (mode === 'percent' && v === 'open') return `${entity}, ${formatDate(day)}: shift still on`;
 		if (mode === 'percent') {
 			return `${entity}, ${formatDate(day)}: ${typeof v === 'number' ? `${v}% attendance` : 'No attendance data'}`;
 		}
@@ -323,6 +326,13 @@
 
 	.pct-none {
 		color: var(--ink-strong);
+		background: var(--brand-white);
+	}
+
+	/* A shift still on: its end can come, so no percent yet. */
+	.pct-open {
+		color: var(--brand-teal);
+		font-weight: 700;
 		background: var(--brand-white);
 	}
 

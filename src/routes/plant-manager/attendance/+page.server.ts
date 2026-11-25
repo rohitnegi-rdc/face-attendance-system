@@ -45,7 +45,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const pumpFilter = plantPumps.some((p: any) => p.id === requestedPump) ? requestedPump : '';
 	const shownPumps = pumpFilter ? plantPumps.filter((p: any) => p.id === pumpFilter) : plantPumps;
 	const shownPumpIds = shownPumps.map((p: any) => p.id);
-	const [daily, sessionRows, sessionCount] = await Promise.all([
+	const [daily, sessionRows, sessionCount, openShifts, worked] = await Promise.all([
 		query<any>(
 			`SELECT pu.id AS pump_id, pu.pump_code, dpa.session_date,
 			        COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched)
@@ -84,8 +84,31 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			 JOIN manager_plants pma ON pma.plant_id = pu.plant_id
 			 WHERE pma.manager_id = $1 AND s.session_date BETWEEN $2 AND $3 AND pu.id = ANY($4)`,
 			[managerId, from, to, shownPumpIds]
+		),
+		// A start still waiting for its end: the daily grid says "Shift on", not a low percent.
+		query<{ pump_id: string; day: string }>(
+			`SELECT DISTINCT pump_id, to_char(session_date, 'YYYY-MM-DD') AS day
+			 FROM attendance_sessions
+			 WHERE pump_id = ANY($1) AND session_date BETWEEN $2 AND $3
+			   AND session_type = 'morning' AND pairing_status = 'open' AND status <> 'failed'`,
+			[shownPumpIds, from, to]
+		),
+		// Pumps Active or Idle on some day of the range (pump_day_status, latest row on or before a
+		// day). A pump Inactive the whole range with no attendance is left out of the daily grid.
+		query<{ pump_id: string }>(
+			`SELECT DISTINCT ds.pump_id FROM pump_day_status ds
+			 WHERE ds.pump_id = ANY($1) AND ds.day <= $3 AND ds.status IN ('active', 'idle')
+			   AND (ds.day >= $2 OR ds.day = (SELECT max(s2.day) FROM pump_day_status s2
+			                                  WHERE s2.pump_id = ds.pump_id AND s2.day <= $2))`,
+			[shownPumpIds, from, to]
 		)
 	]);
+	const gridPumpIds = new Set([
+		...daily.map((row: any) => row.pump_id as string),
+		...openShifts.map((row) => row.pump_id),
+		...worked.map((row) => row.pump_id)
+	]);
+	const gridPumps = shownPumps.filter((p: any) => gridPumpIds.has(p.id));
 
 	// By gang (pump gangs): the shown pumps of this manager. Null when their Areas have gangs off.
 	const gangView = await gangGrid(
@@ -124,6 +147,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	return {
 		pumps,
 		shownPumps,
+		gridPumps,
+		openShifts: openShifts.map((row) => `${row.pump_id}:${row.day}`),
 		plants,
 		daily,
 		gangView,

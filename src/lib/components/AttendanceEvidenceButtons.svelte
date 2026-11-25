@@ -60,6 +60,7 @@
 		showUnavailable = true,
 		allowFlag = true,
 		allowRename = false,
+		showPhotos = false,
 		fraudCaseHref
 	}: {
 		session: SessionEvidence;
@@ -69,6 +70,9 @@
 		allowRename?: boolean;
 		// The read-only side-by-side page for a fraud case, where the role has one.
 		fraudCaseHref?: (flagId: string) => string;
+		// The group photo and every face on screen instead of a button and name chips (the latest
+		// day of a plant manager's log, user 2026-11-25). Tapping still opens the big popup.
+		showPhotos?: boolean;
 	} = $props();
 
 	const fraud = $derived(session.fraud ?? []);
@@ -145,7 +149,25 @@
 	data-testid="evidence-actions"
 	data-session-id={session.id}
 >
-	{#if session.groupPhotoUrl}
+	{#if session.groupPhotoUrl && showPhotos}
+		<button
+			class="group-thumb"
+			type="button"
+			aria-label="Open the {shiftTypeLabel(session.sessionType)} group photo"
+			data-testid="group-thumb"
+			onclick={() =>
+				openEvidence({
+					sessionId: session.id,
+					personId: null,
+					title: `${shiftTypeLabel(session.sessionType)} group photo`,
+					description: 'Original group attendance submission',
+					url: session.groupPhotoUrl!,
+					flagged: Boolean(session.groupFlagged)
+				})}
+		>
+			<img src={session.groupPhotoUrl} alt="" loading="lazy" />
+		</button>
+	{:else if session.groupPhotoUrl}
 		<button
 			class="button button--secondary evidence-button"
 			type="button"
@@ -166,7 +188,11 @@
 	{/if}
 
 	{#if fraud.length || session.people.length}
-		<div class="evidence-people" data-testid="evidence-people">
+		<div
+			class="evidence-people"
+			class:evidence-people--photos={showPhotos}
+			data-testid="evidence-people"
+		>
 			{#each fraud as item (item.flagId + item.side)}
 				<button
 					class="face-tile face-tile--fraud"
@@ -220,7 +246,11 @@
 								name: person.name ?? null
 							})}
 					>
-						<ScanFace size={15} aria-hidden="true" />
+						{#if showPhotos}
+							<img class="face-chip__photo" src={person.cropUrl} alt="" loading="lazy" />
+						{:else}
+							<ScanFace size={15} aria-hidden="true" />
+						{/if}
 						<span class="face-chip__label">{person.label}</span>
 					</button>
 				{:else if showUnavailable}
@@ -352,6 +382,42 @@
 		align-items: flex-start;
 		gap: var(--space-2);
 		min-width: 20rem;
+	}
+	/* The group photo on screen: full width of its half, tap for the big view. */
+	.group-thumb {
+		display: block;
+		width: 100%;
+		max-width: 30rem;
+		padding: 0;
+		overflow: hidden;
+		background: var(--surface-muted);
+		border: 1px solid var(--brand-mist);
+		border-radius: var(--radius-md);
+		cursor: zoom-in;
+	}
+	/* The whole photo, never cropped: a face at the edge must stay visible. */
+	.group-thumb img {
+		display: block;
+		width: 100%;
+		height: auto;
+		max-height: 22rem;
+		object-fit: contain;
+	}
+	.group-thumb:hover {
+		border-color: var(--brand-teal);
+	}
+	/* Faces on screen: a little wider cells, and no fixed height cut so every face shows. */
+	.evidence-people--photos {
+		grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
+		max-height: none;
+	}
+	.face-chip__photo {
+		display: block;
+		width: 3.5rem;
+		height: 3.5rem;
+		object-fit: cover;
+		background: var(--surface-muted);
+		border-radius: var(--radius-sm);
 	}
 	.evidence-button {
 		flex-shrink: 0;

@@ -373,8 +373,10 @@ describe('the 9 am attendance tracker', () => {
 			`${world.names.a} attendance, Wed, 30 Sep 2026: 2 full shift, 2 start only, 1 end only`
 		);
 		assert.match(html, /No end photo/);
-		assert.match(html, /2 pumps with no attendance/);
-		assert.equal(html.match(/background:#fdecea/g)?.length, 2, 'the two zero pumps are red rows');
+		// The Idle pump with nobody has no work that day: a plain row, not red (2026-11-25).
+		assert.match(html, /1 pump with no attendance/);
+		assert.equal(html.match(/background:#fdecea/g)?.length, 1, 'only the Active zero pump is red');
+		assert.match(html, /Idle, no work/);
 		assert.match(html, /Hello,/);
 		assert.match(
 			html,

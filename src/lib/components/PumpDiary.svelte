@@ -47,7 +47,7 @@
 		{@const none = total(c) === 0}
 		<li
 			class="day"
-			class:day--none={none && d.status !== 'inactive'}
+			class:day--none={none && d.status === 'active'}
 			data-testid="diary-day"
 			data-day={d.day}
 		>
@@ -61,7 +61,9 @@
 			</div>
 			<p class="day__counted" data-testid="diary-counted">
 				{#if none}
-					<span class:alert-text={d.status !== 'inactive'}>Nobody counted for this day</span>
+					<span class:alert-text={d.status === 'active'}
+						>{d.status === 'idle' ? 'Idle, no work' : 'Nobody counted for this day'}</span
+					>
 				{:else}
 					<ShiftSplit
 						full={c.present}

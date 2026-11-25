@@ -23,7 +23,7 @@ import { REASON_LABELS } from './regularisationEmail.js';
  */
 /** @typedef {{ name: string | null, plants: string, waiting: number, oldest: string | null }} Approver */
 /** @typedef {{ code: number, name: string | null, people: number, held: string | null, also: string[] }} Gang */
-/** @typedef {Counts & { pump_code: string, site_name?: string | null, start_at: string | Date | null, end_at: string | Date | null, regularised?: boolean, request?: Request | null, location?: Location | null, gangs?: Gang[] }} Pump */
+/** @typedef {Counts & { pump_code: string, site_name?: string | null, work_status?: string, start_at: string | Date | null, end_at: string | Date | null, regularised?: boolean, request?: Request | null, location?: Location | null, gangs?: Gang[] }} Pump */
 /** @typedef {{ id: string, name: string, pumps: Pump[], totals: Counts }} Plant */
 /** @typedef {{ name: string, plants: Plant[] }} Area */
 /** @typedef {{ pump_days: number, marked: number }} MonthToDate */
@@ -186,6 +186,9 @@ export function renderAttendanceDigest({
 	/** @param {Plant} plant */
 	const plantRows = (plant) => {
 		const plantCell = `<td ${TD}>${escapeHtml(plant.name)}</td>`;
+		// Red: nobody counted at an Active pump. An Idle pump has no work that day (2026-11-25).
+		/** @param {Pump} p */
+		const isRed = (p) => !p.workers && p.work_status !== 'idle';
 		// The pump code, and the site it worked at that day under it.
 		/** @param {Pump} p */
 		const pumpCell = (p) =>
@@ -194,32 +197,35 @@ export function renderAttendanceDigest({
 			'</td>';
 		/** @param {Pump} p */
 		const pumpRow = (p) =>
-			p.workers && p.regularised && !p.start_at && !p.end_at
+			!p.workers && p.work_status === 'idle'
 				? `<tr>${plantCell}${pumpCell(p)}` +
-					`<td ${TD} colspan="2"><strong>Regularised</strong> (missed day, approved)</td>${counts(p)}</tr>`
-				: p.workers
+					`<td ${TD} colspan="2">Idle, no work</td>${counts(p)}</tr>`
+				: p.workers && p.regularised && !p.start_at && !p.end_at
 					? `<tr>${plantCell}${pumpCell(p)}` +
-						`<td ${TD}>${p.start_at ? istTime(p.start_at) : '<strong>No start photo</strong>'}</td>` +
-						`<td ${TD}>${p.end_at ? istTime(p.end_at) : '<strong>No end photo</strong>'}</td>${counts(p)}</tr>`
-					: `<tr ${RED_ROW}>${plantCell}${pumpCell(p)}` +
-						`<td ${TD} colspan="2"><strong>No attendance</strong></td>${counts(p, true)}</tr>`;
+						`<td ${TD} colspan="2"><strong>Regularised</strong> (missed day, approved)</td>${counts(p)}</tr>`
+					: p.workers
+						? `<tr>${plantCell}${pumpCell(p)}` +
+							`<td ${TD}>${p.start_at ? istTime(p.start_at) : '<strong>No start photo</strong>'}</td>` +
+							`<td ${TD}>${p.end_at ? istTime(p.end_at) : '<strong>No end photo</strong>'}</td>${counts(p)}</tr>`
+						: `<tr ${RED_ROW}>${plantCell}${pumpCell(p)}` +
+							`<td ${TD} colspan="2"><strong>No attendance</strong></td>${counts(p, true)}</tr>`;
 		// The request line sits under its pump, on the pump row's background.
 		/** @param {Pump} p */
 		const requestRow = (p) =>
 			p.request
-				? `<tr${p.workers ? '' : ' style="background:#fdecea"'}><td ${TD}></td>` +
+				? `<tr${isRed(p) ? ' style="background:#fdecea"' : ''}><td ${TD}></td>` +
 					`<td ${TD} colspan="8" data-request="${escapeHtml(p.request.status)}">${requestLine(p.request)}</td></tr>`
 				: '';
 		/** @param {Pump} p */
 		const locationRow = (p) =>
 			p.location
-				? `<tr${p.workers ? '' : ' style="background:#fdecea"'}><td ${TD}></td>` +
+				? `<tr${isRed(p) ? ' style="background:#fdecea"' : ''}><td ${TD}></td>` +
 					`<td ${TD} colspan="8" data-location="${escapeHtml(p.location.status)}">${locationLine(p.location)}</td></tr>`
 				: '';
 		/** @param {Pump} p */
 		const gangRow = (p) =>
 			p.gangs?.length
-				? `<tr${p.workers ? '' : ' style="background:#fdecea"'}><td ${TD}></td>` +
+				? `<tr${isRed(p) ? ' style="background:#fdecea"' : ''}><td ${TD}></td>` +
 					`<td ${TD} colspan="8" data-gangs="${p.gangs.length}">${gangLine(p.gangs)}</td></tr>`
 				: '';
 		const rows = plant.pumps
@@ -227,7 +233,7 @@ export function renderAttendanceDigest({
 			.join('');
 		const total =
 			plant.pumps.length > 1
-				? `<tr${plant.totals.workers ? '' : ` ${RED_ROW}`}><td ${TD} colspan="4"><strong>${escapeHtml(plant.name)} total</strong></td>${counts(plant.totals, true)}</tr>`
+				? `<tr${plant.totals.workers || !plant.pumps.some(isRed) ? '' : ` ${RED_ROW}`}><td ${TD} colspan="4"><strong>${escapeHtml(plant.name)} total</strong></td>${counts(plant.totals, true)}</tr>`
 				: '';
 		return rows + total;
 	};
@@ -235,7 +241,9 @@ export function renderAttendanceDigest({
 	const body = areas
 		.flatMap((a) => a.plants.map(plantRows))
 		.join('<tr><td colspan="9" style="height:18px;padding:0">&nbsp;</td></tr>');
-	const zero = totals.pumps - totals.marked;
+	const zero = areas
+		.flatMap((a) => a.plants.flatMap((pl) => pl.pumps))
+		.filter((p) => !p.workers && p.work_status !== 'idle').length;
 	const zeroLine = zero
 		? `<p style="color:${RED};margin:8px 0 0"><strong>${zero} ${zero === 1 ? 'pump' : 'pumps'} with no attendance</strong>, in red below.</p>`
 		: '';

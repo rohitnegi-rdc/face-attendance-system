@@ -12,6 +12,9 @@ export async function installFakeCamera(page: Page) {
 		const w = window as unknown as { __cameraImage: HTMLImageElement | null };
 		w.__cameraImage = null;
 		if (!navigator.mediaDevices) return;
+		// Some browsers never answer the device list (headless Chromium on localhost did). The
+		// preview must not wait on it, so every camera test runs with a list that never answers.
+		navigator.mediaDevices.enumerateDevices = () => new Promise<MediaDeviceInfo[]>(() => {});
 		navigator.mediaDevices.getUserMedia = async () => {
 			const canvas = document.createElement('canvas');
 			canvas.width = 1280;

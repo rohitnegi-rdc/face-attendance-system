@@ -5,11 +5,14 @@ const STORAGE_KEY = 'pump-lang';
 
 export const pumpLang = $state({ hindi: true });
 
-export function loadPumpLang() {
+// The pump's Area decides the default (areas.pump_english, e.g. Kerala opens in English); a choice
+// made on this phone with the EN / हिंदी switch wins over it.
+export function loadPumpLang(defaultHindi = true) {
 	try {
-		pumpLang.hindi = localStorage.getItem(STORAGE_KEY) !== 'en';
+		const saved = localStorage.getItem(STORAGE_KEY);
+		pumpLang.hindi = saved === 'en' ? false : saved === 'hi' ? true : defaultHindi;
 	} catch {
-		pumpLang.hindi = true;
+		pumpLang.hindi = defaultHindi;
 	}
 }
 
@@ -63,6 +66,8 @@ const HI: Record<string, string> = {
 	'Choose the gang': 'गैंग चुनें',
 	'Which gang is this photo for?': 'यह फोटो किस गैंग की है?',
 	'Find your gang in the photos': 'फोटो में अपनी गैंग पहचानें',
+	'Your gang': 'आपकी गैंग',
+	'Change gang': 'गैंग बदलें',
 	'Start photo of {gang}': '{gang} की शुरुआत की फोटो',
 	'Gang {code}': 'गैंग {code}',
 	'Shift {n}': 'शिफ्ट {n}',

@@ -395,6 +395,7 @@ test('GANG-05 two gangs at one pump: picker on the phone, the faces decide a wro
 	await expectPicturesLoaded(page.getByTestId('gang-shift'), 1, 3);
 	// Shift details follow the pick: "New gang" (the only choice now) shows no start, only "start".
 	await expect(page.getByTestId('details-started')).toHaveCount(0);
+	await expect(page.getByTestId('operator-photo')).toBeVisible();
 	const startStep = await page.getByTestId('next-step').innerText();
 	await shots(page, 'pump-picker-one-running', [390]);
 
@@ -416,17 +417,25 @@ test('GANG-05 two gangs at one pump: picker on the phone, the faces decide a wro
 	await expect(page.getByTestId('gang-shift')).toHaveCount(2);
 	await expect(page.getByTestId('gang-new')).toHaveCount(0);
 	await expectPicturesLoaded(page.getByTestId('gang-shift'), 2, 5);
-	// Tapping a gang's photo chooses it (the tick shows on that card only).
+	// No photo step until a gang is picked (user, 2026-11-25): the operator finds the gang first.
+	await expect(page.getByTestId('operator-photo')).toHaveCount(0);
+	// Tapping a gang's photo chooses it: only that gang stays on screen, ticked, and the photo step
+	// appears (user, 2026-11-25). "Change gang" brings both back and hides the photo step again.
 	await page.getByTestId('gang-start-photo').nth(1).click();
-	await expect(page.getByTestId('gang-shift').nth(1).locator('.gang-tick')).toBeVisible();
-	await expect(page.getByTestId('gang-shift').nth(0).locator('.gang-tick')).toHaveCount(0);
+	await expect(page.getByTestId('gang-shift')).toHaveCount(1);
+	await expect(page.getByTestId('gang-shift').locator('.gang-tick')).toBeVisible();
+	await expect(page.getByTestId('operator-photo')).toBeVisible();
 	// The details show the picked gang's own start and "end"; picking the other gang changes the start.
 	const endStep = await page.getByTestId('next-step').innerText();
 	expect(endStep).not.toBe(startStep);
 	const gang2Started = await page.getByTestId('details-started').innerText();
+	await page.getByTestId('gang-change').click();
+	await expect(page.getByTestId('gang-shift')).toHaveCount(2);
+	await expect(page.getByTestId('operator-photo')).toHaveCount(0);
 	await page.getByTestId('gang-start-photo').nth(0).click();
 	await expect(page.getByTestId('details-started')).not.toHaveText(gang2Started);
 	await expect(page.getByTestId('next-step')).toHaveText(endStep);
+	await page.getByTestId('gang-change').click();
 	await page.getByTestId('gang-start-photo').nth(1).click();
 	await expect(page.getByTestId('details-started')).toHaveText(gang2Started);
 	await page.evaluate(() => {

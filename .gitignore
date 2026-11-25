@@ -62,3 +62,5 @@ eval/datasets.local.json
 .claude/deep-build/plan.json
 .claude/deep-build/evidence/
 artifacts/deep-build/
+/Test/gang-demo/
+/Test/pm-demo/

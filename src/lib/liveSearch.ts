@@ -23,3 +23,15 @@ export function applyOnSelect(event: Event) {
 	const target = event.target;
 	if (target instanceof HTMLSelectElement && target.form) void applyFilters(target.form);
 }
+
+// On a GET filter form with dates: a dropdown or a picked date applies at once (no Apply button).
+export function applyOnChange(event: Event) {
+	const target = event.target;
+	if (
+		(target instanceof HTMLSelectElement ||
+			(target instanceof HTMLInputElement && ['date', 'month'].includes(target.type))) &&
+		target.form &&
+		(!(target instanceof HTMLInputElement) || target.value)
+	)
+		void applyFilters(target.form);
+}
