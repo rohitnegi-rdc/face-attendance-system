@@ -42,8 +42,9 @@ export function verifyToken(token: string): AuthToken | null {
 	}
 }
 
-// Pump and vendor logins start with this password (CSV import) and go back to it when the admin
-// or a plant manager resets them; the change is forced at the next sign-in.
+// Every login except an admin starts with this password (CSV import, new plant managers, monitors,
+// business managers and heads) and goes back to it when reset. Signing in with it makes every
+// login except a pump choose its own password first (api/auth/login); it cannot be chosen again.
 export const DEFAULT_PASSWORD = 'Test1234!';
 
 export async function hashPassword(plain: string): Promise<string> {

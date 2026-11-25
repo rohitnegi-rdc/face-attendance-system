@@ -30,7 +30,9 @@
 			</p>{/if}
 		{#if form?.credentials && form?.formKind !== 'reset'}
 			<div class="credential-notice" role="status">
-				<strong>Show these first-login details to the manager now.</strong>
+				<strong
+					>First sign-in details for the manager. They choose their own password at sign-in.</strong
+				>
 				<code>{form.credentials.email}</code>
 				<code>{form.credentials.password}</code>
 			</div>
@@ -112,8 +114,8 @@
 			<div>
 				<h2 id="accounts-heading">Manager accounts</h2>
 				<p class="supporting-text">
-					Reset a password when a manager cannot sign in and the reset email does not arrive. They
-					get a temporary password and choose their own at the next sign-in.
+					Reset a password when a manager cannot sign in and the reset email does not arrive. It
+					goes back to the starting password and they choose their own at the next sign-in.
 				</p>
 			</div>
 		</div>
@@ -126,7 +128,10 @@
 			</p>{/if}
 		{#if form?.formKind === 'reset' && form?.credentials}
 			<div class="credential-notice" role="status" data-testid="manager-temp-password">
-				<strong>Give these to the manager now. The password cannot be viewed again.</strong>
+				<strong
+					>Password reset to the starting one. Give these to the manager; they choose their own at
+					sign-in.</strong
+				>
 				<code>{form.credentials.email}</code>
 				<code>{form.credentials.password}</code>
 			</div>

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { SESSION_SECONDS, setSessionCookie } from '$lib/server/cookies';
-import { findAccountByEmail, checkPassword, signToken } from '$lib/server/auth';
+import { DEFAULT_PASSWORD, findAccountByEmail, checkPassword, signToken } from '$lib/server/auth';
 import { logger } from '$lib/server/log';
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
@@ -32,7 +32,9 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		);
 	}
 
-	const mustChangePassword = account.must_change_password;
+	// The shared starting password is never kept: everyone but a pump replaces it at once.
+	const mustChangePassword =
+		account.must_change_password || (account.role !== 'pump' && password === DEFAULT_PASSWORD);
 	const token = signToken(
 		{
 			role: account.role,

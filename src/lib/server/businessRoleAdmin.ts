@@ -4,6 +4,7 @@
 // heads only look and are copied on the 9 am email. Every change is audited.
 import { fail, type Actions } from '@sveltejs/kit';
 import type { PoolClient } from 'pg';
+import { DEFAULT_PASSWORD, hashPassword } from '$lib/server/auth';
 import { pool, query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
 import {
@@ -145,10 +146,11 @@ export function roleAdminActions(role: BusinessRole): Actions {
 						return { error: 'That email is already an admin, vendor or pump login.' };
 					const row = await client.query(
 						`INSERT INTO plant_managers (name, email, password_hash, must_change_password, ${t.flag})
-					 VALUES ($1, $2, NULL, FALSE, true)
-					 ON CONFLICT (lower(email)) DO UPDATE SET ${t.flag} = true, disabled_at = NULL
+					 VALUES ($1, $2, $3, FALSE, true)
+					 ON CONFLICT (lower(email)) DO UPDATE SET ${t.flag} = true, disabled_at = NULL,
+					   password_hash = COALESCE(plant_managers.password_hash, EXCLUDED.password_hash)
 					 RETURNING id`,
-						[name, email]
+						[name, email, await hashPassword(DEFAULT_PASSWORD)]
 					);
 					id = row.rows[0].id;
 				} else {

@@ -80,14 +80,16 @@ test('AUTH-16 a fresh database gets the pumps from the CSV migration, never aske
 	expect(await response.json()).toMatchObject({ role: 'pump', mustChangePassword: false });
 });
 
-test('AUTH-17 a fresh database gets Google-only plant managers and the Mumbai location check', async () => {
+test('AUTH-17 a fresh database gets plant managers on the starting password and the Mumbai location check', async () => {
 	const { rows } = await db.query(
 		`SELECT pm.password_hash, pm.must_change_password, p.manager_email
 		 FROM plants p JOIN plant_manager_assignments pma ON pma.plant_id = p.id
 		 JOIN plant_managers pm ON pm.id = pma.manager_id WHERE p.name = 'MUM-Deonar'`
 	);
 	expect(rows).toHaveLength(1);
-	expect(rows[0]).toMatchObject({ password_hash: null, must_change_password: false });
+	// Migration 059: the starting password, never kept (forced change at sign-in); Google still works.
+	expect(rows[0].password_hash).toBeTruthy();
+	expect(rows[0].must_change_password).toBe(false);
 	expect(rows[0].manager_email).toMatch(/@rdc\.in$/);
 	const assigned = await db.query(
 		`SELECT count(*)::int AS plants FROM plant_manager_assignments pma
@@ -100,7 +102,8 @@ test('AUTH-17 a fresh database gets Google-only plant managers and the Mumbai lo
 	const password = await (
 		await anonymous()
 	).post('/api/auth/login', { data: { email: rows[0].manager_email, password: 'Test1234!' } });
-	expect(password.status()).toBe(401);
+	expect(password.status()).toBe(200);
+	expect(await password.json()).toMatchObject({ role: 'plant-manager', mustChangePassword: true });
 });
 
 test('AUTH-04/05 a disabled pump cannot log in, and an existing token cannot submit', async () => {

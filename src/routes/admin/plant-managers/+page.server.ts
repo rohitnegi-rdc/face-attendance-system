@@ -1,13 +1,13 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
-import { randomBytes } from 'node:crypto';
-import { hashPassword } from '$lib/server/auth';
+import { DEFAULT_PASSWORD, hashPassword } from '$lib/server/auth';
 import { pool, query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
 import { issueTemporaryPassword } from '$lib/server/passwordReset';
 
+// A new login starts on the default password and must choose its own at the first sign-in.
 function temporaryPassword() {
-	return randomBytes(12).toString('base64url');
+	return DEFAULT_PASSWORD;
 }
 
 export const load: PageServerLoad = async () => {

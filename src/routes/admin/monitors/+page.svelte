@@ -35,7 +35,9 @@
 			</p>{/if}
 		{#if form?.formKind === 'add' && form?.credentials}
 			<div class="credential-notice" role="status" data-testid="monitor-credentials">
-				<strong>Give these first sign-in details to the monitor now. They are shown once.</strong>
+				<strong
+					>First sign-in details for the monitor. They choose their own password at sign-in.</strong
+				>
 				<code>{form.credentials.email}</code>
 				<code>{form.credentials.password}</code>
 			</div>

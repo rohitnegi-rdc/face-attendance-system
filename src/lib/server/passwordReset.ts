@@ -4,9 +4,9 @@
 //   has an account, so it cannot be used to find out who has one. Not for pump logins: crews
 //   have no official mailbox, so their plant manager resets them.
 // - Reset by someone else: the admin (any account) or a plant manager (pumps of their plants).
-//   Pump and vendor logins go back to the default password (DEFAULT_PASSWORD, the same one the
-//   CSV import gives them); a plant manager or admin login gets a random temporary password.
-//   Either way the user must replace it at the next sign-in (/change-password).
+//   Every login except an admin goes back to the default password (DEFAULT_PASSWORD, the one it
+//   started with); an admin login gets a random temporary password. Everyone but a pump must
+//   replace it at the next sign-in (/change-password).
 // Every reset is written to password_reset_log.
 import { createHash, randomBytes } from 'node:crypto';
 import type { PoolClient } from 'pg';
@@ -31,6 +31,7 @@ export function passwordProblem(password: string, confirmation: string) {
 	if (password.length < 8 || password.length > 128) {
 		return 'Choose a password between 8 and 128 characters.';
 	}
+	if (password === DEFAULT_PASSWORD) return 'Choose your own password, not the starting one.';
 	if (password !== confirmation) return 'The passwords do not match.';
 	return null;
 }
@@ -153,15 +154,14 @@ export async function resetPasswordWithToken(token: string, password: string) {
 	}
 }
 
-// A temporary password for an account, shown to whoever issued it: the default password for a
-// pump or vendor login, a random one otherwise. null when the account does not exist.
+// A temporary password for an account, shown to whoever issued it: the default password for any
+// login but an admin, a random one for an admin. null when the account does not exist.
 export async function issueTemporaryPassword(
 	role: Role,
 	accountId: string,
 	by: { role: Role; id: string }
 ) {
-	const password =
-		role === 'pump' || role === 'vendor' ? DEFAULT_PASSWORD : randomBytes(12).toString('base64url');
+	const password = role === 'admin' ? randomBytes(12).toString('base64url') : DEFAULT_PASSWORD;
 	const client = await pool.connect();
 	try {
 		await client.query('BEGIN');

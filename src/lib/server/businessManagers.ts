@@ -1,6 +1,7 @@
 // Business managers (migration 048): one per plant, they approve regularisations
 // (src/lib/server/regularisation.ts). Each is a plant-manager login marked is_business_manager that
-// signs in with Google like plant managers (no password); its plants are in business_manager_plants
+// signs in with Google like plant managers, or with the default password it starts on (a change
+// forced at the first sign-in); its plants are in business_manager_plants
 // and so appear on its plant-manager pages (manager_plants), read only unless it also manages
 // plants of its own. A list row whose plant is not in the system yet waits in
 // business_manager_waiting and joins its plant once the plant exists.
@@ -11,6 +12,7 @@
 import type { PoolClient } from 'pg';
 import { parse } from 'csv-parse/sync';
 import { pool } from './db';
+import { DEFAULT_PASSWORD, hashPassword } from './auth';
 import { normalizePlantName } from './plantManagerImport';
 import { attachWaitingSql } from '../../../worker/regularisationEmail.js';
 
@@ -85,6 +87,7 @@ export async function importBusinessManagers(
 		byName.set(key, [...(byName.get(key) ?? []), plant.id]);
 	}
 	const managers = new Set<string>();
+	let startHash: string | undefined; // bcrypt is slow: hash the starting password once per import
 	const summary: ImportSummary = { managers: 0, assigned: 0, waiting: 0, errors: [] };
 	for (const [index, row] of rows.entries()) {
 		const line = index + 2;
@@ -107,10 +110,11 @@ export async function importBusinessManagers(
 		}
 		const manager = await client.query(
 			`INSERT INTO plant_managers (name, email, password_hash, must_change_password, ${t.flag})
-			 VALUES ($1, $2, NULL, FALSE, true)
-			 ON CONFLICT (lower(email)) DO UPDATE SET ${t.flag} = true, disabled_at = NULL
+			 VALUES ($1, $2, $3, FALSE, true)
+			 ON CONFLICT (lower(email)) DO UPDATE SET ${t.flag} = true, disabled_at = NULL,
+			   password_hash = COALESCE(plant_managers.password_hash, EXCLUDED.password_hash)
 			 RETURNING id`,
-			[name, email]
+			[name, email, (startHash ??= await hashPassword(DEFAULT_PASSWORD))]
 		);
 		const managerId = manager.rows[0].id as string;
 		managers.add(managerId);

@@ -1,9 +1,10 @@
 // PWD: forgot password and resets by someone else. The email link (/forgot-password, then
 // /reset-password) works once for 30 minutes; the page answers the same for unknown emails; logins
 // made by the system (.rdc) have no mailbox and are sent to the plant manager or the admin, who
-// reset a pump or vendor to the default password (a plant manager to a random temporary one);
-// the user must replace it at sign-in.
+// reset every login but an admin to the default password; everyone but a pump must replace it at
+// sign-in, and may not choose the default again.
 import { createHash } from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import {
 	action,
@@ -22,7 +23,7 @@ import {
 } from './helpers';
 
 const NEW_PASSWORD = 'Brand-New-Pass-456';
-// DEFAULT_PASSWORD in src/lib/server/auth.ts: what a reset gives a pump or vendor login.
+// DEFAULT_PASSWORD in src/lib/server/auth.ts: what a reset gives every login but an admin.
 const DEFAULT_PASSWORD = 'Test1234!';
 // A form action answers JSON unless the request asks for the page, as a browser does.
 const HTML = { accept: 'text/html' };
@@ -242,12 +243,41 @@ test('PWD-06 the admin resets a plant manager; an open email link stops working'
 		'manager-temp-password'
 	);
 	expect(issued.email).toBe(manager.email);
+	expect(issued.password).toBe(DEFAULT_PASSWORD);
 	const signedIn = await signIn(manager.email, issued.password);
 	expect(signedIn.status).toBe(200);
 	expect(signedIn.body.mustChangePassword).toBe(true);
 	expect(await (await (await anonymous()).get(`/reset-password?token=${token}`)).text()).toContain(
 		'data-testid="reset-expired"'
 	);
+});
+
+test('PWD-10 the starting password is never kept: forced change, and it cannot be chosen again', async () => {
+	const manager = await managerWithMailbox();
+	// As migration 059 leaves a Google-only manager: the starting password, no change flag set.
+	await db.query(
+		`UPDATE plant_managers SET password_hash = $1, must_change_password = FALSE WHERE id = $2`,
+		[await bcrypt.hash(DEFAULT_PASSWORD, 4), manager.id]
+	);
+	const context = await anonymous();
+	const first = await context.post('/api/auth/login', {
+		data: { email: manager.email, password: DEFAULT_PASSWORD }
+	});
+	expect(await first.json()).toMatchObject({ mustChangePassword: true });
+	// Nothing but the password change opens until it is done.
+	expect((await context.get('/api/persons')).status()).toBe(403);
+	const same = await context.post('/api/auth/password', {
+		data: { password: DEFAULT_PASSWORD, confirmation: DEFAULT_PASSWORD }
+	});
+	expect(same.status()).toBe(400);
+	expect((await same.json()).error).toContain('not the starting one');
+	const changed = await context.post('/api/auth/password', {
+		data: { password: NEW_PASSWORD, confirmation: NEW_PASSWORD }
+	});
+	expect(changed.status()).toBe(200);
+	expect((await signIn(manager.email, DEFAULT_PASSWORD)).status).toBe(401);
+	const again = await signIn(manager.email, NEW_PASSWORD);
+	expect(again).toMatchObject({ status: 200, body: { mustChangePassword: false } });
 });
 
 test('PWD-08 the sign-in page offers no "Forgot password?" for a pump login', async ({ page }) => {

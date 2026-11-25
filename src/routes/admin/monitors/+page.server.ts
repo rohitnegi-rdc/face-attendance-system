@@ -1,8 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
-import { randomBytes } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { hashPassword } from '$lib/server/auth';
+import { DEFAULT_PASSWORD, hashPassword } from '$lib/server/auth';
 import { pool, query } from '$lib/server/db';
 import { logger } from '$lib/server/log';
 import { issueTemporaryPassword } from '$lib/server/passwordReset';
@@ -110,7 +109,7 @@ export const actions: Actions = {
 				let password: string | null = null;
 				if (!manager) {
 					if (!name) return { error: 'Enter a name for the new monitor.' };
-					password = randomBytes(12).toString('base64url');
+					password = DEFAULT_PASSWORD;
 					const inserted = await client.query(
 						`INSERT INTO plant_managers (name, email, password_hash, is_monitor)
 						 VALUES ($1, $2, $3, true) RETURNING id, name`,
@@ -211,7 +210,7 @@ export const actions: Actions = {
 			formKind: 'row',
 			id,
 			success: true,
-			message: 'Temporary password issued. It is shown once; they choose their own at sign-in.',
+			message: 'Password reset to the starting one. They choose their own at sign-in.',
 			credentials: issued
 		};
 	}
