@@ -8,7 +8,9 @@
 	// horizontally-scrollable columns. `entities` is an array of { id, label, faceUrl? }, rendered
 	// as rows; worker rows pass faceUrl so the face shows beside the name. `cellValue(entityId, day)` returns either a status string
 	// ('present'|'morning_only'|'evening_only'|'absent') or a number 0-100 (attendance %)
-	// when `mode === 'percent'` ('open' there: a shift still on, shown as "Shift on"), or a headcount when `mode === 'count'` (gangs). `heldCell` marks a
+	// when `mode === 'percent'` ('open' there: a shift still on, shown as "Shift on"), or a headcount when `mode === 'count'` (gangs),
+	// or { full, startOnly, endOnly, open? } when `mode === 'split'` (workers by shift, the same three
+	// counts as ShiftSplit and the 9 am email). `heldCell` marks a
 	// day waiting for or refused a location approval (amber, left out of totals); `href` links a row.
 	let {
 		days = [],
@@ -20,11 +22,14 @@
 	} = $props<{
 		days: string[];
 		entities: { id: string; label: string; faceUrl?: string; href?: string }[];
-		cellValue: (entityId: string, day: string) => string | number | null;
-		mode?: 'status' | 'percent' | 'count';
+		cellValue: (entityId: string, day: string) => string | number | Split | null;
+		mode?: 'status' | 'percent' | 'count' | 'split';
 		entityLabel?: string;
 		heldCell?: (entityId: string, day: string) => boolean;
 	}>();
+	type Split = { full: number; startOnly: number; endOnly: number; open?: boolean };
+	const asSplit = (v: unknown): Split | null =>
+		v && typeof v === 'object' && 'full' in v ? (v as Split) : null;
 	let scroller: HTMLDivElement;
 	const orderedDays = $derived([...days].sort((a, b) => b.localeCompare(a)));
 
@@ -35,7 +40,12 @@
 		});
 	}
 
-	function statusClass(v: string | number | null): string {
+	function statusClass(v: string | number | Split | null): string {
+		if (mode === 'split') {
+			const split = asSplit(v);
+			if (!split) return 'pct-none';
+			return split.full > 0 ? 'split-cell split-cell--full' : 'split-cell';
+		}
 		if (mode === 'count') return typeof v === 'number' ? 'pct-mid' : 'pct-none';
 		if (mode === 'percent') {
 			if (v === 'open') return 'pct-open';
@@ -57,7 +67,7 @@
 		}
 	}
 
-	function cellLabel(v: string | number | null): string {
+	function cellLabel(v: string | number | Split | null): string {
 		if (mode === 'count') return typeof v === 'number' ? String(v) : '-';
 		if (mode === 'percent' && v === 'open') return 'Shift on';
 		if (mode === 'percent') return typeof v === 'number' ? `${v}%` : '-';
@@ -67,7 +77,16 @@
 		return '-';
 	}
 
-	function accessibleCellLabel(entity: string, day: string, v: string | number | null): string {
+	function accessibleCellLabel(
+		entity: string,
+		day: string,
+		v: string | number | Split | null
+	): string {
+		if (mode === 'split') {
+			const split = asSplit(v);
+			if (!split) return `${entity}, ${formatDate(day)}: no attendance`;
+			return `${entity}, ${formatDate(day)}: ${split.full} full shift, ${split.startOnly} start only, ${split.endOnly} end only${split.open ? ', shift still on' : ''}`;
+		}
 		if (mode === 'count')
 			return `${entity}, ${formatDate(day)}: ${typeof v === 'number' ? `${v} people` : 'No shift'}`;
 		if (mode === 'percent' && v === 'open') return `${entity}, ${formatDate(day)}: shift still on`;
@@ -112,7 +131,9 @@
 			? 'Attendance percentage calendar'
 			: mode === 'count'
 				? 'Headcount calendar'
-				: 'Attendance status calendar'}
+				: mode === 'split'
+					? 'Workers by shift calendar'
+					: 'Attendance status calendar'}
 	>
 		<thead>
 			<tr>
@@ -138,10 +159,16 @@
 					</th>
 					{#each orderedDays as day}
 						{@const v = cellValue(e.id, day)}
+						{@const split = mode === 'split' ? asSplit(v) : null}
 						<td
 							class={statusClass(v)}
 							class:held={heldCell?.(e.id, day)}
-							aria-label={accessibleCellLabel(e.label, day, v)}>{cellLabel(v)}</td
+							aria-label={accessibleCellLabel(e.label, day, v)}
+							>{#if split}{#if split.open}<span class="sc-on">Shift on</span>{/if}<span
+									class="sc sc--full"><b>{split.full}</b> full</span
+								><span class="sc"><b>{split.startOnly}</b> start</span><span class="sc sc--end"
+									><b>{split.endOnly}</b> end</span
+								>{:else if mode === 'split'}-{:else}{cellLabel(v)}{/if}</td
 						>
 					{/each}
 				</tr>
@@ -150,6 +177,16 @@
 	</table>
 </div>
 
+{#if mode === 'split'}
+	<div class="legend" aria-label="Workers by shift legend">
+		<span
+			><b class="legend__swatch legend__swatch--wide split-cell--full">full</b> Full shift (start and
+			end)</span
+		>
+		<span><b class="legend__swatch legend__swatch--wide">start</b> Start only</span>
+		<span><b class="legend__swatch legend__swatch--wide legend__swatch--end">end</b> End only</span>
+	</div>
+{/if}
 {#if mode === 'status'}
 	<div class="legend" aria-label="Attendance status legend">
 		<span><b class="legend__swatch st-present">P</b> Present</span>
@@ -336,6 +373,37 @@
 		background: var(--brand-white);
 	}
 
+	/* Workers by shift: three short lines per day, full shift on top. */
+	.split-cell {
+		line-height: 1.25;
+		color: var(--ink-default);
+		background: var(--surface-muted);
+	}
+	.split-cell--full {
+		background: var(--primary-tint);
+	}
+	.sc,
+	.sc-on {
+		display: block;
+		text-align: left;
+	}
+	.sc b {
+		display: inline-block;
+		min-width: 1.4em;
+		color: var(--ink-strong);
+	}
+	.sc--full,
+	.sc--full b {
+		color: #056e61;
+	}
+	.sc--full b {
+		font-size: var(--text-sm);
+	}
+	.sc-on {
+		color: var(--brand-teal);
+		font-weight: 700;
+	}
+
 	.calendar-grid td.held {
 		color: var(--ink-strong);
 		background: #ffe3a3;
@@ -363,6 +431,19 @@
 		place-items: center;
 		border: 1px solid var(--brand-mist);
 		border-radius: var(--radius-sm);
+	}
+	.legend__swatch--wide {
+		width: auto;
+		padding: 0 0.4rem;
+		font-weight: 400;
+		background: var(--surface-muted);
+	}
+	.legend__swatch.split-cell--full {
+		color: #056e61;
+		background: var(--primary-tint);
+	}
+	.legend__swatch--end {
+		box-shadow: inset 0 0 0 1px var(--brand-steel);
 	}
 	@media (max-width: 47.99rem) {
 		.entity-col {

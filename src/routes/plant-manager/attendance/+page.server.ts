@@ -47,9 +47,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const shownPumpIds = shownPumps.map((p: any) => p.id);
 	const [daily, sessionRows, sessionCount, openShifts, worked] = await Promise.all([
 		query<any>(
+			// Workers per pump and day by shift: the same three counts as the Pumps page and the 9 am
+			// email (full shift, start only, end only).
 			`SELECT pu.id AS pump_id, pu.pump_code, dpa.session_date,
-			        COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched)
-			        / NULLIF(COUNT(*), 0), 0), 0)::int AS attendance_pct
+			        count(*) FILTER (WHERE dpa.morning_matched AND dpa.evening_matched)::int AS full_shift,
+			        count(*) FILTER (WHERE dpa.morning_matched AND NOT dpa.evening_matched)::int AS start_only,
+			        count(*) FILTER (WHERE dpa.evening_matched AND NOT dpa.morning_matched)::int AS end_only
 			 FROM daily_person_attendance dpa JOIN pumps pu ON pu.id = dpa.pump_id
 			 JOIN manager_plants pma ON pma.plant_id = pu.plant_id
 			 WHERE pma.manager_id = $1 AND dpa.session_date BETWEEN $2 AND $3 AND pu.id = ANY($4)

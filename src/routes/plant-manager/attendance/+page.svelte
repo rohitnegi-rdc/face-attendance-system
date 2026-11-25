@@ -5,6 +5,7 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import GangHeadcountGrid from '$lib/components/GangHeadcountGrid.svelte';
 	import ShiftLog from '$lib/components/ShiftLog.svelte';
+	import ShiftSplit from '$lib/components/ShiftSplit.svelte';
 	import { calendarDays, dateKey, formatDate, todayStr } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 	import { applyOnChange } from '$lib/liveSearch';
@@ -58,14 +59,34 @@
 	const personStatus = (personId: string, day: string) =>
 		data.attendanceMap[`${personId}|${day}`] ?? 'absent';
 	const rangeLabel = $derived(`${formatDate(data.filters.from)} – ${formatDate(data.filters.to)}`);
+	// Workers by shift per pump and day, and the same three added up over the range per pump.
+	type Split = { full: number; startOnly: number; endOnly: number };
 	const lookup = $derived(
-		new Map(
+		new Map<string, Split>(
 			data.daily.map((row: any) => [
 				`${row.pump_id}:${dateKey(row.session_date)}`,
-				Number(row.attendance_pct)
+				{ full: row.full_shift, startOnly: row.start_only, endOnly: row.end_only }
 			])
 		)
 	);
+	const pumpTotals = $derived(
+		data.gridPumps.map((pump: any) => {
+			const total = { full: 0, startOnly: 0, endOnly: 0 };
+			for (const row of data.daily)
+				if (row.pump_id === pump.id) {
+					total.full += row.full_shift;
+					total.startOnly += row.start_only;
+					total.endOnly += row.end_only;
+				}
+			return { id: pump.id, code: pump.pump_code, ...total };
+		})
+	);
+	function splitCell(pumpId: string, day: string) {
+		const split = lookup.get(`${pumpId}:${day}`);
+		const open = openShifts.has(`${pumpId}:${day}`);
+		if (!split) return open ? { full: 0, startOnly: 0, endOnly: 0, open } : null;
+		return { ...split, open };
+	}
 </script>
 
 <svelte:head><title>Plant attendance | Face Attendance</title></svelte:head>
@@ -138,7 +159,7 @@
 				<p class="supporting-text">
 					{dailyView === 'gang' && data.gangView
 						? 'Workers of each gang counted per day, wherever the gang worked.'
-						: 'Full shift (start and end) matches by pump.'}
+						: 'Workers of each pump per day: full shift, start only and end only.'}
 				</p>
 			</div>
 			{#if data.gangView}
@@ -164,11 +185,19 @@
 			/>{:else if entities.length}<AttendanceCalendarGrid
 				{days}
 				{entities}
-				mode="percent"
+				mode="split"
 				entityLabel="Pump"
-				cellValue={(entity, day) =>
-					openShifts.has(`${entity}:${day}`) ? 'open' : (lookup.get(`${entity}:${day}`) ?? null)}
-			/>{:else}<EmptyState
+				cellValue={splitCell}
+			/>
+			<h3 class="totals-title">Total for {rangeLabel}</h3>
+			<ul class="pump-totals" data-testid="pump-totals">
+				{#each pumpTotals as row (row.id)}
+					<li data-testid="pump-total">
+						<span class="pump-totals__code">{row.code}</span>
+						<ShiftSplit full={row.full} startOnly={row.startOnly} endOnly={row.endOnly} />
+					</li>
+				{/each}
+			</ul>{:else}<EmptyState
 				title="No attendance in this range"
 				description="Choose another date range."
 			/>{/if}
@@ -252,6 +281,29 @@
 </div>
 
 <style>
+	.totals-title {
+		margin: var(--space-4) 0 var(--space-2);
+		font-size: var(--text-sm);
+	}
+	.pump-totals {
+		display: grid;
+		gap: var(--space-1);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.pump-totals li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-2) 0;
+		border-bottom: 1px solid var(--brand-mist);
+	}
+	.pump-totals__code {
+		min-width: 9rem;
+		font-weight: 700;
+	}
 	.log-head {
 		flex-wrap: wrap;
 	}
