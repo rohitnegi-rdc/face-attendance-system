@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import AttendanceDailyBars from '$lib/components/AttendanceDailyBars.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
@@ -70,9 +70,7 @@
 <svelte:head><title>{data.pump.pump_code} | Face Attendance</title></svelte:head>
 
 <div class="page detail-page">
-	<a class="back-link" href={resolve('/admin/attendance')}
-		><ArrowLeft size={16} /> Attendance records</a
-	>
+	<BackLink href={resolve('/admin/attendance')} label="Attendance records" />
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Pump</p>
@@ -557,15 +555,6 @@
 	.danger-form label {
 		display: grid;
 		gap: var(--space-1);
-	}
-	.back-link {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		margin-bottom: var(--space-5);
-		font-size: var(--text-sm);
-		font-weight: 600;
-		text-decoration: none;
 	}
 	.eyebrow {
 		margin: 0 0 var(--space-1);

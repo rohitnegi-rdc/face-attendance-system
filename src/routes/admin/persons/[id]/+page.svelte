@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import AttendanceEvidenceButtons from '$lib/components/AttendanceEvidenceButtons.svelte';
 	import FacePeek from '$lib/components/FacePeek.svelte';
 	import MetricStrip from '$lib/components/MetricStrip.svelte';
@@ -40,9 +40,7 @@
 >
 
 <div class="page person-page">
-	<a class="back-link" href={resolve(`/admin/pumps/${data.person.pump_id}`)}
-		><ArrowLeft size={16} /> {data.person.pump_code}</a
-	>
+	<BackLink href={resolve(`/admin/pumps/${data.person.pump_id}`)} label={data.person.pump_code} />
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Worker</p>
@@ -273,15 +271,6 @@
 	}
 	.person-page {
 		max-width: 64rem;
-	}
-	.back-link {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		margin-bottom: var(--space-5);
-		font-size: var(--text-sm);
-		font-weight: 600;
-		text-decoration: none;
 	}
 	.eyebrow {
 		margin: 0 0 var(--space-1);

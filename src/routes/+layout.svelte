@@ -2,8 +2,16 @@
 	import { assets } from '$app/paths';
 	import '$lib/styles/global.css';
 	import Toaster from '$lib/components/Toaster.svelte';
+	import { beforeNavigate } from '$app/navigation';
+	import { recordNavigation } from '$lib/backNav';
 
 	let { children } = $props();
+
+	// Back links return to the previous page (BackLink.svelte): remember where each page came from,
+	// with the leaving page's tab title as the label.
+	beforeNavigate(({ from, to, type }) => {
+		if (from && to) recordNavigation(from.url, to.url, document.title, type);
+	});
 </script>
 
 <svelte:head>

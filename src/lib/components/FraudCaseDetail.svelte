@@ -1,5 +1,5 @@
 <script lang="ts">
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Ban from '@lucide/svelte/icons/ban';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
@@ -121,7 +121,7 @@
 {/snippet}
 
 <div class="page fraud-case">
-	<a class="back" href={backHref}><ArrowLeft size={16} /> {backLabel}</a>
+	<BackLink href={backHref} label={backLabel} />
 
 	<header class="case-head">
 		<h1>Same person at two pumps</h1>
@@ -179,19 +179,6 @@
 		display: grid;
 		gap: var(--space-6);
 		max-width: 64rem;
-	}
-	.back {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		justify-self: start;
-		min-height: 2.75rem;
-		color: var(--ink-muted);
-		font-weight: 600;
-		text-decoration: none;
-	}
-	.back:hover {
-		color: var(--ink-strong);
 	}
 
 	.case-head {

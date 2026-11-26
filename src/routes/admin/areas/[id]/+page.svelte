@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 	import PumpTodayList from '$lib/components/PumpTodayList.svelte';
@@ -22,7 +22,7 @@
 <svelte:head><title>{data.area.name} | Face Attendance</title></svelte:head>
 
 <div class="page detail-page">
-	<a class="back-link" href={resolve('/admin/areas')}><ArrowLeft size={16} /> Areas</a>
+	<BackLink href={resolve('/admin/areas')} label="Areas" />
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Area</p>
@@ -81,15 +81,6 @@
 <style>
 	.detail-page {
 		--content-max: 80rem;
-	}
-	.back-link {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		margin-bottom: var(--space-4);
-		font-size: var(--text-sm);
-		font-weight: 600;
-		text-decoration: none;
 	}
 	.eyebrow {
 		margin: 0 0 var(--space-1);

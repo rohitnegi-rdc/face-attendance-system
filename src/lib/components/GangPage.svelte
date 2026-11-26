@@ -4,7 +4,7 @@
 	// A shift counted for the wrong gang is moved to another gang here.
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import StatusBadge from '$lib/components/StatusBadge.svelte';
 	import { formatDate, formatTime } from '$lib/date';
@@ -32,7 +32,7 @@
 <svelte:head><title>{title} | Face Attendance</title></svelte:head>
 
 <div class="page">
-	<a class="back" href={backHref}><ArrowLeft size={16} /> Gangs</a>
+	<BackLink href={backHref} label="Gangs" />
 	<header class="page-header">
 		<div class="page-header__copy">
 			<h1 data-testid="gang-title">{title}</h1>
@@ -172,13 +172,6 @@
 </div>
 
 <style>
-	.back {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		margin-bottom: var(--space-2);
-		font-size: var(--text-sm);
-	}
 	.tiles {
 		display: grid;
 		grid-template-columns: repeat(4, minmax(0, 1fr));

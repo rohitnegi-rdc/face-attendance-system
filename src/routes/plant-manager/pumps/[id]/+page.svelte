@@ -3,7 +3,7 @@
 	// site, who was counted, and the shift with its start and end photos. Back goes to Pumps today.
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ShiftLog from '$lib/components/ShiftLog.svelte';
 	import ShiftSplit from '$lib/components/ShiftSplit.svelte';
@@ -14,7 +14,8 @@
 	let { data } = $props();
 
 	const isToday = $derived(data.day === data.today);
-	// Opened from the Pumps page (?from=pumps) back goes there; otherwise to Pumps today.
+	// Back goes to the page this was opened from (BackLink); opened directly: ?from=pumps the Pumps
+	// page, otherwise Pumps today.
 	const fromPumps = $derived(page.url.searchParams.get('from') === 'pumps');
 	const back = $derived(
 		fromPumps
@@ -38,9 +39,7 @@
 <svelte:head><title>{data.pump.pump_code} | Face Attendance</title></svelte:head>
 
 <div class="page pump-day" data-testid="pm-pump-day">
-	<a class="back" href={back.href} data-testid="pm-pump-day-back"
-		><ArrowLeft size={18} /> {back.label}</a
-	>
+	<BackLink href={back.href} label={back.label} testId="pm-pump-day-back" />
 
 	<header class="head">
 		<div class="title">
@@ -106,16 +105,6 @@
 		display: grid;
 		gap: var(--space-3);
 		max-width: 48rem;
-	}
-	.back {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		justify-self: start;
-		min-height: 2.75rem;
-		color: var(--brand-teal);
-		font-weight: 600;
-		text-decoration: none;
 	}
 	.head {
 		display: flex;

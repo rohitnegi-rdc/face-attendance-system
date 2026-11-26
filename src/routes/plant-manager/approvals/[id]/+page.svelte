@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import { formatDate } from '$lib/date';
 	import { mapUrl } from '$lib/maps';
@@ -22,7 +22,7 @@
 <svelte:head><title>Approve {s.pump_code} | Face Attendance</title></svelte:head>
 
 <div class="page approval-page">
-	<a class="back" href={resolve('/plant-manager/approvals')}><ArrowLeft size={16} /> Approvals</a>
+	<BackLink href={resolve('/plant-manager/approvals')} label="Approvals" />
 
 	<header class="page-header">
 		<div class="page-header__copy">
@@ -141,14 +141,6 @@
 <style>
 	.approval-page {
 		max-width: 60rem;
-	}
-	.back {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		margin-bottom: var(--space-3);
-		color: var(--ink-muted);
-		text-decoration: none;
 	}
 	.problem {
 		display: flex;

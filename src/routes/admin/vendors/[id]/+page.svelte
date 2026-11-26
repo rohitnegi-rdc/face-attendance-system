@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import ArrowDownUp from '@lucide/svelte/icons/arrow-down-up';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import AttendanceCalendarGrid from '$lib/components/AttendanceCalendarGrid.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 
@@ -44,9 +44,7 @@
 <svelte:head><title>{data.vendor.name} | Face Attendance</title></svelte:head>
 
 <div class="page detail-page">
-	<a class="back-link" href={resolve('/admin/attendance')}
-		><ArrowLeft size={16} /> Attendance records</a
-	>
+	<BackLink href={resolve('/admin/attendance')} label="Attendance records" />
 	<header class="page-header">
 		<div class="page-header__copy">
 			<p class="eyebrow">Vendor</p>
@@ -122,15 +120,6 @@
 <style>
 	.detail-page {
 		--content-max: 80rem;
-	}
-	.back-link {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		margin-bottom: var(--space-5);
-		font-size: var(--text-sm);
-		font-weight: 600;
-		text-decoration: none;
 	}
 	.eyebrow {
 		margin: 0 0 var(--space-1);

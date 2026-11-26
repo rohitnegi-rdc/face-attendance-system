@@ -6,7 +6,7 @@
 	// under the row.
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/BackLink.svelte';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Shuffle from '@lucide/svelte/icons/shuffle';
 	import Save from '@lucide/svelte/icons/save';
@@ -139,7 +139,7 @@
 <div class="page fix-page">
 	<header class="page-header">
 		<div class="page-header__copy">
-			<a class="back-link" href={backHref}><ArrowLeft size={17} /> {backLabel}</a>
+			<BackLink href={backHref} label={backLabel} />
 			<h1>Fix attendance</h1>
 			<p>
 				<strong>{data.pump.pump_code}</strong> · {formatDate(data.day)} · {data.pump.plant_name} ·
@@ -504,12 +504,6 @@
 <style>
 	.fix-page {
 		--content-max: 72rem;
-	}
-	.back-link {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-1);
-		margin-bottom: var(--space-2);
 	}
 	.notice {
 		margin: 0 0 var(--space-4);
