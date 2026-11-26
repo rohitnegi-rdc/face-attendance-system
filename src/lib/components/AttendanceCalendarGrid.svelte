@@ -10,7 +10,8 @@
 	// ('present'|'morning_only'|'evening_only'|'absent') or a number 0-100 (attendance %)
 	// when `mode === 'percent'` ('open' there: a shift still on, shown as "Shift on"), or a headcount when `mode === 'count'` (gangs),
 	// or { full, startOnly, endOnly, open? } when `mode === 'split'` (workers by shift, the same three
-	// counts as ShiftSplit and the 9 am email). `heldCell` marks a
+	// counts as ShiftSplit and the 9 am email; a row may carry `total`, the same three over the range,
+	// shown under its label). `heldCell` marks a
 	// day waiting for or refused a location approval (amber, left out of totals); `href` links a row.
 	let {
 		days = [],
@@ -21,7 +22,13 @@
 		heldCell
 	} = $props<{
 		days: string[];
-		entities: { id: string; label: string; faceUrl?: string; href?: string }[];
+		entities: {
+			id: string;
+			label: string;
+			faceUrl?: string;
+			href?: string;
+			total?: { full: number; startOnly: number; endOnly: number };
+		}[];
 		cellValue: (entityId: string, day: string) => string | number | Split | null;
 		mode?: 'status' | 'percent' | 'count' | 'split';
 		entityLabel?: string;
@@ -43,8 +50,10 @@
 	function statusClass(v: string | number | Split | null): string {
 		if (mode === 'split') {
 			const split = asSplit(v);
-			if (!split) return 'pct-none';
-			return split.full > 0 ? 'split-cell split-cell--full' : 'split-cell';
+			if (!split) return 'sc-cell sc-cell--empty';
+			// Tinted only when the day is complete: everyone counted had a start and an end.
+			const complete = split.full > 0 && !split.startOnly && !split.endOnly && !split.open;
+			return complete ? 'sc-cell sc-cell--complete' : 'sc-cell';
 		}
 		if (mode === 'count') return typeof v === 'number' ? 'pct-mid' : 'pct-none';
 		if (mode === 'percent') {
@@ -126,6 +135,7 @@
 </div>
 <div class="grid-wrap" bind:this={scroller} role="region" aria-label="Scrollable attendance dates">
 	<table
+		class:calendar-grid--split={mode === 'split'}
 		class="calendar-grid"
 		aria-label={mode === 'percent'
 			? 'Attendance percentage calendar'
@@ -156,6 +166,13 @@
 									>{e.label}</span
 								></span
 							>{:else if e.href}<a href={e.href}>{e.label}</a>{:else}{e.label}{/if}
+						{#if mode === 'split' && e.total}<span class="sc-total" data-testid="pump-total"
+								><b class:sc-zero={!e.total.full}>{e.total.full}</b> full<span class="sc-sep"
+									>·</span
+								><b class:sc-zero={!e.total.startOnly}>{e.total.startOnly}</b> start<span
+									class="sc-sep">·</span
+								><b class:sc-zero={!e.total.endOnly}>{e.total.endOnly}</b> end</span
+							>{/if}
 					</th>
 					{#each orderedDays as day}
 						{@const v = cellValue(e.id, day)}
@@ -164,11 +181,16 @@
 							class={statusClass(v)}
 							class:held={heldCell?.(e.id, day)}
 							aria-label={accessibleCellLabel(e.label, day, v)}
-							>{#if split}{#if split.open}<span class="sc-on">Shift on</span>{/if}<span
-									class="sc sc--full"><b>{split.full}</b> full</span
-								><span class="sc"><b>{split.startOnly}</b> start</span><span class="sc sc--end"
-									><b>{split.endOnly}</b> end</span
-								>{:else if mode === 'split'}-{:else}{cellLabel(v)}{/if}</td
+							>{#if split}<span class="sc-part" class:sc-zero={!split.full}
+									><b>{split.full}</b> full</span
+								><span class="sc-part" class:sc-zero={!split.startOnly}
+									><b>{split.startOnly}</b> start only</span
+								><span class="sc-part" class:sc-zero={!split.endOnly}
+									><b>{split.endOnly}</b> end only</span
+								>{#if split.open}<span class="sc-on">Shift on</span
+									>{/if}{:else if mode === 'split'}<span class="sc-none">–</span>{:else}{cellLabel(
+									v
+								)}{/if}</td
 						>
 					{/each}
 				</tr>
@@ -178,14 +200,11 @@
 </div>
 
 {#if mode === 'split'}
-	<div class="legend" aria-label="Workers by shift legend">
-		<span
-			><b class="legend__swatch legend__swatch--wide split-cell--full">full</b> Full shift (start and
-			end)</span
-		>
-		<span><b class="legend__swatch legend__swatch--wide">start</b> Start only</span>
-		<span><b class="legend__swatch legend__swatch--wide legend__swatch--end">end</b> End only</span>
-	</div>
+	<p class="sc-legend">
+		Full: start and end photo. Start only / end only: someone missed half. A 0 is red.
+		<b>Shift on</b>: the end photo is still to come. A tinted day: everyone had a full shift. Under
+		each pump: its total for these dates.
+	</p>
 {/if}
 {#if mode === 'status'}
 	<div class="legend" aria-label="Attendance status legend">
@@ -373,35 +392,83 @@
 		background: var(--brand-white);
 	}
 
-	/* Workers by shift: three short lines per day, full shift on top. */
-	.split-cell {
-		line-height: 1.25;
-		color: var(--ink-default);
-		background: var(--surface-muted);
-	}
-	.split-cell--full {
-		background: var(--primary-tint);
-	}
-	.sc,
-	.sc-on {
-		display: block;
+	/* Workers by shift: the full-shift count leads; the missing halves follow only when there are
+	   any, so a normal day is one number and an exception reads at a glance. */
+	.calendar-grid--split .entity-col {
 		text-align: left;
 	}
-	.sc b {
-		display: inline-block;
-		min-width: 1.4em;
+	.calendar-grid--split tbody .entity-col {
+		vertical-align: top;
+	}
+	.calendar-grid--split tbody .entity-col {
+		font-weight: 700;
 		color: var(--ink-strong);
 	}
-	.sc--full,
-	.sc--full b {
-		color: #056e61;
+	.calendar-grid--split td,
+	.calendar-grid--split .day-head {
+		min-width: max(5.25rem, calc((100cqi - clamp(10rem, 22vw, 15rem)) / 7));
 	}
-	.sc--full b {
-		font-size: var(--text-sm);
+	.calendar-grid--split td.sc-cell {
+		vertical-align: top;
+		text-align: center;
+		line-height: 1.3;
+		color: var(--ink-default);
+		background: var(--brand-white);
+	}
+	.calendar-grid--split td.sc-cell--complete {
+		background: var(--primary-tint);
+	}
+	.calendar-grid--split td.sc-cell--empty {
+		vertical-align: middle;
+		text-align: center;
+	}
+	.sc-none {
+		color: var(--brand-mist);
+	}
+	.sc-part,
+	.sc-on {
+		display: block;
+		white-space: nowrap;
+	}
+	.sc-part {
+		color: var(--ink-strong);
+	}
+	.sc-part b {
+		margin-right: 0.15em;
+	}
+	.sc-part.sc-zero,
+	.sc-part.sc-zero b {
+		color: var(--alert);
 	}
 	.sc-on {
-		color: var(--brand-teal);
+		margin-top: var(--space-1);
+		color: var(--primary-pressed);
 		font-weight: 700;
+	}
+	.sc-total {
+		display: block;
+		margin-top: var(--space-1);
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
+		font-weight: 400;
+		white-space: normal;
+	}
+	.sc-total b {
+		color: var(--ink-strong);
+	}
+	.sc-total b.sc-zero {
+		color: var(--alert);
+	}
+	.sc-sep {
+		margin: 0 0.35em;
+		color: var(--brand-mist);
+	}
+	.sc-legend {
+		max-width: 72ch;
+		margin: var(--space-2) 0 0;
+		color: var(--ink-muted);
+		font-size: var(--text-xs);
+		line-height: 1.5;
 	}
 
 	.calendar-grid td.held {
@@ -431,19 +498,6 @@
 		place-items: center;
 		border: 1px solid var(--brand-mist);
 		border-radius: var(--radius-sm);
-	}
-	.legend__swatch--wide {
-		width: auto;
-		padding: 0 0.4rem;
-		font-weight: 400;
-		background: var(--surface-muted);
-	}
-	.legend__swatch.split-cell--full {
-		color: #056e61;
-		background: var(--primary-tint);
-	}
-	.legend__swatch--end {
-		box-shadow: inset 0 0 0 1px var(--brand-steel);
 	}
 	@media (max-width: 47.99rem) {
 		.entity-col {

@@ -119,19 +119,21 @@ test('UI-18 a monitor sees full shift, start only and end only per pump and day'
 	await page.setViewportSize({ width: 390, height: 844 });
 	await signIn(page, monitor.email);
 	await page.goto(`/plant-manager/attendance?pump=${pump.id}`);
+	// Plant, then Pump, even with only one plant (UI-20).
+	await expect(page.getByTestId('pm-plant-filter')).toBeVisible();
 	const cell = (day: string) =>
 		page.getByRole('cell', { name: new RegExp(`^${pump.code}, .*${dayLabel(day)}:`) });
-	await expect(cell(todayIST())).toHaveText(/Shift on\s*0 full\s*3 start\s*0 end/);
-	await expect(cell(yesterday)).toHaveText(/^2 full\s*1 start\s*0 end$/);
-	await expect(cell(before)).toHaveText(/^0 full\s*0 start\s*1 end$/);
-	await expect(cell(daysAgo(3))).toHaveText('-');
-	// Range totals: 2 full, 4 start only (1 yesterday + 3 today), 1 end only.
-	const total = page.getByTestId('pump-total').filter({ hasText: pump.code });
-	await expect(total.getByTestId('split-full')).toHaveText('2 full shift');
-	await expect(total.getByTestId('split-start')).toHaveText('4 start only');
-	await expect(total.getByTestId('split-end')).toHaveText('1 end only');
+	// The full-shift count leads; a missing half shows only when there is one.
+	await expect(cell(todayIST())).toHaveText(/^0 full\s*3 start only\s*0 end only\s*Shift on$/);
+	await expect(cell(yesterday)).toHaveText(/^2 full\s*1 start only\s*0 end only$/);
+	await expect(cell(before)).toHaveText(/^0 full\s*0 start only\s*1 end only$/);
+	// Every 0 is red (zero full shifts, a zero start only or end only).
+	await expect(cell(before).locator('.sc-zero')).toHaveCount(2);
+	await expect(cell(daysAgo(3))).toHaveText('–');
+	// Range total under the pump code: 2 full, 4 start only (1 yesterday + 3 today), 1 end only.
+	await expect(page.getByTestId('pump-total')).toHaveText(/^2 full\s*·\s*4 start\s*·\s*1 end$/);
 	await noSidewaysScroll(page);
-	await page.getByTestId('pump-totals').scrollIntoViewIfNeeded();
+	await page.getByRole('heading', { name: 'Daily attendance' }).scrollIntoViewIfNeeded();
 	await page.screenshot({
 		path: 'artifacts/pm-split/monitor-attendance-phone.png',
 		fullPage: true
@@ -140,5 +142,87 @@ test('UI-18 a monitor sees full shift, start only and end only per pump and day'
 	await page.screenshot({
 		path: 'artifacts/pm-split/monitor-attendance-desktop.png',
 		fullPage: true
+	});
+});
+
+// UI-19: a back link returns to the page it was opened from, named after it, not to one fixed page
+// (2026-11-26); a reload keeps it; opened directly it falls back to the page's usual parent.
+test('UI-19 back links return to the previous page', async ({ page, browser }) => {
+	const { plantId } = await createArea();
+	const pump = await createPump(plantId);
+	const admin = await createAdmin();
+	await page.setViewportSize({ width: 390, height: 844 });
+	await signIn(page, admin.email);
+
+	await page.goto(`/admin/pumps?q=${pump.code}`);
+	await page.getByRole('link', { name: pump.code, exact: true }).first().click();
+	await page.waitForURL(new RegExp(`/admin/pumps/${pump.id}`));
+	const back = page.getByTestId('back-link');
+	await expect(back).toHaveText('Pumps');
+	await page.reload();
+	await expect(back).toHaveText('Pumps');
+	await back.click();
+	await page.waitForURL(/\/admin\/pumps\?q=/);
+
+	// Opened directly in a new tab: the usual parent.
+	const fresh = await browser.newContext({ storageState: await page.context().storageState() });
+	const direct = await fresh.newPage();
+	await direct.goto(`/admin/pumps/${pump.id}`);
+	await expect(direct.getByTestId('back-link')).toHaveText('Attendance records');
+	await fresh.close();
+});
+
+// UI-20: the Attendance filters go Plant, then Pump (plant manager) and Area, Plant, Pump (admin):
+// each list holds only what is inside the one chosen above it (2026-11-26).
+test('UI-20 attendance filters narrow plant then pump', async ({ page }) => {
+	const a = await createArea();
+	const b = await createArea();
+	const { rows } = await db.query(
+		'INSERT INTO plants (area_id, name) VALUES ($1, $2) RETURNING id, name',
+		[a.areaId, `${a.areaId.slice(0, 6)}-PLANT2`]
+	);
+	const plant2 = rows[0].id as string;
+	const pumpA = await createPump(a.plantId);
+	const pumpA2 = await createPump(plant2);
+	const pumpB = await createPump(b.plantId);
+	const options = (testId: string) =>
+		page
+			.getByTestId(testId)
+			.locator('option')
+			.evaluateAll((els) => els.map((el) => (el as HTMLOptionElement).value).filter(Boolean));
+
+	// Admin: Area narrows Plant and Pump, Plant narrows Pump, changing Area clears the rest.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await signIn(page, (await createAdmin()).email);
+	await page.goto('/admin/attendance');
+	await page.getByTestId('admin-area-filter').selectOption(a.areaId);
+	expect((await options('admin-plant-filter')).sort()).toEqual([a.plantId, plant2].sort());
+	expect((await options('admin-pump-filter')).sort()).toEqual([pumpA.id, pumpA2.id].sort());
+	await page.getByTestId('admin-plant-filter').selectOption(plant2);
+	expect(await options('admin-pump-filter')).toEqual([pumpA2.id]);
+	await page.getByTestId('admin-pump-filter').selectOption(pumpA2.id);
+	await page.getByTestId('admin-area-filter').selectOption(b.areaId);
+	await expect(page.getByTestId('admin-plant-filter')).toHaveValue('');
+	await expect(page.getByTestId('admin-pump-filter')).toHaveValue('');
+	expect(await options('admin-pump-filter')).toEqual([pumpB.id]);
+	await noSidewaysScroll(page);
+
+	// Plant manager of both plants of Area A: Plant narrows Pump, kept after the page applies it.
+	const manager = await createPlantManager(a.plantId);
+	await db.query('INSERT INTO plant_manager_assignments (plant_id, manager_id) VALUES ($1, $2)', [
+		plant2,
+		manager.id
+	]);
+	await page.context().clearCookies();
+	await signIn(page, manager.email);
+	await page.goto('/plant-manager/attendance');
+	expect((await options('pm-pump-filter')).sort()).toEqual([pumpA.id, pumpA2.id].sort());
+	await page.getByTestId('pm-plant-filter').selectOption(plant2);
+	await page.waitForURL(new RegExp(`plant=${plant2}`));
+	expect(await options('pm-pump-filter')).toEqual([pumpA2.id]);
+	await expect(page.getByTestId('pm-plant-filter')).toHaveValue(plant2);
+	await page.screenshot({
+		path: 'artifacts/pm-split/attendance-plant-filter-phone.png',
+		fullPage: false
 	});
 });

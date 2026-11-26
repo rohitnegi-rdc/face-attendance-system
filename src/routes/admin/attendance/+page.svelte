@@ -20,6 +20,28 @@
 	$effect(() => {
 		dateMode = data.isSingleDay ? 'day' : 'range';
 	});
+	// Area, then Plant, then Pump: each list shows only what is inside the one chosen above it, and
+	// changing a level clears the levels under it.
+	let area = $state('');
+	let plant = $state('');
+	let pump = $state('');
+	$effect.pre(() => {
+		area = data.filters.area;
+		plant = data.filters.plant;
+		pump = data.filters.pump;
+	});
+	const plantChoices = $derived(
+		area ? data.options.plants.filter((p: any) => p.area_id === area) : data.options.plants
+	);
+	const pumpChoices = $derived(
+		plant
+			? data.options.pumps.filter((p: any) => p.plant_id === plant)
+			: area
+				? data.options.pumps.filter((p: any) =>
+						plantChoices.some((pl: any) => pl.id === p.plant_id)
+					)
+				: data.options.pumps
+	);
 
 	// Full day: the workers split by shift, like the plant manager's checklist and the 9 am email.
 	// With a Session filter: present or absent for that half.
@@ -150,10 +172,16 @@
 
 	<form class="filter-bar" method="GET">
 		<label class="field"
-			><span>Area</span><select name="area"
-				><option value="">All areas</option>{#each data.options.areas as item}<option
-						value={item.id}
-						selected={item.id === data.filters.area}>{item.name}</option
+			><span>Area</span><select
+				name="area"
+				bind:value={area}
+				onchange={() => {
+					plant = '';
+					pump = '';
+				}}
+				data-testid="admin-area-filter"
+				><option value="">All areas</option>{#each data.options.areas as item (item.id)}<option
+						value={item.id}>{item.name}</option
 					>{/each}</select
 			></label
 		>
@@ -166,18 +194,20 @@
 			></label
 		>
 		<label class="field"
-			><span>Plant</span><select name="plant"
-				><option value="">All plants</option>{#each data.options.plants as item}<option
-						value={item.id}
-						selected={item.id === data.filters.plant}>{item.name}</option
+			><span>Plant</span><select
+				name="plant"
+				bind:value={plant}
+				onchange={() => (pump = '')}
+				data-testid="admin-plant-filter"
+				><option value="">All plants</option>{#each plantChoices as item (item.id)}<option
+						value={item.id}>{item.name}</option
 					>{/each}</select
 			></label
 		>
 		<label class="field"
-			><span>Pump</span><select name="pump"
-				><option value="">All pumps</option>{#each data.options.pumps as item}<option
-						value={item.id}
-						selected={item.id === data.filters.pump}>{item.pump_code}</option
+			><span>Pump</span><select name="pump" bind:value={pump} data-testid="admin-pump-filter"
+				><option value="">All pumps</option>{#each pumpChoices as item (item.id)}<option
+						value={item.id}>{item.pump_code}</option
 					>{/each}</select
 			></label
 		>

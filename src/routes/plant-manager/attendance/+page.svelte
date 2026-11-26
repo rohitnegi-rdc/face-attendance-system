@@ -5,7 +5,6 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import GangHeadcountGrid from '$lib/components/GangHeadcountGrid.svelte';
 	import ShiftLog from '$lib/components/ShiftLog.svelte';
-	import ShiftSplit from '$lib/components/ShiftSplit.svelte';
 	import { calendarDays, dateKey, formatDate, todayStr } from '$lib/date';
 	import { personDisplayLabel } from '$lib/personLabel';
 	import { applyOnChange } from '$lib/liveSearch';
@@ -27,8 +26,18 @@
 	);
 	// Only pumps Active or Idle in the range, or with attendance in it (gridPumps): an Inactive pump
 	// is not a row of zeros.
+	// Each pump row carries its total for the range under the code (full / start only / end only).
 	const entities = $derived(
-		data.gridPumps.map((pump: any) => ({ id: pump.id, label: pump.pump_code }))
+		data.gridPumps.map((pump: any) => {
+			const total = { full: 0, startOnly: 0, endOnly: 0 };
+			for (const row of data.daily)
+				if (row.pump_id === pump.id) {
+					total.full += row.full_shift;
+					total.startOnly += row.start_only;
+					total.endOnly += row.end_only;
+				}
+			return { id: pump.id, label: pump.pump_code, total };
+		})
 	);
 	const openShifts = $derived(new Set(data.openShifts));
 	// Keeps the date range, the pump and the other list's page when one list pages.
@@ -59,7 +68,7 @@
 	const personStatus = (personId: string, day: string) =>
 		data.attendanceMap[`${personId}|${day}`] ?? 'absent';
 	const rangeLabel = $derived(`${formatDate(data.filters.from)} – ${formatDate(data.filters.to)}`);
-	// Workers by shift per pump and day, and the same three added up over the range per pump.
+	// Workers by shift per pump and day.
 	type Split = { full: number; startOnly: number; endOnly: number };
 	const lookup = $derived(
 		new Map<string, Split>(
@@ -68,18 +77,6 @@
 				{ full: row.full_shift, startOnly: row.start_only, endOnly: row.end_only }
 			])
 		)
-	);
-	const pumpTotals = $derived(
-		data.gridPumps.map((pump: any) => {
-			const total = { full: 0, startOnly: 0, endOnly: 0 };
-			for (const row of data.daily)
-				if (row.pump_id === pump.id) {
-					total.full += row.full_shift;
-					total.startOnly += row.start_only;
-					total.endOnly += row.end_only;
-				}
-			return { id: pump.id, code: pump.pump_code, ...total };
-		})
 	);
 	function splitCell(pumpId: string, day: string) {
 		const split = lookup.get(`${pumpId}:${day}`);
@@ -134,17 +131,17 @@
 			><span>From</span><input type="date" name="from" value={data.filters.from} /></label
 		><label class="field"
 			><span>To</span><input type="date" name="to" value={data.filters.to} /></label
-		>{#if data.plants.length > 1}<label class="field"
-				><span>Plant</span><select
-					name="plant"
-					bind:value={plant}
-					onchange={() => (pump = '')}
-					data-testid="pm-plant-filter"
-					><option value="">All plants</option>{#each data.plants as p (p.id)}<option value={p.id}
-							>{p.name}</option
-						>{/each}</select
-				></label
-			>{/if}<label class="field"
+		><label class="field"
+			><span>Plant</span><select
+				name="plant"
+				bind:value={plant}
+				onchange={() => (pump = '')}
+				data-testid="pm-plant-filter"
+				><option value="">All plants</option>{#each data.plants as p (p.id)}<option value={p.id}
+						>{p.name}</option
+					>{/each}</select
+			></label
+		><label class="field"
 			><span>Pump</span><select name="pump" bind:value={pump} data-testid="pm-pump-filter"
 				><option value="">All pumps</option>{#each pumpChoices as p (p.id)}<option value={p.id}
 						>{p.pump_code}</option
@@ -188,16 +185,7 @@
 				mode="split"
 				entityLabel="Pump"
 				cellValue={splitCell}
-			/>
-			<h3 class="totals-title">Total for {rangeLabel}</h3>
-			<ul class="pump-totals" data-testid="pump-totals">
-				{#each pumpTotals as row (row.id)}
-					<li data-testid="pump-total">
-						<span class="pump-totals__code">{row.code}</span>
-						<ShiftSplit full={row.full} startOnly={row.startOnly} endOnly={row.endOnly} />
-					</li>
-				{/each}
-			</ul>{:else}<EmptyState
+			/>{:else}<EmptyState
 				title="No attendance in this range"
 				description="Choose another date range."
 			/>{/if}
@@ -281,29 +269,6 @@
 </div>
 
 <style>
-	.totals-title {
-		margin: var(--space-4) 0 var(--space-2);
-		font-size: var(--text-sm);
-	}
-	.pump-totals {
-		display: grid;
-		gap: var(--space-1);
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-	.pump-totals li {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--space-2);
-		padding: var(--space-2) 0;
-		border-bottom: 1px solid var(--brand-mist);
-	}
-	.pump-totals__code {
-		min-width: 9rem;
-		font-weight: 700;
-	}
 	.log-head {
 		flex-wrap: wrap;
 	}

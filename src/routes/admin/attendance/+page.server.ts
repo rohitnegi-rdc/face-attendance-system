@@ -186,8 +186,9 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	const areas = await query<any>(`SELECT id, name FROM areas ORDER BY name`);
 	const vendors = await query<any>(`SELECT id, name FROM vendors ORDER BY name`);
-	const plants = await query<any>(`SELECT id, name FROM plants ORDER BY name`);
-	const pumps = await query<any>(`SELECT id, pump_code FROM pumps ORDER BY pump_code`);
+	// With area / plant ids, so the form's Plant list follows the Area and the Pump list the Plant.
+	const plants = await query<any>(`SELECT id, name, area_id FROM plants ORDER BY name`);
+	const pumps = await query<any>(`SELECT id, pump_code, plant_id FROM pumps ORDER BY pump_code`);
 
 	// By gang (pump gangs, migration 056): the same Area / vendor / plant / pump filters, over the
 	// chosen days (else the last 30). Null when no Area in the filter has gangs on.
